@@ -1,4 +1,5 @@
 import { requireAdminProfile } from "@/lib/auth";
+import { fetchAllRows } from "@/lib/paged";
 import { createClient } from "@/lib/supabase/server";
 
 import { listByKey, LISTS } from "./config";
@@ -32,11 +33,19 @@ export default async function MasterListsPage({
   // historical enquiry still resolve the option it was filed under.
   const supabase = await createClient();
 
-  let query = supabase.from(spec.table).select("*") as unknown as ReadQuery;
-  for (const order of spec.orderBy) {
-    query = query.order(order.column, { ascending: order.ascending });
-  }
-  const { data, error } = await query;
+  // Paged. Teachers is the biggest of these at 73 today, but a master list is
+  // append-only by design (§3 soft-delete, no deletes), so it grows forever —
+  // and a silently truncated list here would hide options rather than fail.
+  const { rows: data, error } = await fetchAllRows<Row>((from, to) => {
+    let query = supabase.from(spec.table).select("*") as unknown as ReadQuery;
+    for (const order of spec.orderBy) {
+      query = query.order(order.column, { ascending: order.ascending });
+    }
+    return (query as unknown as { range: (a: number, b: number) => never }).range(
+      from,
+      to,
+    );
+  });
 
   // Subjects are grouped under their course, so the editor needs the courses.
   const needsCourses = spec.fields.some((f) => f.kind === "course");
@@ -50,7 +59,7 @@ export default async function MasterListsPage({
 
       {error ? (
         <p className="rounded-md border border-danger/40 bg-danger-soft px-3 py-2 text-[13px] text-danger">
-          Could not load {spec.label}: {error.message}
+          Could not load {spec.label}: {error}
         </p>
       ) : (
         <ListEditor

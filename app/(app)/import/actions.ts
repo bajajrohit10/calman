@@ -88,7 +88,10 @@ export async function lookupNumbers(mobiles: string[]): Promise<{
 }> {
   await requireUser();
   if (!mobiles.length) return { error: null, statuses: [] };
-  if (mobiles.length > 1000) return { error: "Too many numbers in one lookup." };
+  // 500, not 1000: PostgREST caps a response at max_rows (1000 here), so a
+  // lookup of exactly a thousand numbers could come back short and every
+  // missing one would silently look like a new number.
+  if (mobiles.length > 500) return { error: "Too many numbers in one lookup." };
 
   const supabase = await createClient();
   const { data, error } = await supabase

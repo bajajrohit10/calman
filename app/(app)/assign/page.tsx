@@ -30,7 +30,7 @@ export default async function Page({
   ).toString();
 
   const supabase = await createClient();
-  const [list, teachers, courses, subjects, contents, terms, sources, staff, dayAssignments] =
+  const [list, teachers, courses, subjects, contents, terms, sources, staff] =
     await Promise.all([
       loadRecommended(filters),
       supabase.from("teachers").select("id, name").eq("is_active", true).order("name"),
@@ -45,20 +45,26 @@ export default async function Page({
         .eq("is_active", true)
         .neq("role", "ticket_team")
         .order("full_name"),
-      supabase.from("assignments").select("counsellor_id, bucket").eq("date", date),
     ]);
 
-  const counts = new Map<string, number>();
-  for (const a of dayAssignments.data ?? []) {
-    counts.set(a.counsellor_id, (counts.get(a.counsellor_id) ?? 0) + 1);
-  }
-
-  const roster = (staff.data ?? []).map((p) => ({
-    id: p.id,
-    name: p.full_name ?? "(no name)",
-    role: p.role,
-    count: counts.get(p.id) ?? 0,
-  }));
+  // Counted per counsellor by the database. Fetching the day's assignment rows
+  // and tallying them in JS was wrong above a thousand rows on a busy day, and
+  // wrong without saying so — an exact head count cannot truncate.
+  const roster = await Promise.all(
+    (staff.data ?? []).map(async (p) => {
+      const { count } = await supabase
+        .from("assignments")
+        .select("*", { count: "exact", head: true })
+        .eq("date", date)
+        .eq("counsellor_id", p.id);
+      return {
+        id: p.id,
+        name: p.full_name ?? "(no name)",
+        role: p.role,
+        count: count ?? 0,
+      };
+    }),
+  );
 
   return (
     <div className="flex flex-col gap-5">

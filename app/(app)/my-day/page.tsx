@@ -2,6 +2,7 @@ import { PageHeader } from "@/components/ui";
 import { isAdmin, requireUser } from "@/lib/auth";
 import type { AssignmentBucket } from "@/lib/enquiry-labels";
 import { istDatePlus, istToday } from "@/lib/format";
+import { fetchAllRows } from "@/lib/paged";
 import { loadRecommended } from "@/lib/recommended";
 import { createClient } from "@/lib/supabase/server";
 
@@ -32,12 +33,15 @@ export default async function Page({
   const [list, assignments, roster, dismissal, masters] = await Promise.all([
     // includeNotDue: My Day is "what am I assigned", not "what is due" — a
     // campaign assignment is by definition not due today.
-    loadRecommended({ date, counsellorId, includeNotDue: true, limit: 200 }),
-    supabase
-      .from("assignments")
-      .select("enquiry_id, bucket")
-      .eq("date", date)
-      .eq("counsellor_id", counsellorId),
+    loadRecommended({ date, counsellorId, includeNotDue: true, limit: 500 }),
+    fetchAllRows<{ enquiry_id: number; bucket: AssignmentBucket }>((from, to) =>
+      supabase
+        .from("assignments")
+        .select("enquiry_id, bucket")
+        .eq("date", date)
+        .eq("counsellor_id", counsellorId)
+        .range(from, to) as never,
+    ),
     admin
       ? supabase
           .from("profiles")
@@ -61,7 +65,7 @@ export default async function Page({
   // even though the enquiry itself derives as a follow-up. Group by what was
   // assigned; order within the group is whatever §6 already returned.
   const assignedBucket = new Map<number, AssignmentBucket>(
-    (assignments.data ?? []).map((a) => [a.enquiry_id, a.bucket]),
+    assignments.rows.map((a) => [a.enquiry_id, a.bucket]),
   );
 
   const rows = list.rows.map((r) => ({
@@ -75,7 +79,7 @@ export default async function Page({
         date,
         includeNotDue: true,
         followUpTo: istDatePlus(-1),
-        limit: 200,
+        limit: 500,
       })
     : { rows: [], total: 0, error: null };
 

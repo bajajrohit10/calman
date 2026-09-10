@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
+import { fetchAllRows } from "@/lib/paged";
 import { createClient } from "@/lib/supabase/server";
 
 import { BatchReport, type ReportRow } from "./report";
@@ -28,18 +29,39 @@ export default async function Page({
 
   if (!batch) notFound();
 
-  const { data: rows } = await supabase
-    .from("import_rows")
-    .select(
-      "id, row_number, normalised_mobile, outcome, skip_reason, enquiry_id, resolved_at, raw",
-    )
-    .eq("batch_id", batchId)
-    .order("row_number");
+  // Paged: a 3,000-row import would otherwise render its first thousand rows
+  // and, worse, compute its summary counts from that same truncated array.
+  const { rows, error: rowsError, truncated } = await fetchAllRows<ReportRow>(
+    (from, to) =>
+      supabase
+        .from("import_rows")
+        .select(
+          "id, row_number, normalised_mobile, outcome, skip_reason, enquiry_id, resolved_at, raw",
+        )
+        .eq("batch_id", batchId)
+        .order("row_number")
+        .range(from, to) as never,
+  );
 
-  const counts = (rows ?? []).reduce<Record<string, number>>((acc, r) => {
-    acc[r.outcome] = (acc[r.outcome] ?? 0) + 1;
-    return acc;
-  }, {});
+  // Counted by the database rather than derived from the array, so the summary
+  // is right even if the listing above ever hits its ceiling.
+  const OUTCOMES = [
+    "imported",
+    "duplicate_updated",
+    "duplicate_new_enquiry",
+    "skipped",
+  ] as const;
+  const counted = await Promise.all(
+    OUTCOMES.map(async (outcome) => {
+      const { count } = await supabase
+        .from("import_rows")
+        .select("*", { count: "exact", head: true })
+        .eq("batch_id", batchId)
+        .eq("outcome", outcome);
+      return [outcome, count ?? 0] as const;
+    }),
+  );
+  const counts = Object.fromEntries(counted);
 
   return (
     <div className="flex flex-col gap-5">
@@ -59,7 +81,17 @@ export default async function Page({
         </Link>
       </div>
 
-      <BatchReport rows={(rows ?? []) as ReportRow[]} counts={counts} />
+      <BatchReport
+        rows={rows}
+        counts={counts}
+        note={
+          rowsError
+            ? `Could not load every row: ${rowsError}`
+            : truncated
+              ? "This listing stopped at its ceiling; the counts above are still exact."
+              : null
+        }
+      />
     </div>
   );
 }

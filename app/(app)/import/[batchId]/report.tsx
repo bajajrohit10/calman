@@ -37,9 +37,11 @@ const TONES: Record<string, "ok" | "info" | "accent" | "warn"> = {
 export function BatchReport({
   rows,
   counts,
+  note,
 }: {
   rows: ReportRow[];
   counts: Record<string, number>;
+  note?: string | null;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +77,7 @@ export function BatchReport({
         </label>
       </div>
 
+      {note ? <ErrorNote>{note}</ErrorNote> : null}
       {error ? <ErrorNote>{error}</ErrorNote> : null}
 
       <div className="overflow-x-auto rounded-lg border border-line bg-surface">

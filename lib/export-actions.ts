@@ -44,9 +44,16 @@ export async function exportCurrentView(
         error: `That is ${probe.total} enquiries — more than the ${MAX_EXPORT} that can be exported at once. Narrow the filter first.`,
       };
     }
-    const all = await loadEnquiries({ ...filters, limit: MAX_EXPORT, offset: 0 });
-    if (all.error) return { error: all.error };
-    ids = all.rows.map((r) => r.enquiry_id);
+    // Paged: PostgREST caps a response at 1000 rows, so asking for MAX_EXPORT
+    // in one call would have quietly exported the first thousand of a set the
+    // guard above had just declared small enough to export whole.
+    const PAGE = 500;
+    for (let offset = 0; offset < probe.total; offset += PAGE) {
+      const page = await loadEnquiries({ ...filters, limit: PAGE, offset });
+      if (page.error) return { error: page.error };
+      ids.push(...page.rows.map((r) => r.enquiry_id));
+      if (page.rows.length < PAGE) break;
+    }
     stem = "calman-enquiries";
   } else if (input.source === "desk") {
     const params = new URLSearchParams(input.search);
