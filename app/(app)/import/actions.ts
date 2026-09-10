@@ -207,6 +207,8 @@ export async function commitChunk(
     skipped: 0,
   };
 
+  // Rows already written for this batch are skipped, so a chunk that failed
+  // halfway can be retried without creating a second enquiry for anyone.
   const { data: already } = await supabase
     .from("import_rows")
     .select("row_number")
@@ -216,93 +218,140 @@ export async function commitChunk(
       rows.map((r) => r.rowNumber),
     );
   const done = new Set((already ?? []).map((r) => r.row_number));
+  const todo = rows.filter((r) => !done.has(r.rowNumber));
 
-  for (const row of rows) {
-    if (done.has(row.rowNumber)) continue;
+  type Pending = Record<string, unknown>;
+  const importRows: Pending[] = [];
+  const base = (row: CommitRow) => ({
+    batch_id: batchId,
+    row_number: row.rowNumber,
+    raw: row.raw,
+    normalised_mobile: row.mobile,
+  });
 
-    const base = {
-      batch_id: batchId,
-      row_number: row.rowNumber,
-      raw: row.raw,
-      normalised_mobile: row.mobile,
-    };
+  /**
+   * Bulk first, and fall back to one-by-one only if the bulk write fails, so a
+   * single bad row cannot sink the other 199 while the happy path still costs
+   * one round trip instead of two hundred.
+   */
+  async function insertMany<T extends Pending>(table: "students" | "enquiries", payload: T[], columns: string) {
+    if (!payload.length) return { data: [] as Pending[], failed: false };
+    const { data, error } = await supabase.from(table).insert(payload as never).select(columns);
+    if (!error) return { data: (data ?? []) as unknown as Pending[], failed: false };
 
-    // ---- nothing to create -------------------------------------------------
+    const out: Pending[] = [];
+    for (const one of payload) {
+      const r = await supabase.from(table).insert(one as never).select(columns).maybeSingle();
+      if (r.data) out.push(r.data as unknown as Pending);
+    }
+    return { data: out, failed: true };
+  }
+
+  // ---- 1. rows that create nothing ----------------------------------------
+  const creating: CommitRow[] = [];
+  const updating: CommitRow[] = [];
+
+  for (const row of todo) {
     if (row.decision === "skip" || row.decision === "ignore" || !row.mobile) {
-      await supabase.from("import_rows").insert({
-        ...base,
+      importRows.push({
+        ...base(row),
         outcome: "skipped",
         skip_reason:
-          row.skipReason ?? (row.decision === "ignore" ? "Ignored by the importer" : "Skipped"),
+          row.skipReason ??
+          (row.decision === "ignore" ? "Ignored by the importer" : "Skipped"),
         student_id: row.existingStudentId,
       });
       counts.skipped += 1;
-      continue;
+    } else if (row.decision === "update" && row.existingEnquiryId) {
+      updating.push(row);
+    } else {
+      creating.push(row);
     }
+  }
 
-    // ---- fill in blanks on the existing open enquiry ------------------------
-    if (row.decision === "update" && row.existingEnquiryId) {
-      // The generated argument types take `undefined` for an omitted default,
-      // not `null`, so unmapped columns are dropped rather than sent as nulls.
-      const { error } = await supabase.rpc("import_update_enquiry", {
-        p_enquiry_id: row.existingEnquiryId,
-        p_source_id: row.sourceId ?? undefined,
-        p_product_text: row.productText ?? undefined,
-        p_term_id: row.termId ?? undefined,
-        p_importance: row.importance ?? undefined,
-        p_lead_verification: row.leadVerification ?? undefined,
-      });
-      await supabase.from("import_rows").insert({
-        ...base,
-        outcome: error ? "skipped" : "duplicate_updated",
-        skip_reason: error ? error.message : null,
+  // ---- 2. updates and supersedes: one RPC each, but both are rare ----------
+  for (const row of updating) {
+    const { error } = await supabase.rpc("import_update_enquiry", {
+      p_enquiry_id: row.existingEnquiryId!,
+      p_source_id: row.sourceId ?? undefined,
+      p_product_text: row.productText ?? undefined,
+      p_term_id: row.termId ?? undefined,
+      p_importance: row.importance ?? undefined,
+      p_lead_verification: row.leadVerification ?? undefined,
+    });
+    importRows.push({
+      ...base(row),
+      outcome: error ? "skipped" : "duplicate_updated",
+      skip_reason: error ? error.message : null,
+      student_id: row.existingStudentId,
+      enquiry_id: error ? null : row.existingEnquiryId,
+    });
+    if (error) counts.skipped += 1;
+    else counts.duplicate_updated += 1;
+  }
+
+  const superseding = creating.filter((r) => r.decision === "supersede" && r.existingEnquiryId);
+  const supersedeFailed = new Set<number>();
+  for (const row of superseding) {
+    const { error } = await supabase.rpc("supersede_enquiry", {
+      p_enquiry_id: row.existingEnquiryId!,
+    });
+    if (error) {
+      supersedeFailed.add(row.rowNumber);
+      importRows.push({
+        ...base(row),
+        outcome: "skipped",
+        skip_reason: `Could not close the previous enquiry: ${error.message}`,
         student_id: row.existingStudentId,
-        enquiry_id: error ? null : row.existingEnquiryId,
       });
-      if (error) counts.skipped += 1;
-      else counts.duplicate_updated += 1;
-      continue;
+      counts.skipped += 1;
     }
+  }
 
-    // ---- create (optionally superseding the previous enquiry) ---------------
-    let studentId = row.existingStudentId;
-    if (!studentId) {
-      const { data, error } = await supabase
-        .from("students")
-        .insert({ mobile: row.mobile, name: row.name, created_by: viewer.userId })
-        .select("id")
-        .single();
-      if (error) {
-        await supabase.from("import_rows").insert({
-          ...base,
-          outcome: "skipped",
-          skip_reason: `Could not create the student: ${error.message}`,
-        });
-        counts.skipped += 1;
-        continue;
-      }
-      studentId = data.id;
+  const toCreate = creating.filter((r) => !supersedeFailed.has(r.rowNumber));
+
+  // ---- 3. students, in one write ------------------------------------------
+  const newStudents = toCreate.filter((r) => !r.existingStudentId);
+  const studentByMobile = new Map<string, string>();
+  if (newStudents.length) {
+    const { data } = await insertMany(
+      "students",
+      newStudents.map((r) => ({
+        mobile: r.mobile,
+        name: r.name,
+        created_by: viewer.userId,
+      })),
+      "id, mobile",
+    );
+    for (const s of data) {
+      studentByMobile.set(s.mobile as string, s.id as string);
     }
+  }
 
-    if (row.decision === "supersede" && row.existingEnquiryId) {
-      const { error } = await supabase.rpc("supersede_enquiry", {
-        p_enquiry_id: row.existingEnquiryId,
+  const withStudent = toCreate
+    .map((row) => ({
+      row,
+      studentId: row.existingStudentId ?? studentByMobile.get(row.mobile!) ?? null,
+    }))
+    .filter((x) => {
+      if (x.studentId) return true;
+      importRows.push({
+        ...base(x.row),
+        outcome: "skipped",
+        skip_reason: "Could not create the student for this number",
       });
-      if (error) {
-        await supabase.from("import_rows").insert({
-          ...base,
-          outcome: "skipped",
-          skip_reason: `Could not close the previous enquiry: ${error.message}`,
-          student_id: studentId,
-        });
-        counts.skipped += 1;
-        continue;
-      }
-    }
+      counts.skipped += 1;
+      return false;
+    });
 
-    const { data: enquiry, error: enquiryError } = await supabase
-      .from("enquiries")
-      .insert({
+  // ---- 4. enquiries, in one write -----------------------------------------
+  // Every row in a chunk carries a distinct number (the file was de-duplicated
+  // before this point), so student_id identifies the row it belongs to and the
+  // returned set can be matched without relying on insert order.
+  if (withStudent.length) {
+    const { data } = await insertMany(
+      "enquiries",
+      withStudent.map(({ row, studentId }) => ({
         student_id: studentId,
         type: "purchase",
         source_id: row.sourceId,
@@ -311,32 +360,42 @@ export async function commitChunk(
         importance: row.importance,
         lead_verification: row.leadVerification,
         created_by: viewer.userId,
-      })
-      .select("id")
-      .single();
+      })),
+      "id, student_id",
+    );
 
-    if (enquiryError) {
-      await supabase.from("import_rows").insert({
-        ...base,
-        outcome: "skipped",
-        skip_reason: `Could not create the enquiry: ${enquiryError.message}`,
+    const enquiryByStudent = new Map<string, number>();
+    for (const e of data) enquiryByStudent.set(e.student_id as string, e.id as number);
+
+    for (const { row, studentId } of withStudent) {
+      const enquiryId = enquiryByStudent.get(studentId!);
+      if (!enquiryId) {
+        importRows.push({
+          ...base(row),
+          outcome: "skipped",
+          skip_reason: "Could not create the enquiry for this row",
+          student_id: studentId,
+        });
+        counts.skipped += 1;
+        continue;
+      }
+      // No assignment row is written: that is what "unassigned pool" means,
+      // and the recommended list picks them up as `fresh` (§6).
+      importRows.push({
+        ...base(row),
+        outcome: row.decision === "supersede" ? "duplicate_new_enquiry" : "imported",
         student_id: studentId,
+        enquiry_id: enquiryId,
       });
-      counts.skipped += 1;
-      continue;
+      if (row.decision === "supersede") counts.duplicate_new_enquiry += 1;
+      else counts.imported += 1;
     }
+  }
 
-    // No assignment row is written: that is what "unassigned pool" means, and
-    // the recommended list picks them up as `fresh` (§6).
-    await supabase.from("import_rows").insert({
-      ...base,
-      outcome: row.decision === "supersede" ? "duplicate_new_enquiry" : "imported",
-      student_id: studentId,
-      enquiry_id: enquiry.id,
-    });
-
-    if (row.decision === "supersede") counts.duplicate_new_enquiry += 1;
-    else counts.imported += 1;
+  // ---- 5. the audit rows, in one write ------------------------------------
+  if (importRows.length) {
+    const { error } = await supabase.from("import_rows").insert(importRows as never);
+    if (error) return { error: `Could not write the import log: ${error.message}` };
   }
 
   revalidatePath("/import");

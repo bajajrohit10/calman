@@ -53,6 +53,12 @@ type ReviewRow = {
   termId: string | null;
   importance: Importance | null;
   leadVerification: LeadVerification | null;
+  /**
+   * Values the file supplied that matched nothing. Silently dropping these is
+   * the failure that hides: a file naming a retired term imports every row
+   * with no term and nobody notices until the reports look wrong.
+   */
+  unmatched: { field: string; value: string }[];
 };
 
 type Stage = "upload" | "mapping" | "review" | "committing" | "done";
@@ -66,6 +72,22 @@ function matchMaster(list: Master[], value: string | undefined): string | null {
   const v = value.trim().toLowerCase();
   if (!v) return null;
   return list.find((m) => m.name.trim().toLowerCase() === v)?.id ?? null;
+}
+
+/**
+ * Resolve a value and report it when it does not land. An empty cell is not a
+ * problem — the field is optional; a *populated* cell that matches nothing is,
+ * because the row will import as though the column had been blank.
+ */
+function resolve<T>(
+  field: string,
+  raw: string | undefined,
+  parse: (v: string) => T | null,
+): { value: T | null; unmatched: { field: string; value: string } | null } {
+  const v = (raw ?? "").trim();
+  if (!v) return { value: null, unmatched: null };
+  const value = parse(v);
+  return { value, unmatched: value === null ? { field, value: v } : null };
 }
 
 function parseImportance(value: string | undefined): Importance | null {
@@ -207,6 +229,20 @@ export function Importer({ masters }: { masters: ImportMasters }) {
     try {
       const seen = new Map<string, number>();
       const draft: ReviewRow[] = parsed.map((p) => {
+        const cell = (col: string | null) => (col ? p.raw[col] : undefined);
+        const source = resolve("source", cell(mapping.source), (v) =>
+          matchMaster(masters.sources, v),
+        );
+        const term = resolve("term", cell(mapping.term), (v) =>
+          matchMaster(masters.terms, v),
+        );
+        const importance = resolve("importance", cell(mapping.importance), parseImportance);
+        const lead = resolve(
+          "lead verification",
+          cell(mapping.lead_verification),
+          parseLeadVerification,
+        );
+
         const rawMobile = p.raw[mobileCol] ?? "";
         const mobile = normaliseMobile(rawMobile);
         const valid = isValidMobile(mobile);
@@ -226,15 +262,16 @@ export function Importer({ masters }: { masters: ImportMasters }) {
           status: null,
           decision: "skip",
           name: mapping.name ? (p.raw[mapping.name] ?? "").trim() || null : null,
-          sourceId: matchMaster(masters.sources, mapping.source ? p.raw[mapping.source] : ""),
+          sourceId: source.value,
           productText: mapping.product_text
             ? (p.raw[mapping.product_text] ?? "").trim() || null
             : null,
-          termId: matchMaster(masters.terms, mapping.term ? p.raw[mapping.term] : ""),
-          importance: parseImportance(mapping.importance ? p.raw[mapping.importance] : ""),
-          leadVerification: parseLeadVerification(
-            mapping.lead_verification ? p.raw[mapping.lead_verification] : "",
-          ),
+          termId: term.value,
+          importance: importance.value,
+          leadVerification: lead.value,
+          unmatched: [source, term, importance, lead]
+            .map((r) => r.unmatched)
+            .filter((u): u is { field: string; value: string } => u !== null),
         };
       });
 
@@ -351,6 +388,19 @@ export function Importer({ masters }: { masters: ImportMasters }) {
       else g.new.push(r);
     }
     return g;
+  }, [review]);
+
+  /** §5.7: an unrecognised value must not slip past unremarked. */
+  const unmatchedSummary = useMemo(() => {
+    const rows = review.filter((r) => r.unmatched.length > 0);
+    const fields = new Map<string, number>();
+    for (const r of rows) {
+      for (const u of r.unmatched) fields.set(u.field, (fields.get(u.field) ?? 0) + 1);
+    }
+    return {
+      rows: rows.length,
+      fields: [...fields].map(([f, n]) => `${f} ×${n}`),
+    };
   }, [review]);
 
   function setDecisionFor(rowNumbers: Set<number>, decision: RowDecision) {
@@ -497,6 +547,14 @@ export function Importer({ masters }: { masters: ImportMasters }) {
             <span className="text-[12.5px] text-ink-2">
               {review.length} rows from {filename}
             </span>
+            {unmatchedSummary.rows > 0 ? (
+              <span className="flex items-center gap-1.5 rounded-md border border-warn/40 bg-warn-soft/50 px-2 py-1 text-[12px] text-warn">
+                <strong>{unmatchedSummary.rows}</strong>
+                {unmatchedSummary.rows === 1 ? " row has" : " rows have"} a value that
+                matches no master list ({unmatchedSummary.fields.join(", ")}). Those
+                fields will import blank.
+              </span>
+            ) : null}
             <Button
               className="ml-auto"
               variant="primary"
@@ -625,10 +683,18 @@ function Group({
                   ) : null}
                 </td>
                 <td className="px-2 py-1.5 text-ink-3">
-                  {r.invalidReason ??
-                    (r.status
-                      ? `${r.status.enquiryCount} enquir${r.status.enquiryCount === 1 ? "y" : "ies"} on file`
-                      : "not seen before")}
+                  <span className="block">
+                    {r.invalidReason ??
+                      (r.status
+                        ? `${r.status.enquiryCount} enquir${r.status.enquiryCount === 1 ? "y" : "ies"} on file`
+                        : "not seen before")}
+                  </span>
+                  {r.unmatched.length ? (
+                    <span className="mt-0.5 block text-[11.5px] text-warn">
+                      not recognised:{" "}
+                      {r.unmatched.map((u) => `${u.field} “${u.value}”`).join(", ")}
+                    </span>
+                  ) : null}
                 </td>
                 <td className="px-2 py-1.5">
                   {r.mobile && r.status?.studentId ? (
