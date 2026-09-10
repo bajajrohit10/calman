@@ -58,6 +58,8 @@ export default async function Page({
       supabase.from("courses").select("id, name").eq("is_active", true).order("name"),
       supabase.from("subjects").select("id, name, course_id").eq("is_active", true).order("name"),
       supabase.from("contents").select("id, name").eq("is_active", true).order("priority"),
+      supabase.from("terms").select("id, name").eq("is_active", true).order("sort_order"),
+      supabase.from("sources").select("id, name").eq("is_active", true).order("name"),
     ]),
   ]);
 
@@ -83,7 +85,7 @@ export default async function Page({
       })
     : { rows: [], total: 0, error: null };
 
-  const [teachers, courses, subjects, contents] = masters;
+  const [teachers, courses, subjects, contents, panelTerms, panelSources] = masters;
 
   return (
     <div className="flex flex-col gap-5">
@@ -108,6 +110,8 @@ export default async function Page({
           courses: courses.data ?? [],
           subjects: subjects.data ?? [],
           contents: contents.data ?? [],
+          terms: panelTerms.data ?? [],
+          sources: panelSources.data ?? [],
         }}
       />
     </div>

@@ -79,6 +79,8 @@ export default async function Page({
           courses: courses.data ?? [],
           subjects: subjects.data ?? [],
           contents: contents.data ?? [],
+          terms: terms.data ?? [],
+          sources: sources.data ?? [],
         }}
         selected={{
           counsellor: one(sp.counsellor) ?? "",

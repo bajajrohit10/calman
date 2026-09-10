@@ -7,7 +7,9 @@ import {
   outcomesFor,
   type CallOutcome,
   type EnquiryType,
+  type Importance,
   type IssueCategory,
+  type LeadVerification,
 } from "@/lib/enquiry-labels";
 import { createClient } from "@/lib/supabase/server";
 
@@ -50,6 +52,11 @@ export type PanelPayload = {
   mobile: string;
   term: string | null;
   productText: string | null;
+  /** Current values for the "Edit enquiry details" control. */
+  termId: string | null;
+  sourceId: string | null;
+  importance: Importance | null;
+  leadVerification: LeadVerification | null;
   items: {
     id: string;
     status: string;
@@ -74,7 +81,7 @@ export async function loadPanelEnquiry(
   const { data, error } = await supabase
     .from("enquiries")
     .select(
-      `id, type, product_text,
+      `id, type, product_text, term_id, source_id, importance, lead_verification,
        term:terms ( name ),
        students ( name, mobile ),
        enquiry_items (
@@ -102,6 +109,10 @@ export async function loadPanelEnquiry(
       mobile: student?.mobile ?? "",
       term: (data.term as { name: string } | null)?.name ?? null,
       productText: data.product_text,
+      termId: data.term_id,
+      sourceId: data.source_id,
+      importance: data.importance as Importance | null,
+      leadVerification: data.lead_verification as LeadVerification | null,
       items: (data.enquiry_items ?? []).map((i) => ({
         id: i.id,
         status: i.status,
@@ -291,4 +302,67 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
   revalidatePath("/quick-add");
 
   return { error: null, ok: "Call logged." };
+}
+
+
+/**
+ * Correct an enquiry's grading (§5.3), and the student's name with it.
+ *
+ * These are the fields a counsellor learns on the call: which attempt they are
+ * sitting, where they came from, whether they have a competitor quote, and how
+ * serious they are. Re-grading to importance A is what §5.8 counts as a price
+ * list issued, so this is also the only path that metric has.
+ *
+ * RLS decides what may be written — the column grant on enquiries limits it to
+ * these four, and students to `name` — so this action deliberately does not
+ * re-implement that check. It writes as the caller and lets the database
+ * refuse anything else.
+ */
+export async function updateEnquiryDetails(input: {
+  enquiryId: number;
+  importance: Importance | "" | null;
+  termId: string | null;
+  sourceId: string | null;
+  leadVerification: LeadVerification | "" | null;
+  studentName: string | null;
+}): Promise<{ error: string | null; ok?: string }> {
+  const viewer = await requireUser();
+  if (!viewer.profile) return { error: "Your account is not active." };
+
+  const supabase = await createClient();
+
+  const { data: enquiry, error: findError } = await supabase
+    .from("enquiries")
+    .select("id, student_id, students ( mobile )")
+    .eq("id", input.enquiryId)
+    .maybeSingle();
+
+  if (findError) return { error: findError.message };
+  if (!enquiry) return { error: "That enquiry no longer exists." };
+
+  const { error } = await supabase
+    .from("enquiries")
+    .update({
+      importance: input.importance || null,
+      term_id: input.termId || null,
+      source_id: input.sourceId || null,
+      lead_verification: input.leadVerification || null,
+    })
+    .eq("id", input.enquiryId);
+
+  if (error) return { error: `Could not save the details: ${error.message}` };
+
+  const name = input.studentName?.trim() || null;
+  const { error: nameError } = await supabase
+    .from("students")
+    .update({ name })
+    .eq("id", enquiry.student_id);
+
+  if (nameError) return { error: `Could not save the name: ${nameError.message}` };
+
+  const mobile = (enquiry.students as { mobile: string } | null)?.mobile;
+  if (mobile) revalidatePath(`/students/${mobile}`);
+  revalidatePath("/enquiries");
+
+  return { error: null, ok: "Details saved." };
 }

@@ -56,6 +56,10 @@ export type NewEnquiryResult = {
     mobile: string;
     term: string | null;
     productText: string | null;
+    termId: string | null;
+    sourceId: string | null;
+    importance: Importance | null;
+    leadVerification: LeadVerification | null;
     items: never[];
   };
 };
@@ -147,6 +151,10 @@ export async function createEnquiry(
       mobile,
       term: (enquiry.term as { name: string } | null)?.name ?? null,
       productText: input.productText?.trim() || null,
+      termId: input.termId || null,
+      sourceId: input.sourceId || null,
+      importance: (input.importance || null) as Importance | null,
+      leadVerification: (input.leadVerification || null) as LeadVerification | null,
       items: [],
     },
   };

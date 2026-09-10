@@ -215,6 +215,10 @@ export function QuickAdd({ masters }: { masters: QuickAddMasters }) {
                         mobile: stage.student.mobile,
                         term: openEnquiryRow.term?.name ?? null,
                         productText: openEnquiryRow.product_text,
+                        termId: null,
+                        sourceId: null,
+                        importance: openEnquiryRow.importance,
+                        leadVerification: openEnquiryRow.lead_verification,
                         items: openEnquiryRow.enquiry_items.map((i) => ({
                           id: i.id,
                           status: i.status,
