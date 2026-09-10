@@ -4,9 +4,38 @@ import { revalidatePath } from "next/cache";
 
 import { getViewer, isAdmin } from "@/lib/auth";
 import type { AssignmentBucket } from "@/lib/enquiry-labels";
+import { loadAllMatching, type MatchingRow } from "@/lib/recommended";
 import { createClient } from "@/lib/supabase/server";
 
+import { parseDeskParams } from "./filters";
+
 export type AssignResult = { error: string | null; ok?: string };
+
+export type SelectAllResult = {
+  error: string | null;
+  rows?: MatchingRow[];
+  total?: number;
+};
+
+/**
+ * Every row matching the desk's current filter, across all pages.
+ *
+ * Takes the query string rather than a filter object so the selection is
+ * parsed by exactly the same code that produced the page the manager is
+ * looking at — "select all 240 matching" has to mean the 240 on screen, not a
+ * set assembled from a second, subtly different reading of the filters.
+ */
+export async function selectAllMatching(search: string): Promise<SelectAllResult> {
+  const auth = await authorise();
+  if (auth.error) return { error: auth.error };
+
+  const params = new URLSearchParams(search);
+  const { filters } = parseDeskParams((key) => params.get(key));
+
+  const result = await loadAllMatching(filters);
+  if (result.error) return { error: result.error };
+  return { error: null, rows: result.rows, total: result.total };
+}
 
 /**
  * The desk is admin/manager only, and so are the assignment RLS policies. This

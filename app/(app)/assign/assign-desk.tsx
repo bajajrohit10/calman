@@ -14,7 +14,12 @@ import { formatDate } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
 import type { RecommendedRow } from "@/lib/recommended";
 
-import { assignEnquiries, reassignDay, unassignEnquiries } from "./actions";
+import {
+  assignEnquiries,
+  reassignDay,
+  selectAllMatching,
+  unassignEnquiries,
+} from "./actions";
 
 type Master = { id: string; name: string };
 type Subject = Master & { course_id: string };
@@ -62,7 +67,7 @@ export function AssignDesk({
   selected: Record<string, string>;
 }) {
   const router = useRouter();
-  const [picked, setPicked] = useState<Set<number>>(new Set());
+  const [picked, setPicked] = useState<Map<number, AssignmentBucket>>(new Map());
   const [counsellor, setCounsellor] = useState("");
   const [result, setResult] = useState<{ error: string | null; ok?: string } | null>(null);
   const [pending, start] = useTransition();
@@ -80,12 +85,25 @@ export function AssignDesk({
 
   const allOnPage = rows.length > 0 && rows.every((r) => picked.has(r.enquiry_id));
 
-  function toggle(id: number) {
+  function toggle(row: RecommendedRow) {
     setPicked((p) => {
-      const next = new Set(p);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      const next = new Map(p);
+      if (next.has(row.enquiry_id)) next.delete(row.enquiry_id);
+      else next.set(row.enquiry_id, row.bucket);
       return next;
+    });
+  }
+
+  /** Every row the filter matches, not just the ones on screen. */
+  function selectAll() {
+    setResult(null);
+    start(async () => {
+      const res = await selectAllMatching(window.location.search);
+      if (res.error) {
+        setResult({ error: res.error });
+        return;
+      }
+      setPicked(new Map((res.rows ?? []).map((r) => [r.enquiryId, r.bucket])));
     });
   }
 
@@ -95,22 +113,21 @@ export function AssignDesk({
       const res = await fn();
       setResult(res);
       if (!res.error) {
-        setPicked(new Set());
+        setPicked(new Map());
         router.refresh();
       }
     });
   }
 
-  const ids = [...picked];
+  const ids = [...picked.keys()];
   // Campaign mode is the same filter bar with the due-date restriction lifted,
   // so an assignment made from it is a campaign assignment (§5.5). Otherwise
   // each row keeps the bucket §6 derived for it.
-  const toAssign = rows
-    .filter((r) => picked.has(r.enquiry_id))
-    .map((r) => ({
-      enquiryId: r.enquiry_id,
-      bucket: (includeNotDue ? "campaign" : r.bucket) as AssignmentBucket,
-    }));
+  const toAssign = [...picked].map(([enquiryId, bucket]) => ({
+    enquiryId,
+    bucket: (includeNotDue ? "campaign" : bucket) as AssignmentBucket,
+  }));
+  const allMatchingSelected = total > 0 && picked.size === total;
 
   return (
     <div className="flex flex-col gap-4 xl:flex-row">
@@ -254,6 +271,44 @@ export function AssignDesk({
 
         {error ? <ErrorNote>{error}</ErrorNote> : null}
 
+        {/* Cross-page selection. The header checkbox stays "this page only";
+            this is the only way to act on rows the manager cannot see. */}
+        {total > rows.length ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-line bg-sunk/40 px-3 py-1.5 text-[12px]">
+            {allMatchingSelected ? (
+              <>
+                <span className="text-ink">
+                  All {picked.size} matching enquiries selected, including rows on
+                  other pages.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPicked(new Map())}
+                  className="text-ink-2 underline underline-offset-2 hover:text-ink"
+                >
+                  Clear selection
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="text-ink-2">
+                  {picked.size
+                    ? `${picked.size} selected on this page.`
+                    : `Showing ${rows.length} of ${total}.`}
+                </span>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={selectAll}
+                  className="text-accent underline underline-offset-2 disabled:opacity-60"
+                >
+                  Select all {total} matching
+                </button>
+              </>
+            )}
+          </div>
+        ) : null}
+
         <div className="overflow-x-auto rounded-lg border border-line bg-surface">
           <table className="w-full min-w-[900px] border-collapse text-[12.5px]">
             <thead>
@@ -264,7 +319,11 @@ export function AssignDesk({
                     aria-label="Select all on this page"
                     checked={allOnPage}
                     onChange={() =>
-                      setPicked(allOnPage ? new Set() : new Set(rows.map((r) => r.enquiry_id)))
+                      setPicked(
+                        allOnPage
+                          ? new Map()
+                          : new Map(rows.map((r) => [r.enquiry_id, r.bucket])),
+                      )
                     }
                   />
                 </th>
@@ -292,7 +351,7 @@ export function AssignDesk({
                       type="checkbox"
                       aria-label={`Select enquiry ${r.enquiry_id}`}
                       checked={picked.has(r.enquiry_id)}
-                      onChange={() => toggle(r.enquiry_id)}
+                      onChange={() => toggle(r)}
                     />
                   </td>
                   <td className="px-2 py-1.5">

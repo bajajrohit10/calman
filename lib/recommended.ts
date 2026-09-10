@@ -104,10 +104,49 @@ export async function loadRecommended(
   return { rows, total: rows[0]?.total_count ?? 0, error: null };
 }
 
-/** Every enquiry id matching the filter, ignoring the page — for "select all". */
-export async function loadRecommendedIds(
+/**
+ * A hard ceiling on "select all matching". Selecting a subset and reporting it
+ * as everything would be worse than refusing: the manager would assign 2000 of
+ * 3000 leads and have no way of knowing which 1000 were left behind.
+ */
+export const MAX_SELECT_ALL = 2000;
+
+const SELECT_PAGE = 500;
+
+export type MatchingRow = { enquiryId: number; bucket: AssignmentBucket };
+
+/**
+ * Every row matching the filter, ignoring the page — for "select all N
+ * matching" on the desk.
+ *
+ * Returns each row's derived bucket alongside its id, because a selection that
+ * spans pages is assigned from this list rather than from what is on screen,
+ * and each assignment has to keep the bucket §6 put it in.
+ */
+export async function loadAllMatching(
   filters: RecommendedFilters,
-): Promise<number[]> {
-  const { rows } = await loadRecommended({ ...filters, limit: 1000, offset: 0 });
-  return rows.map((r) => r.enquiry_id);
+): Promise<{ rows: MatchingRow[]; total: number; error: string | null }> {
+  // One cheap probe for the real total before fetching anything wide.
+  const probe = await loadRecommended({ ...filters, limit: 1, offset: 0 });
+  if (probe.error) return { rows: [], total: 0, error: probe.error };
+
+  if (probe.total > MAX_SELECT_ALL) {
+    return {
+      rows: [],
+      total: probe.total,
+      error: `That is ${probe.total} enquiries — more than the ${MAX_SELECT_ALL} that can be selected at once. Narrow the filter first.`,
+    };
+  }
+
+  const out: MatchingRow[] = [];
+  for (let offset = 0; offset < probe.total; offset += SELECT_PAGE) {
+    const page = await loadRecommended({ ...filters, limit: SELECT_PAGE, offset });
+    if (page.error) return { rows: [], total: probe.total, error: page.error };
+    out.push(
+      ...page.rows.map((r) => ({ enquiryId: r.enquiry_id, bucket: r.bucket })),
+    );
+    if (page.rows.length < SELECT_PAGE) break;
+  }
+
+  return { rows: out, total: probe.total, error: null };
 }
