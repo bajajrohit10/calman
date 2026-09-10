@@ -46,3 +46,6 @@ yarn-error.log*
 
 # turbo
 .turbo
+
+# Source spreadsheets and other client reference material — never commit
+/docs/reference/

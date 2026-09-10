@@ -1,26 +1,118 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* Calman is a desktop tool people sit in for eight hours. The palette is
+   deliberately low-saturation so nothing fatigues, with a single teal accent
+   reserved for interactive state and one semantic set for enquiry status. */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+:root {
+  --ground: #f4f6f5;
+  --surface: #ffffff;
+  --surface-2: #eceeed;
+  --sunk: #e4e8e6;
+
+  --ink: #16211f;
+  --ink-2: #4a5754;
+  --ink-3: #74817e;
+
+  --line: #d9dfdc;
+  --line-2: #c3ccc8;
+
+  --accent: #0d5b54;
+  --accent-hover: #0a4741;
+  --accent-ink: #ffffff;
+  --accent-soft: #dbeae7;
+
+  --ok: #1c6b43;
+  --ok-soft: #dbeade0;
+  --warn: #8a5a0b;
+  --warn-soft: #f2e7d1;
+  --danger: #9d2d39;
+  --danger-soft: #f4dcde;
+  --info: #1c5691;
+  --info-soft: #dbe5f1;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --ground: #0d1413;
+    --surface: #141d1b;
+    --surface-2: #1a2422;
+    --sunk: #101816;
+
+    --ink: #e7ecea;
+    --ink-2: #a7b3b0;
+    --ink-3: #7a8784;
+
+    --line: #25302c;
+    --line-2: #33403c;
+
+    --accent: #4dbfaf;
+    --accent-hover: #63cfc0;
+    --accent-ink: #06201d;
+    --accent-soft: #15302c;
+
+    --ok: #54b17e;
+    --ok-soft: #152b1f;
+    --warn: #cf9642;
+    --warn-soft: #2b2315;
+    --danger: #e07e88;
+    --danger-soft: #2e191b;
+    --info: #67a8e8;
+    --info-soft: #15222e;
   }
 }
 
+@theme inline {
+  --color-ground: var(--ground);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-sunk: var(--sunk);
+
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+
+  --color-line: var(--line);
+  --color-line-2: var(--line-2);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-stack), ui-monospace, monospace;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--ground);
+  color: var(--ink);
+}
+
+/* Dense by default: this is a data tool, not a marketing page. */
+:where(input, select, textarea) {
+  color: var(--ink);
+}
+
+::placeholder {
+  color: var(--ink-3);
+}
+
+:where(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Keyboard-first (§5.3): never remove focus rings, only make them tidy. */
+:where(button, a):focus:not(:focus-visible) {
+  outline: none;
 }
