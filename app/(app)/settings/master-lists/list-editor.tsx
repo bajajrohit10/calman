@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { Fragment, useActionState, useMemo, useState } from "react";
 
 import {
   Badge,
@@ -271,7 +271,8 @@ export function ListEditor({
   // Subjects read far better grouped under their course than as one flat list
   // of "DT, FM, IDT, …" with a course column repeated down the side.
   const groups = useMemo(() => {
-    if (!spec.groupByCourse) return [{ title: null as string | null, rows: visible }];
+    if (!spec.groupByCourse)
+      return [{ id: "all", title: null as string | null, rows: visible }];
     const byCourse = new Map<string, Row[]>();
     for (const row of visible) {
       const key = String(row.course_id ?? "");
@@ -280,6 +281,9 @@ export function ListEditor({
     }
     return [...byCourse.entries()]
       .map(([courseId, groupRows]) => ({
+        // Keyed by course id, not title: two unplaced courses would both fall
+        // back to "Unknown course" and collide.
+        id: courseId,
         title: courses.find((c) => c.id === courseId)?.name ?? "Unknown course",
         rows: groupRows,
       }))
@@ -354,9 +358,9 @@ export function ListEditor({
           </thead>
           <tbody>
             {groups.map((group) => (
-              <>
+              <Fragment key={group.id}>
                 {group.title ? (
-                  <tr key={`h-${group.title}`} className="border-b border-line bg-sunk/60">
+                  <tr className="border-b border-line bg-sunk/60">
                     <td
                       colSpan={spec.fields.length + 2}
                       className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-2"
@@ -373,7 +377,7 @@ export function ListEditor({
                     courses={courses}
                   />
                 ))}
-              </>
+              </Fragment>
             ))}
 
             {visible.length === 0 ? (

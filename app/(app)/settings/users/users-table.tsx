@@ -129,6 +129,11 @@ function RoleCell({
   return (
     <form action={action} className="flex items-center gap-1.5">
       <Select
+        // The select is uncontrolled, so React keeps whatever the user picked
+        // and ignores a changed defaultValue. Keying on the saved role forces a
+        // fresh element once the action lands, so the cell shows what is now
+        // stored rather than the stale choice.
+        key={user.role}
         name="role"
         defaultValue={user.role}
         className="w-[132px]"
@@ -147,6 +152,11 @@ function RoleCell({
       {state.error ? (
         <span className="text-[11px] text-danger" role="alert">
           {state.error}
+        </span>
+      ) : null}
+      {state.ok ? (
+        <span className="text-[11px] text-ok" role="status">
+          {state.ok}
         </span>
       ) : null}
     </form>
