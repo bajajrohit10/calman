@@ -249,7 +249,11 @@ export function QuickAdd({ masters }: { masters: QuickAddMasters }) {
             </div>
           </div>
 
-          <StudentHistoryView student={stage.student} />
+          <StudentHistoryView
+            student={stage.student}
+            masters={{ terms: masters.terms, sources: masters.sources }}
+            onEdited={() => setLookup(null)}
+          />
         </div>
       ) : null}
 
@@ -271,7 +275,13 @@ export function QuickAdd({ masters }: { masters: QuickAddMasters }) {
               Open the full history
             </Link>
           </p>
-          {stage.student ? <StudentHistoryView student={stage.student} /> : null}
+          {stage.student ? (
+            <StudentHistoryView
+              student={stage.student}
+              masters={{ terms: masters.terms, sources: masters.sources }}
+              onEdited={() => setLookup(null)}
+            />
+          ) : null}
         </div>
       ) : null}
     </div>

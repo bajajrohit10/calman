@@ -73,6 +73,8 @@ export type HistoryEnquiry = {
   lost_reason: LostReason | null;
   close_reason: CloseReason | null;
   next_follow_up_date: string | null;
+  term_id: string | null;
+  source_id: string | null;
   fresh_call_date: string | null;
   follow_up_slots_used: number;
   created_at: string;
@@ -97,7 +99,7 @@ const SELECT = `
   id, mobile, name, created_at,
   enquiries (
     id, type, status, product_text, importance, lead_verification,
-    lost_reason, close_reason, next_follow_up_date, fresh_call_date,
+    lost_reason, close_reason, next_follow_up_date, term_id, source_id, fresh_call_date,
     follow_up_slots_used, created_at, closed_at,
     source:sources ( name ),
     term:terms ( name ),

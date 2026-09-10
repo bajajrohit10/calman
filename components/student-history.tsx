@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { EnquiryDetailsEditor, type DetailMasters } from "@/components/enquiry-details";
 import { Badge, cx } from "@/components/ui";
 import { WhatsAppButton } from "@/components/whatsapp/button";
 import { courseTextFor } from "@/lib/whatsapp-text";
@@ -101,10 +102,15 @@ export function EnquiryCard({
   enquiry,
   mobile,
   studentName,
+  masters,
+  onEdited,
 }: {
   enquiry: HistoryEnquiry;
   mobile?: string;
   studentName?: string | null;
+  /** Omit to render the card read-only. */
+  masters?: DetailMasters;
+  onEdited?: () => void;
 }) {
   const resolution =
     enquiry.status === "lost" && enquiry.lost_reason
@@ -128,6 +134,23 @@ export function EnquiryCard({
           opened {formatDateTime(enquiry.created_at)}
         </span>
       </header>
+
+      {masters ? (
+        <div className="border-b border-line px-4 py-2">
+          <EnquiryDetailsEditor
+            enquiryId={enquiry.id}
+            masters={masters}
+            initial={{
+              studentName: studentName ?? null,
+              importance: enquiry.importance,
+              termId: enquiry.term_id,
+              sourceId: enquiry.source_id,
+              leadVerification: enquiry.lead_verification,
+            }}
+            onSaved={onEdited}
+          />
+        </div>
+      ) : null}
 
       {enquiry.status === "open" && mobile ? (
         <div className="border-b border-line px-4 py-2">
@@ -255,10 +278,14 @@ export function StudentHistoryView({
   student,
   className,
   showHeader = true,
+  masters,
+  onEdited,
 }: {
   student: StudentHistory;
   className?: string;
   showHeader?: boolean;
+  masters?: DetailMasters;
+  onEdited?: () => void;
 }) {
   return (
     <div className={cx("flex flex-col gap-3", className)}>
@@ -287,6 +314,8 @@ export function StudentHistoryView({
             enquiry={enquiry}
             mobile={student.mobile}
             studentName={student.name}
+            masters={masters}
+            onEdited={onEdited}
           />
         ))
       ) : (

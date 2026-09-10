@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
 import { isValidMobile, normaliseMobile } from "@/lib/mobile";
 import { loadStudentByMobile } from "@/lib/students";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Student · Calman" };
 
@@ -28,6 +29,12 @@ export default async function Page({
   const student = await loadStudentByMobile(mobile);
   if (!student) notFound();
 
+  const supabase = await createClient();
+  const [terms, sources] = await Promise.all([
+    supabase.from("terms").select("id, name").eq("is_active", true).order("sort_order"),
+    supabase.from("sources").select("id, name").eq("is_active", true).order("name"),
+  ]);
+
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
@@ -44,7 +51,10 @@ export default async function Page({
         </Link>
       </div>
 
-      <StudentHistoryView student={student} />
+      <StudentHistoryView
+        student={student}
+        masters={{ terms: terms.data ?? [], sources: sources.data ?? [] }}
+      />
     </div>
   );
 }

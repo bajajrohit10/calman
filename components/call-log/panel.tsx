@@ -4,9 +4,7 @@ import { useId, useMemo, useRef, useState, useTransition } from "react";
 
 import { Badge, Button, ErrorNote, Input, Select, Textarea, cx } from "@/components/ui";
 import {
-  IMPORTANCE_LABELS,
   ISSUE_CATEGORY_LABELS,
-  LEAD_VERIFICATION_LABELS,
   ITEM_STATUS_LABELS,
   OUTCOME_LABELS,
   outcomeTakesDate,
@@ -17,12 +15,13 @@ import {
   type IssueCategory,
   type LeadVerification,
 } from "@/lib/enquiry-labels";
+import { EnquiryDetailsEditor } from "@/components/enquiry-details";
 import { istDatePlus, istNextMonday, istToday } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
 import { WhatsAppButton } from "@/components/whatsapp/button";
 import { courseTextFor } from "@/lib/whatsapp-text";
 
-import { logCall, updateEnquiryDetails, type LogCallResult } from "./actions";
+import { logCall, type LogCallResult } from "./actions";
 
 export type Master = { id: string; name: string };
 export type SubjectMaster = { id: string; name: string; course_id: string };
@@ -203,32 +202,6 @@ export function CallLogPanel({
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
   const [newLines, setNewLines] = useState<NewLine[]>([]);
   const [showInterests, setShowInterests] = useState(false);
-  const [showDetails, setShowDetails] = useState(false);
-  const [details, setDetails] = useState({
-    importance: (enquiry.importance ?? "") as Importance | "",
-    termId: enquiry.termId ?? "",
-    sourceId: enquiry.sourceId ?? "",
-    leadVerification: (enquiry.leadVerification ?? "") as LeadVerification | "",
-    studentName: enquiry.studentName ?? "",
-  });
-  const [detailsResult, setDetailsResult] = useState<LogCallResult | null>(null);
-  const [savingDetails, startDetails] = useTransition();
-
-  function saveDetails() {
-    setDetailsResult(null);
-    startDetails(async () => {
-      setDetailsResult(
-        await updateEnquiryDetails({
-          enquiryId: enquiry.id,
-          importance: details.importance,
-          termId: details.termId || null,
-          sourceId: details.sourceId || null,
-          leadVerification: details.leadVerification,
-          studentName: details.studentName,
-        }),
-      );
-    });
-  }
   const [result, setResult] = useState<LogCallResult | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -563,137 +536,17 @@ export function CallLogPanel({
           </section>
         ) : null}
 
-        <div>
-          <button
-            type="button"
-            onClick={() => setShowDetails((d) => !d)}
-            className="text-[12.5px] text-ink-2 underline-offset-2 hover:underline"
-          >
-            {showDetails ? "▾" : "›"} Edit enquiry details
-          </button>
-
-          {showDetails ? (
-            <div className="mt-2 grid gap-2 rounded-md border border-line bg-sunk/30 px-3 py-2.5 sm:grid-cols-2 lg:grid-cols-3">
-              <label className="flex flex-col gap-1">
-                <span className="text-[10.5px] font-medium uppercase tracking-wide text-ink-3">
-                  Student name
-                </span>
-                <Input
-                  value={details.studentName}
-                  onChange={(e) =>
-                    setDetails((d) => ({ ...d, studentName: e.target.value }))
-                  }
-                  placeholder="Not recorded"
-                />
-              </label>
-
-              <label className="flex flex-col gap-1">
-                <span className="text-[10.5px] font-medium uppercase tracking-wide text-ink-3">
-                  Importance
-                </span>
-                <Select
-                  aria-label="Importance"
-                  value={details.importance}
-                  onChange={(e) =>
-                    setDetails((d) => ({
-                      ...d,
-                      importance: e.target.value as Importance | "",
-                    }))
-                  }
-                >
-                  <option value="">—</option>
-                  {Object.entries(IMPORTANCE_LABELS).map(([v, label]) => (
-                    <option key={v} value={v}>
-                      {label}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-
-              <label className="flex flex-col gap-1">
-                <span className="text-[10.5px] font-medium uppercase tracking-wide text-ink-3">
-                  Term
-                </span>
-                <Select
-                  aria-label="Term"
-                  value={details.termId}
-                  onChange={(e) => setDetails((d) => ({ ...d, termId: e.target.value }))}
-                >
-                  <option value="">—</option>
-                  {masters.terms.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-
-              <label className="flex flex-col gap-1">
-                <span className="text-[10.5px] font-medium uppercase tracking-wide text-ink-3">
-                  Source
-                </span>
-                <Select
-                  aria-label="Source"
-                  value={details.sourceId}
-                  onChange={(e) => setDetails((d) => ({ ...d, sourceId: e.target.value }))}
-                >
-                  <option value="">—</option>
-                  {masters.sources.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-
-              <label className="flex flex-col gap-1">
-                <span className="text-[10.5px] font-medium uppercase tracking-wide text-ink-3">
-                  Lead verification
-                </span>
-                <Select
-                  aria-label="Lead verification"
-                  value={details.leadVerification}
-                  onChange={(e) =>
-                    setDetails((d) => ({
-                      ...d,
-                      leadVerification: e.target.value as LeadVerification | "",
-                    }))
-                  }
-                >
-                  <option value="">—</option>
-                  {Object.entries(LEAD_VERIFICATION_LABELS).map(([v, label]) => (
-                    <option key={v} value={v}>
-                      {label}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-
-              <div className="flex items-end gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  disabled={savingDetails}
-                  onClick={saveDetails}
-                >
-                  {savingDetails ? "Saving…" : "Save details"}
-                </Button>
-                {detailsResult?.ok ? (
-                  <span className="pb-1.5 text-[11.5px] text-ok" role="status">
-                    {detailsResult.ok}
-                  </span>
-                ) : null}
-              </div>
-
-              {detailsResult?.error ? (
-                <div className="sm:col-span-2 lg:col-span-3">
-                  <ErrorNote>{detailsResult.error}</ErrorNote>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
+        <EnquiryDetailsEditor
+          enquiryId={enquiry.id}
+          masters={{ terms: masters.terms, sources: masters.sources }}
+          initial={{
+            studentName: enquiry.studentName,
+            importance: enquiry.importance,
+            termId: enquiry.termId,
+            sourceId: enquiry.sourceId,
+            leadVerification: enquiry.leadVerification,
+          }}
+        />
 
         {/* Interests are a purchase concept: an after-sale enquiry is about an
             order that already exists, so there is nothing to record here. */}
