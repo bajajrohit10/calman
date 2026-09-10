@@ -208,13 +208,25 @@ function ResetPasswordCell({ user }: { user: UserRow }) {
 
 function ActiveCell({
   user,
+  callerRole,
   callerId,
 }: {
   user: UserRow;
+  callerRole: Role;
   callerId: string;
 }) {
   const [state, action] = useActionState(setActive, EMPTY);
   const isSelf = user.id === callerId;
+  // A Manager may not touch a Super Admin. The server refuses anyway, but
+  // offering the button and then refusing is worse than not offering it —
+  // and it left this cell contradicting the role and password cells, which
+  // both lock a Super Admin row already.
+  const locked = !canManage(callerRole, user.role);
+  const reason = isSelf
+    ? "You cannot deactivate your own account"
+    : locked
+      ? "Only a Super Admin can change a Super Admin account"
+      : undefined;
 
   return (
     <form action={action} className="flex items-center gap-2">
@@ -229,8 +241,8 @@ function ActiveCell({
         type="submit"
         size="sm"
         variant={user.isActive ? "ghost" : "secondary"}
-        disabled={isSelf}
-        title={isSelf ? "You cannot deactivate your own account" : undefined}
+        disabled={isSelf || locked}
+        title={reason}
       >
         {user.isActive ? "Deactivate" : "Reactivate"}
       </Button>
@@ -301,7 +313,7 @@ export function UsersTable({
                   <RoleCell user={user} callerRole={callerRole} callerId={callerId} />
                 </td>
                 <td className="px-3 py-2">
-                  <ActiveCell user={user} callerId={callerId} />
+                  <ActiveCell user={user} callerRole={callerRole} callerId={callerId} />
                 </td>
                 <td className="px-3 py-2 tabular-nums text-ink-3">
                   {user.lastSignInAt

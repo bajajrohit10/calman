@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useActionState, useMemo, useState } from "react";
+import { Fragment, useActionState, useEffect, useMemo, useState } from "react";
 
 import {
   Badge,
@@ -133,9 +133,28 @@ function EditableRow({
   row: Row;
   courses: Course[];
 }) {
-  const [editing, setEditing] = useState(false);
   const [saveState, saveAction] = useActionState(updateItem, EMPTY);
   const [activeState, activeAction] = useActionState(setItemActive, EMPTY);
+
+  // Opening the editor records the action state it opened against.
+  // useActionState hands back a fresh object per submit, so "a result arrived
+  // since we opened" is just an identity check — no effect pushing state, and
+  // a failed save keeps the form open with its error rather than closing.
+  const [openedAt, setOpenedAt] = useState<ListActionResult | null>(null);
+  const [noticeDone, setNoticeDone] = useState(false);
+  const saved = openedAt !== null && saveState !== openedAt && Boolean(saveState.ok);
+  const editing = openedAt !== null && !saved;
+
+  useEffect(() => {
+    if (!saved || noticeDone) return;
+    const timer = setTimeout(() => setNoticeDone(true), 2500);
+    return () => clearTimeout(timer);
+  }, [saved, noticeDone]);
+
+  function openEditor() {
+    setOpenedAt(saveState);
+    setNoticeDone(false);
+  }
 
   const id = String(row[spec.pk]);
   const active = row.is_active !== false;
@@ -169,7 +188,7 @@ function EditableRow({
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={() => setEditing(false)}
+                onClick={() => setOpenedAt(null)}
               >
                 Cancel
               </Button>
@@ -228,7 +247,12 @@ function EditableRow({
 
       <td className="px-3 py-2 align-top">
         <div className="flex items-center justify-end gap-1">
-          <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
+          {saved && !noticeDone ? (
+            <span className="mr-1 text-[11px] text-ok" role="status">
+              Saved
+            </span>
+          ) : null}
+          <Button size="sm" variant="ghost" onClick={openEditor}>
             Edit
           </Button>
           <form action={activeAction}>
