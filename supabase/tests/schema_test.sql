@@ -11,6 +11,16 @@
 --   supabase db reset && psql "$(supabase status -o json | jq -r .DB_URL)" \
 --     -f supabase/tests/schema_test.sql
 --
+-- Against the linked hosted project, via the Management API. That path speaks
+-- SQL only, so strip the psql meta-commands first; the final SELECT returns
+-- one row per assertion. The transaction still rolls back, so it leaves the
+-- database exactly as it found it:
+--   grep -v '^\\' supabase/tests/schema_test.sql > /tmp/t.sql
+--   supabase db query --linked -f /tmp/t.sql
+--
+-- The master lists must be seeded first — the fixtures reference Bhanwar
+-- Borana, CA Final, DT/IDT and the `Full` content row.
+--
 -- Output is one PASS/FAIL line per assertion and a summary; a failure sets a
 -- non-zero exit code via the final assert.
 
