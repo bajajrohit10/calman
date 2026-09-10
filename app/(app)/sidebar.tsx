@@ -5,13 +5,26 @@ import { usePathname } from "next/navigation";
 
 import { Button, cx } from "@/components/ui";
 
-type Item = { href: string; label: string; hint: string; adminOnly?: boolean };
+type Item = {
+  href: string;
+  label: string;
+  hint: string;
+  adminOnly?: boolean;
+  /** Key into the counts prop, for a live badge. */
+  badge?: "newCalls";
+};
 
 // Spec §2. Every item except Settings is available to all four roles; Settings
 // is Super Admin and Manager only. The server also enforces this — hiding a
 // link is presentation, not permission.
 const ITEMS: Item[] = [
   { href: "/my-day", label: "My Day", hint: "Today's assigned calls" },
+  {
+    href: "/new-calls",
+    label: "New Calls",
+    hint: "Unclaimed leads",
+    badge: "newCalls",
+  },
   {
     href: "/assign",
     label: "Assign",
@@ -35,11 +48,14 @@ export function Sidebar({
   showSettings,
   fullName,
   roleLabel,
+  counts,
   signOut,
 }: {
   showSettings: boolean;
   fullName: string;
   roleLabel: string;
+  /** Server-rendered, so it refreshes on navigation (§5.12). */
+  counts: { newCalls: number };
   signOut: () => Promise<void>;
 }) {
   const pathname = usePathname();
@@ -77,7 +93,17 @@ export function Sidebar({
                     : "text-ink-2 hover:bg-surface-2 hover:text-ink",
                 )}
               >
-                {item.label}
+                <span className="flex items-center gap-1.5">
+                  {item.label}
+                  {item.badge && counts[item.badge] > 0 ? (
+                    <span
+                      aria-label={`${counts[item.badge]} waiting`}
+                      className="rounded-full bg-accent px-1.5 py-px text-[10.5px] font-semibold text-white"
+                    >
+                      {counts[item.badge]}
+                    </span>
+                  ) : null}
+                </span>
                 <span className="block text-[11px] font-normal text-ink-3">
                   {item.hint}
                 </span>

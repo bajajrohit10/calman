@@ -17,7 +17,7 @@ export default async function Page({
 }: {
   searchParams: Promise<Params>;
 }) {
-  await requireUser();
+  const viewer = await requireUser();
   const sp = await searchParams;
   const { page, sort, dir, filters } = parseEnquiriesParams((k) => one(sp[k]));
 
@@ -62,6 +62,7 @@ export default async function Page({
         sort={sort}
         dir={dir}
         search={search}
+        counsellorName={viewer.profile?.full_name ?? null}
         roster={(staff.data ?? []).map((p) => ({
           id: p.id,
           name: p.full_name ?? "(no name)",

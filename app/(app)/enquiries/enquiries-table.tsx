@@ -53,6 +53,7 @@ export function EnquiriesTable({
   sort,
   dir,
   search,
+  counsellorName,
   roster,
   masters,
   panelMasters,
@@ -66,6 +67,7 @@ export function EnquiriesTable({
   sort: string;
   dir: "asc" | "desc";
   search: string;
+  counsellorName: string | null;
   roster: { id: string; name: string }[];
   masters: FilterMasters;
   panelMasters: PanelMasters;
@@ -283,6 +285,7 @@ export function EnquiriesTable({
               <CallLogPanel
                 enquiry={open}
                 masters={panelMasters}
+                counsellorName={counsellorName}
                 onSaved={() => {
                   setOpen(null);
                   router.refresh();

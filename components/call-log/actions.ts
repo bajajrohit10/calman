@@ -52,6 +52,7 @@ export type PanelPayload = {
   mobile: string;
   term: string | null;
   productText: string | null;
+  slotsUsed: number;
   /** Current values for the "Edit enquiry details" control. */
   termId: string | null;
   sourceId: string | null;
@@ -82,6 +83,7 @@ export async function loadPanelEnquiry(
     .from("enquiries")
     .select(
       `id, type, product_text, term_id, source_id, importance, lead_verification,
+       follow_up_slots_used,
        term:terms ( name ),
        students ( name, mobile ),
        enquiry_items (
@@ -109,6 +111,7 @@ export async function loadPanelEnquiry(
       mobile: student?.mobile ?? "",
       term: (data.term as { name: string } | null)?.name ?? null,
       productText: data.product_text,
+      slotsUsed: data.follow_up_slots_used ?? 0,
       termId: data.term_id,
       sourceId: data.source_id,
       importance: data.importance as Importance | null,

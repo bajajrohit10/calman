@@ -53,6 +53,7 @@ export function TicketsBoard({
   dir,
   search,
   includeResolved,
+  counsellorName,
   roster,
   masters,
   selected,
@@ -66,6 +67,7 @@ export function TicketsBoard({
   dir: "asc" | "desc";
   search: string;
   includeResolved: boolean;
+  counsellorName: string | null;
   roster: { id: string; name: string }[];
   masters: PanelMasters;
   selected: Record<string, string>;
@@ -293,6 +295,7 @@ export function TicketsBoard({
               <CallLogPanel
                 enquiry={open}
                 masters={masters}
+                counsellorName={counsellorName}
                 onSaved={() => {
                   setOpen(null);
                   router.refresh();

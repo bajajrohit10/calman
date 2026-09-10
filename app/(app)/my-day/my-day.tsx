@@ -29,6 +29,7 @@ export function MyDay({
   error,
   date,
   isAdmin,
+  counsellorName,
   counsellorId,
   roster,
   overdue,
@@ -39,6 +40,7 @@ export function MyDay({
   error: string | null;
   date: string;
   isAdmin: boolean;
+  counsellorName: string | null;
   counsellorId: string;
   roster: { id: string; name: string }[];
   overdue: RecommendedRow[];
@@ -217,6 +219,7 @@ export function MyDay({
               <CallLogPanel
                 enquiry={open}
                 masters={masters}
+                counsellorName={counsellorName}
                 onSaved={afterSave}
                 onCancel={() => setOpen(null)}
               />

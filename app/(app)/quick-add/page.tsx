@@ -38,7 +38,7 @@ async function loadMasters(): Promise<QuickAddMasters> {
 }
 
 export default async function Page() {
-  await requireUser();
+  const viewer = await requireUser();
   const masters = await loadMasters();
 
   return (
@@ -47,7 +47,7 @@ export default async function Page() {
         title="Quick Add"
         description="The phone is ringing. Type the number — everything else follows from it."
       />
-      <QuickAdd masters={masters} />
+      <QuickAdd masters={masters} counsellorName={viewer.profile?.full_name ?? null} />
     </div>
   );
 }

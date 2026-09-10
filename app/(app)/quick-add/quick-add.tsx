@@ -37,7 +37,13 @@ type Stage =
  * in the box is always what would be stored — pasting "+91 98765-43210" from
  * WhatsApp shows 9876543210 immediately.
  */
-export function QuickAdd({ masters }: { masters: QuickAddMasters }) {
+export function QuickAdd({
+  masters,
+  counsellorName,
+}: {
+  masters: QuickAddMasters;
+  counsellorName: string | null;
+}) {
   const [raw, setRaw] = useState("");
   const mobile = normaliseMobile(raw);
   const valid = isValidMobile(mobile);
@@ -215,6 +221,7 @@ export function QuickAdd({ masters }: { masters: QuickAddMasters }) {
                         mobile: stage.student.mobile,
                         term: openEnquiryRow.term?.name ?? null,
                         productText: openEnquiryRow.product_text,
+                        slotsUsed: openEnquiryRow.follow_up_slots_used,
                         termId: null,
                         sourceId: null,
                         importance: openEnquiryRow.importance,
@@ -252,6 +259,7 @@ export function QuickAdd({ masters }: { masters: QuickAddMasters }) {
           <StudentHistoryView
             student={stage.student}
             masters={{ terms: masters.terms, sources: masters.sources }}
+            counsellorName={counsellorName}
             onEdited={() => setLookup(null)}
           />
         </div>
@@ -263,6 +271,7 @@ export function QuickAdd({ masters }: { masters: QuickAddMasters }) {
           <CallLogPanel
             enquiry={stage.enquiry}
             masters={masters}
+            counsellorName={counsellorName}
             onSaved={reset}
             onCancel={reset}
           />
@@ -279,6 +288,7 @@ export function QuickAdd({ masters }: { masters: QuickAddMasters }) {
             <StudentHistoryView
               student={stage.student}
               masters={{ terms: masters.terms, sources: masters.sources }}
+            counsellorName={counsellorName}
               onEdited={() => setLookup(null)}
             />
           ) : null}

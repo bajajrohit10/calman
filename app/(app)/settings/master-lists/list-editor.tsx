@@ -3,6 +3,13 @@
 import { Fragment, useActionState, useEffect, useMemo, useState } from "react";
 
 import {
+  fillTemplate,
+  PLACEHOLDERS,
+  STAGE_LABELS,
+  type Stage,
+} from "@/lib/whatsapp-text";
+
+import {
   Badge,
   Button,
   ErrorNote,
@@ -38,6 +45,18 @@ function FieldInput({
   autoFocus?: boolean;
 }) {
   const value = defaultValue == null ? "" : String(defaultValue);
+
+  if (field.kind === "stage") {
+    return (
+      <Select name={field.name} defaultValue={value || "any"}>
+        {Object.entries(STAGE_LABELS).map(([v, label]) => (
+          <option key={v} value={v}>
+            {label}
+          </option>
+        ))}
+      </Select>
+    );
+  }
 
   if (field.kind === "course") {
     return (
@@ -214,7 +233,9 @@ function EditableRow({
       {spec.fields.map((field) => {
         const raw = row[field.name];
         let display: string;
-        if (field.kind === "course") {
+        if (field.kind === "stage") {
+          display = STAGE_LABELS[(raw as Stage) ?? "any"] ?? String(raw ?? "—");
+        } else if (field.kind === "course") {
           display = courses.find((c) => c.id === raw)?.name ?? "—";
         } else if (raw == null || raw === "") {
           display = "—";
@@ -326,13 +347,7 @@ export function ListEditor({
             {spec.blurb}
           </p>
           {spec.table === "whatsapp_templates" ? (
-            <p className="mt-1.5 max-w-2xl rounded-md border border-line bg-surface-2 px-2.5 py-1.5 text-[12px] text-ink-2">
-              Placeholders: <code className="font-mono text-ink">{"{name}"}</code> becomes
-              the student&rsquo;s name and{" "}
-              <code className="font-mono text-ink">{"{course}"}</code> the course from the
-              enquiry. Both are filled in before the preview opens, and anything else is
-              sent literally.
-            </p>
+            <TemplateHelp rows={visible} />
           ) : null}
         </div>
         <AddForm spec={spec} courses={courses} />
@@ -417,6 +432,73 @@ export function ListEditor({
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+/** A sample enquiry, so the preview shows real substitution rather than prose. */
+const SAMPLE = {
+  name: "Ravi Kumar",
+  items: [
+    { teacher: "Bhanwar Borana", course: "CA Final", subject: "DT", content: "Full" },
+    { teacher: "Vishal Bhattad", course: "CA Final", subject: "Audit", content: "FT" },
+  ],
+  term: "May-27",
+  counsellor: "You",
+};
+
+/**
+ * §5.10's placeholder reference, a live preview, and the one thing a list of
+ * templates cannot tell you by looking: which stage has nothing written for it
+ * yet, so the picker will silently fall back to 'any'.
+ */
+function TemplateHelp({ rows }: { rows: Row[] }) {
+  const [preview, setPreview] = useState<string>(
+    "Hi {name}, about {teacher} for {subject} ({content}) — {term}. — {counsellor}",
+  );
+
+  const covered = new Set(
+    rows.filter((r) => r.is_active !== false).map((r) => String(r.stage ?? "any")),
+  );
+  const missing = (Object.keys(STAGE_LABELS) as Stage[]).filter(
+    (s) => s !== "any" && !covered.has(s),
+  );
+
+  return (
+    <div className="mt-2 flex max-w-3xl flex-col gap-2">
+      <div className="rounded-md border border-line bg-surface-2 px-2.5 py-2 text-[12px] text-ink-2">
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          {PLACEHOLDERS.map((p) => (
+            <span key={p.token}>
+              <code className="font-mono text-ink">{p.token}</code> {p.description}
+            </span>
+          ))}
+        </div>
+        <p className="mt-1.5 text-ink-3">
+          A value the enquiry does not have renders as nothing — never as the
+          placeholder itself. Several interests join with commas.
+        </p>
+      </div>
+
+      <label className="flex flex-col gap-1">
+        <span className="text-[10.5px] font-medium uppercase tracking-wide text-ink-3">
+          Try a message
+        </span>
+        <Textarea rows={2} value={preview} onChange={(e) => setPreview(e.target.value)} />
+      </label>
+      <p className="rounded-md border border-ok/40 bg-ok-soft/40 px-2.5 py-1.5 text-[12.5px] whitespace-pre-wrap text-ink">
+        {fillTemplate(preview, SAMPLE)}
+      </p>
+
+      {missing.length ? (
+        <p className="rounded-md border border-warn/40 bg-warn-soft/50 px-2.5 py-1.5 text-[12px] text-warn">
+          No active template for {missing.map((s) => STAGE_LABELS[s]).join(", ")}. The
+          picker will fall back to an &ldquo;Any&rdquo; template at those stages.
+        </p>
+      ) : null}
     </div>
   );
 }

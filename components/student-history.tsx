@@ -3,7 +3,7 @@ import Link from "next/link";
 import { EnquiryDetailsEditor, type DetailMasters } from "@/components/enquiry-details";
 import { Badge, cx } from "@/components/ui";
 import { WhatsAppButton } from "@/components/whatsapp/button";
-import { courseTextFor } from "@/lib/whatsapp-text";
+import { stageOf } from "@/lib/whatsapp-text";
 import {
   BUCKET_LABELS,
   CLOSE_REASON_LABELS,
@@ -102,12 +102,14 @@ export function EnquiryCard({
   enquiry,
   mobile,
   studentName,
+  counsellorName,
   masters,
   onEdited,
 }: {
   enquiry: HistoryEnquiry;
   mobile?: string;
   studentName?: string | null;
+  counsellorName?: string | null;
   /** Omit to render the card read-only. */
   masters?: DetailMasters;
   onEdited?: () => void;
@@ -158,15 +160,16 @@ export function EnquiryCard({
             enquiryId={enquiry.id}
             mobile={mobile}
             studentName={studentName ?? null}
-            courseText={courseTextFor(
-              enquiry.enquiry_items.map((i) => ({
-                teacher: i.teacher?.name ?? null,
-                course: i.course?.name ?? null,
-                subject: i.subject?.name ?? null,
-                content: i.content?.name ?? null,
-              })),
-              enquiry.product_text,
-            )}
+            items={enquiry.enquiry_items.map((i) => ({
+              teacher: i.teacher?.name ?? null,
+              course: i.course?.name ?? null,
+              subject: i.subject?.name ?? null,
+              content: i.content?.name ?? null,
+            }))}
+            term={enquiry.term?.name ?? null}
+            productText={enquiry.product_text}
+            counsellorName={counsellorName ?? null}
+            stage={stageOf(enquiry.type, enquiry.follow_up_slots_used)}
           />
         </div>
       ) : null}
@@ -279,12 +282,14 @@ export function StudentHistoryView({
   className,
   showHeader = true,
   masters,
+  counsellorName,
   onEdited,
 }: {
   student: StudentHistory;
   className?: string;
   showHeader?: boolean;
   masters?: DetailMasters;
+  counsellorName?: string | null;
   onEdited?: () => void;
 }) {
   return (
@@ -315,6 +320,7 @@ export function StudentHistoryView({
             mobile={student.mobile}
             studentName={student.name}
             masters={masters}
+            counsellorName={counsellorName}
             onEdited={onEdited}
           />
         ))

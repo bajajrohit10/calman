@@ -18,7 +18,13 @@ export type MasterTable =
   | "whatsapp_templates"
   | "holidays";
 
-export type FieldKind = "text" | "textarea" | "number" | "date" | "course";
+export type FieldKind =
+  | "text"
+  | "textarea"
+  | "number"
+  | "date"
+  | "course"
+  | "stage";
 
 export type FieldSpec = {
   name: string;
@@ -131,7 +137,7 @@ export const LISTS: ListSpec[] = [
     table: "whatsapp_templates",
     pk: "id",
     blurb:
-      "Message bodies offered by the WhatsApp button. The picker shows the first three by order.",
+      "Message bodies offered by the WhatsApp button. The picker opens on the template matching the lead's stage.",
     fields: [
       NAME,
       {
@@ -140,6 +146,13 @@ export const LISTS: ListSpec[] = [
         kind: "textarea",
         required: true,
         placeholder: "Hi {name}, about your {course} enquiry…",
+      },
+      {
+        name: "stage",
+        label: "Stage",
+        kind: "stage",
+        width: "w-40",
+        hint: "When the picker offers this first",
       },
       { name: "sort_order", label: "Order", kind: "number", width: "w-24" },
     ],

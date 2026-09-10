@@ -3,33 +3,44 @@
 import { useState, useTransition } from "react";
 
 import { Button, ErrorNote, Select, Textarea } from "@/components/ui";
+import {
+  fillTemplate,
+  STAGE_LABELS,
+  type Stage,
+  type TemplateItem,
+} from "@/lib/whatsapp-text";
 
 import { loadTemplates, logWhatsappSend, type Template } from "./actions";
 
-function fill(body: string, name: string | null, course: string): string {
-  // Blank-safe, and the substitutions have to fit the words already around
-  // them. The seeded templates say "about your {course} enquiry", so a
-  // {course} fallback of "your enquiry" produced "about your your enquiry
-  // enquiry". A bare noun is the only thing that reads in every slot — and
-  // when there is genuinely nothing to say, the counsellor is looking at an
-  // editable preview and can fix it.
-  return body
-    .replaceAll("{name}", (name ?? "").trim() || "there")
-    .replaceAll("{course}", course.trim() || "course");
-}
-
+/**
+ * §5.10. Pick a template, see it filled in, edit it, open WhatsApp.
+ *
+ * When opened from a call panel the enquiry knows its stage, so the picker
+ * opens on the template written for that point in the lead's life rather than
+ * whichever happens to sort first. It is only a starting point — every other
+ * template stays in the list and the text stays editable.
+ */
 export function WhatsAppButton({
   enquiryId,
   mobile,
   studentName,
-  courseText,
+  items,
+  term,
+  productText,
+  counsellorName,
+  stage,
   size = "sm",
   onSent,
 }: {
   enquiryId: number;
   mobile: string;
   studentName: string | null;
-  courseText: string;
+  items: TemplateItem[];
+  term: string | null;
+  productText?: string | null;
+  counsellorName: string | null;
+  /** Omit where no single stage is in view. */
+  stage?: Stage;
   size?: "sm" | "md";
   onSent?: () => void;
 }) {
@@ -40,6 +51,15 @@ export function WhatsAppButton({
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
   const [pending, start] = useTransition();
+
+  const render = (body: string) =>
+    fillTemplate(body, {
+      name: studentName,
+      items,
+      term,
+      counsellor: counsellorName,
+      productText,
+    });
 
   function openPicker() {
     setError(null);
@@ -52,10 +72,16 @@ export function WhatsAppButton({
         return;
       }
       setTemplates(res.templates);
-      const first = res.templates[0];
-      if (first) {
-        setTemplateId(first.id);
-        setMessage(fill(first.body, studentName, courseText));
+
+      // Exact stage first, then anything marked 'any', then whatever is first.
+      const chosen =
+        (stage ? res.templates.find((t) => t.stage === stage) : undefined) ??
+        res.templates.find((t) => t.stage === "any") ??
+        res.templates[0];
+
+      if (chosen) {
+        setTemplateId(chosen.id);
+        setMessage(render(chosen.body));
       }
     });
   }
@@ -63,7 +89,7 @@ export function WhatsAppButton({
   function chooseTemplate(id: string) {
     setTemplateId(id);
     const t = templates.find((x) => x.id === id);
-    if (t) setMessage(fill(t.body, studentName, courseText));
+    if (t) setMessage(render(t.body));
   }
 
   function send() {
@@ -100,7 +126,7 @@ export function WhatsAppButton({
   return (
     <div className="rounded-md border border-ok/40 bg-ok-soft/30 px-3 py-2.5">
       <div className="flex flex-wrap items-end gap-2">
-        <label className="flex min-w-[190px] flex-col gap-1">
+        <label className="flex min-w-[230px] flex-col gap-1">
           <span className="text-[11px] font-medium uppercase tracking-wide text-ink-3">
             Template
           </span>
@@ -112,11 +138,15 @@ export function WhatsAppButton({
             {templates.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
+                {t.stage && t.stage !== "any" ? ` · ${STAGE_LABELS[t.stage]}` : ""}
               </option>
             ))}
           </Select>
         </label>
-        <span className="pb-1.5 text-[11.5px] text-ink-3">to +91 {mobile}</span>
+        <span className="pb-1.5 text-[11.5px] text-ink-3">
+          to +91 {mobile}
+          {stage ? ` · ${STAGE_LABELS[stage]} stage` : ""}
+        </span>
       </div>
 
       <label className="mt-2 flex flex-col gap-1">

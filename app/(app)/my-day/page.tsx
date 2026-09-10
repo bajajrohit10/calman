@@ -98,6 +98,7 @@ export default async function Page({
         error={list.error}
         date={date}
         isAdmin={admin}
+        counsellorName={viewer.profile?.full_name ?? null}
         counsellorId={counsellorId}
         roster={(roster.data ?? []).map((p) => ({
           id: p.id,

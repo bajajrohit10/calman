@@ -19,7 +19,7 @@ import { EnquiryDetailsEditor } from "@/components/enquiry-details";
 import { istDatePlus, istNextMonday, istToday } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
 import { WhatsAppButton } from "@/components/whatsapp/button";
-import { courseTextFor } from "@/lib/whatsapp-text";
+import { stageOf } from "@/lib/whatsapp-text";
 
 import { logCall, type LogCallResult } from "./actions";
 
@@ -51,6 +51,7 @@ export type PanelEnquiry = {
   mobile: string;
   term: string | null;
   productText: string | null;
+  slotsUsed: number;
   termId: string | null;
   sourceId: string | null;
   importance: Importance | null;
@@ -183,11 +184,14 @@ function itemLabel(item: PanelItem) {
 export function CallLogPanel({
   enquiry,
   masters,
+  counsellorName,
   onSaved,
   onCancel,
 }: {
   enquiry: PanelEnquiry;
   masters: PanelMasters;
+  /** Fills {counsellor} in a WhatsApp template. */
+  counsellorName?: string | null;
   onSaved?: () => void;
   onCancel?: () => void;
 }) {
@@ -445,7 +449,11 @@ export function CallLogPanel({
               enquiryId={enquiry.id}
               mobile={enquiry.mobile}
               studentName={enquiry.studentName}
-              courseText={courseTextFor(enquiry.items, enquiry.productText)}
+              items={enquiry.items}
+              term={enquiry.term}
+              productText={enquiry.productText}
+              counsellorName={counsellorName ?? null}
+              stage={stageOf(enquiry.type, enquiry.slotsUsed)}
             />
           </div>
         </div>

@@ -960,6 +960,7 @@ export type Database = {
           is_active: boolean
           name: string
           sort_order: number
+          stage: Database["public"]["Enums"]["template_stage"]
         }
         Insert: {
           body: string
@@ -968,6 +969,7 @@ export type Database = {
           is_active?: boolean
           name: string
           sort_order?: number
+          stage?: Database["public"]["Enums"]["template_stage"]
         }
         Update: {
           body?: string
@@ -976,6 +978,7 @@ export type Database = {
           is_active?: boolean
           name?: string
           sort_order?: number
+          stage?: Database["public"]["Enums"]["template_stage"]
         }
         Relationships: []
       }
@@ -1101,6 +1104,34 @@ export type Database = {
         }
         Returns: undefined
       }
+      new_calls_pool: {
+        Args: {
+          p_course_id?: string
+          p_created_from?: string
+          p_created_to?: string
+          p_importance?: Database["public"]["Enums"]["importance"]
+          p_limit?: number
+          p_offset?: number
+          p_product_text?: string
+          p_source_ids?: string[]
+          p_teacher_id?: string
+          p_term_id?: string
+        }
+        Returns: {
+          created_at: string
+          enquiry_id: number
+          importance: Database["public"]["Enums"]["importance"]
+          item_count: number
+          mobile: string
+          product_text: string
+          source_name: string
+          student_id: string
+          student_name: string
+          teacher_names: string
+          term_name: string
+          total_count: number
+        }[]
+      }
       recommended_calls: {
         Args: {
           p_content_id?: string
@@ -1219,6 +1250,13 @@ export type Database = {
       item_status: "open" | "won" | "competitor" | "closed"
       lead_verification: "yes_with_proof" | "yes_without_proof" | "no"
       lost_reason: "competitor" | "max_followups" | "dropped"
+      template_stage:
+        | "fresh"
+        | "followup_1"
+        | "followup_2"
+        | "followup_3"
+        | "after_sale"
+        | "any"
       user_role: "super_admin" | "manager" | "counsellor" | "ticket_team"
     }
     CompositeTypes: {
@@ -1384,6 +1422,14 @@ export const Constants = {
       item_status: ["open", "won", "competitor", "closed"],
       lead_verification: ["yes_with_proof", "yes_without_proof", "no"],
       lost_reason: ["competitor", "max_followups", "dropped"],
+      template_stage: [
+        "fresh",
+        "followup_1",
+        "followup_2",
+        "followup_3",
+        "after_sale",
+        "any",
+      ],
       user_role: ["super_admin", "manager", "counsellor", "ticket_team"],
     },
   },

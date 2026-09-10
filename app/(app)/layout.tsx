@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { signOut } from "@/app/actions/sign-out";
 import { Button } from "@/components/ui";
 import { ROLE_LABELS, isAdmin, requireUser } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
 
 import { Sidebar } from "./sidebar";
 
@@ -38,9 +39,22 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     );
   }
 
+  // One count for the New Calls badge. Rendered with the layout, so it is
+  // current on every navigation without polling (§5.12).
+  const supabase = await createClient();
+  const { data: pool } = await supabase.rpc("new_calls_pool", {
+    p_limit: 1,
+    p_offset: 0,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any);
+  const newCallsCount = Number(
+    (pool as { total_count: number }[] | null)?.[0]?.total_count ?? 0,
+  );
+
   return (
     <div className="flex min-h-dvh bg-ground">
       <Sidebar
+        counts={{ newCalls: newCallsCount }}
         showSettings={isAdmin(profile.role)}
         fullName={profile.full_name}
         roleLabel={ROLE_LABELS[profile.role]}

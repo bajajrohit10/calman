@@ -20,7 +20,7 @@ export default async function Page({
 }: {
   params: Promise<{ mobile: string }>;
 }) {
-  await requireUser();
+  const viewer = await requireUser();
 
   const { mobile: raw } = await params;
   const mobile = normaliseMobile(decodeURIComponent(raw));
@@ -54,6 +54,7 @@ export default async function Page({
       <StudentHistoryView
         student={student}
         masters={{ terms: terms.data ?? [], sources: sources.data ?? [] }}
+        counsellorName={viewer.profile?.full_name ?? null}
       />
     </div>
   );

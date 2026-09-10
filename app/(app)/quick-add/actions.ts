@@ -56,6 +56,7 @@ export type NewEnquiryResult = {
     mobile: string;
     term: string | null;
     productText: string | null;
+    slotsUsed: number;
     termId: string | null;
     sourceId: string | null;
     importance: Importance | null;
@@ -151,6 +152,8 @@ export async function createEnquiry(
       mobile,
       term: (enquiry.term as { name: string } | null)?.name ?? null,
       productText: input.productText?.trim() || null,
+      // A brand-new enquiry has had no calls, so it is at the fresh stage.
+      slotsUsed: 0,
       termId: input.termId || null,
       sourceId: input.sourceId || null,
       importance: (input.importance || null) as Importance | null,

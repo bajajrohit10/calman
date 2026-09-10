@@ -4,8 +4,14 @@ import { revalidatePath } from "next/cache";
 
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import type { Stage } from "@/lib/whatsapp-text";
 
-export type Template = { id: string; name: string; body: string };
+export type Template = {
+  id: string;
+  name: string;
+  body: string;
+  stage: Stage;
+};
 
 /**
  * The active templates, newest picker first. §5.10 says the picker surfaces
@@ -19,12 +25,12 @@ export async function loadTemplates(): Promise<{
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("whatsapp_templates")
-    .select("id, name, body")
+    .select("id, name, body, stage")
     .eq("is_active", true)
     .order("sort_order");
 
   if (error) return { error: error.message };
-  return { error: null, templates: data ?? [] };
+  return { error: null, templates: (data ?? []) as Template[] };
 }
 
 /**
