@@ -5,13 +5,19 @@ import { usePathname } from "next/navigation";
 
 import { Button, cx } from "@/components/ui";
 
-type Item = { href: string; label: string; hint: string };
+type Item = { href: string; label: string; hint: string; adminOnly?: boolean };
 
 // Spec §2. Every item except Settings is available to all four roles; Settings
 // is Super Admin and Manager only. The server also enforces this — hiding a
 // link is presentation, not permission.
 const ITEMS: Item[] = [
   { href: "/my-day", label: "My Day", hint: "Today's assigned calls" },
+  {
+    href: "/assign",
+    label: "Assign",
+    hint: "Plan and hand out the day",
+    adminOnly: true,
+  },
   { href: "/enquiries", label: "Enquiries", hint: "Every enquiry, filterable" },
   { href: "/quick-add", label: "Quick Add", hint: "Log a ringing phone" },
   { href: "/import", label: "Import", hint: "Bulk import with review" },
@@ -37,7 +43,9 @@ export function Sidebar({
   signOut: () => Promise<void>;
 }) {
   const pathname = usePathname();
-  const items = showSettings ? [...ITEMS, SETTINGS] : ITEMS;
+  const items = showSettings
+    ? [...ITEMS, SETTINGS]
+    : ITEMS.filter((item) => !item.adminOnly);
 
   return (
     <nav

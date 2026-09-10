@@ -44,6 +44,75 @@ export type LogCallInput = {
 
 export type LogCallResult = { error: string | null; ok?: string };
 
+export type PanelPayload = {
+  id: number;
+  type: EnquiryType;
+  studentName: string | null;
+  mobile: string;
+  term: string | null;
+  items: {
+    id: string;
+    status: string;
+    teacher: string | null;
+    course: string | null;
+    subject: string | null;
+    content: string | null;
+  }[];
+};
+
+/**
+ * Everything the call panel needs for one enquiry, fetched when a row is
+ * opened rather than preloaded for the whole day — a list of fifty rows would
+ * otherwise carry fifty sets of items nobody looks at.
+ */
+export async function loadPanelEnquiry(
+  enquiryId: number,
+): Promise<{ error: string | null; enquiry?: PanelPayload }> {
+  await requireUser();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("enquiries")
+    .select(
+      `id, type,
+       term:terms ( name ),
+       students ( name, mobile ),
+       enquiry_items (
+         id, status,
+         teacher:teachers ( name ),
+         course:courses ( name ),
+         subject:subjects ( name ),
+         content:contents ( name )
+       )`,
+    )
+    .eq("id", enquiryId)
+    .maybeSingle();
+
+  if (error) return { error: error.message };
+  if (!data) return { error: "That enquiry no longer exists." };
+
+  const student = data.students as { name: string | null; mobile: string } | null;
+
+  return {
+    error: null,
+    enquiry: {
+      id: data.id,
+      type: data.type as EnquiryType,
+      studentName: student?.name ?? null,
+      mobile: student?.mobile ?? "",
+      term: (data.term as { name: string } | null)?.name ?? null,
+      items: (data.enquiry_items ?? []).map((i) => ({
+        id: i.id,
+        status: i.status,
+        teacher: (i.teacher as { name: string } | null)?.name ?? null,
+        course: (i.course as { name: string } | null)?.name ?? null,
+        subject: (i.subject as { name: string } | null)?.name ?? null,
+        content: (i.content as { name: string } | null)?.name ?? null,
+      })),
+    },
+  };
+}
+
 function parseAmount(raw: string | null): number | null | "invalid" {
   if (raw == null || raw.trim() === "") return null;
   const n = Number(raw);

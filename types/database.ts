@@ -900,6 +900,56 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      recommended_calls: {
+        Args: {
+          p_content_id?: string
+          p_counsellor_id?: string
+          p_course_id?: string
+          p_created_from?: string
+          p_created_to?: string
+          p_date?: string
+          p_discussion?: string
+          p_follow_up_from?: string
+          p_follow_up_to?: string
+          p_importance?: Database["public"]["Enums"]["importance"]
+          p_include_not_due?: boolean
+          p_limit?: number
+          p_offset?: number
+          p_source_id?: string
+          p_status?: Database["public"]["Enums"]["enquiry_status"]
+          p_subject_id?: string
+          p_teacher_id?: string
+          p_term_id?: string
+          p_type?: Database["public"]["Enums"]["enquiry_type"]
+        }
+        Returns: {
+          assigned_to: string
+          assigned_to_name: string
+          bucket: Database["public"]["Enums"]["assignment_bucket"]
+          bucket_rank: number
+          created_at: string
+          due_date: string
+          enquiry_id: number
+          follow_up_slots_used: number
+          importance: Database["public"]["Enums"]["importance"]
+          is_overdue: boolean
+          item_count: number
+          mobile: string
+          next_follow_up_date: string
+          product_text: string
+          source_id: string
+          source_name: string
+          status: Database["public"]["Enums"]["enquiry_status"]
+          student_id: string
+          student_name: string
+          teacher_names: string[]
+          term_id: string
+          term_name: string
+          top_content_priority: number
+          total_count: number
+          type: Database["public"]["Enums"]["enquiry_type"]
+        }[]
+      }
       supersede_enquiry: { Args: { p_enquiry_id: number }; Returns: undefined }
     }
     Enums: {
