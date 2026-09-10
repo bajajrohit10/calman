@@ -1,6 +1,6 @@
 # Calman — Zeroinfy Counselling CRM
 
-Project specification v1 · 10 Sep 2026
+Project specification v1.1 · 10 Sep 2026 · schema decisions incorporated (see §10)
 Replaces the "Zeroinfy Calman Calling" Google Sheet (New Calls / Follow Up Sheets / Data tabs).
 
 ---
@@ -48,16 +48,19 @@ Three levels: **Student (phone) → Enquiry → Call**, plus **Enquiry Items** f
 - `type` — `purchase` | `after_sale`
 - `source_id` → sources master (AC = Abandoned Checkout, Indv WhatsApp, Knowlarity, Interakt, Vsmart, …)
 - `product_text` — free text; the raw product title as imported (counsellor structures it into items when they call)
-- `term` — exam attempt (May-26, Sep-26, Jan-27 …); one per enquiry; editable any time
+- `term_id` → terms master — exam attempt (May-26, Sep-26, Jan-27 …); one per enquiry; editable any time
 - `importance` — A: Yes + PLI (top) · B: Yes + No PLI · C: Not Sure · D: No
-- `lead_verification` — competitor discount proof: Yes with proof · Yes without proof · No
+  - **PLI is derived from `importance = A`**; there is no separate PLI field. Known simplification — revisit if a B lead can also be issued a price list.
+- `lead_verification` — competitor discount proof: Yes with proof · Yes without proof · No. Held on the enquiry, not per item.
 - `status`
   - purchase: `open` | `won` | `lost` | `closed`
   - after_sale: `open` | `escalated` | `closed`
-- `lost_reason` — `competitor` | `max_followups`
-- `next_follow_up_date`
+- `lost_reason` — `competitor` | `max_followups` | `dropped`
+- `close_reason` — `wrong_number` | `superseded`. **Only `wrong_number` is flagged on future imports.**
+- `next_follow_up_date` — on an after-sale enquiry this is a reminder date only (§4.5)
 - `created_at`, `created_by`, `closed_at`
 - Auto-number ID
+- **Derived columns, maintained by trigger and never written by the application:** `fresh_call_date`, `follow_up_slots_used`, `last_slot_date`, `top_content_priority`. The last is the best (lowest) content priority across the enquiry's open items, so the §6 recommended list can sort without joining.
 
 ### enquiry_items (one row per teacher + subject interest)
 - `enquiry_id`, `teacher_id`, `course_id`, `subject_id`, `content_id`
@@ -70,9 +73,9 @@ Three levels: **Student (phone) → Enquiry → Call**, plus **Enquiry Items** f
 - `enquiry_id`, `called_at`, `called_by`
 - `outcome`
   - purchase: `follow_up` (spoke) | `call_back` (no pickup) | `purchased` | `competitor` | `closed` (wrong number)
-  - after_sale: `open` | `escalated` | `closed`
+  - after_sale: `noted` | `escalated` | `resolved` — which set the enquiry status to `open` | `escalated` | `closed` respectively
 - `discussion` — one note per call
-- `next_follow_up_date`
+- `next_follow_up_date` — on an after-sale call this is a reminder date and does **not** put the enquiry into any follow-up queue
 - `whatsapp_sent` — set when the WhatsApp button is used
 - After-sale calls additionally: `issue_category` (video access, book delivery, refund, wrong course, other), `order_id`
 
@@ -102,20 +105,29 @@ sources · teachers · courses · subjects (belongs to course) · contents (Full
 ### Purchase enquiry
 1. Created via bulk import (morning) or the quick-add form (when the phone rings).
 2. Fresh call → outcome. Then follow-ups.
-3. **Follow-up slots:** a follow-up slot = one calendar day on which the enquiry was called, after the fresh-call day. Two or more call-backs on the same day = one slot. Limit: 3 slots. When the 3rd slot ends with outcome `follow_up` or `call_back`, the enquiry automatically becomes `lost` (reason `max_followups`).
-4. `purchased` → counsellor ticks which items were bought, enters one order ID (amount optional). Untied items default to "continue follow-up"; counsellor may close them instead. Enquiry becomes `won` when no open items remain.
-5. `competitor` → enquiry `lost` (reason competitor), never re-enters any queue.
-6. `closed` → wrong number; stored, never queued; future imports of that number are flagged in the import report.
-7. **Reopen:** a lost/closed number that calls again gets a **new enquiry** under the same student. History screen shows old and new enquiries stacked.
+3. **Follow-up slots.** A follow-up slot = one calendar day (IST) on which the enquiry was called, **after** the fresh-call day. The fresh-call day itself never consumes a slot, so a lead gets one fresh day plus three follow-up days — four calling days at most. Two or more calls on the same day, in any combination, count as one slot. Limit: 3 slots. When the 3rd slot ends with outcome `follow_up` or `call_back`, the enquiry automatically becomes `lost` (reason `max_followups`). Three separate days of `call_back` with no answer therefore lose the lead.
+4. **Slot state is derived, not latched.** The whole state machine is recomputed from the enquiry's calls on every call insert, update or delete. A later call on the same day can therefore bring an enquiry back out of `lost` — a `call_back` at 11am on the 3rd slot day marks it lost, and getting through at 4pm returns it to `open` (or `won`). Reports always show current status only; there is no "was lost briefly" state to account for.
+5. `purchased` → counsellor ticks which items were bought, enters one order ID (amount optional). Untied items default to "continue follow-up"; counsellor may close them instead. While any item is still `open`, the enquiry stays `open`. Once no open items remain it resolves:
+   - at least one item `won` → enquiry `won`;
+   - otherwise any item `competitor` → `lost` (reason `competitor`);
+   - otherwise → `lost` (reason `dropped`).
+   - A `purchased` call on an enquiry that has no items at all → `won`.
+6. `competitor` → enquiry `lost` (reason competitor), never re-enters any queue.
+7. `closed` → wrong number: `close_reason = wrong_number`. Stored, never queued; future imports of that number are flagged in the import report.
+8. **Reopen:** a lost/closed number that calls again gets a **new enquiry** under the same student. History screen shows old and new enquiries stacked.
+9. **Supersede.** "Open new enquiry (close previous)" in §5.1 closes the old enquiry with `close_reason = superseded`. A superseded enquiry is *not* a wrong number and is never flagged on import. It is also the one status the trigger will not recompute — it was closed by a human decision, not by call history.
 
 ### After-sale enquiry
-- `open` → counsellor tries to solve and closes immediately if possible → `closed`.
+- `noted` → the counsellor is working it; enquiry stays `open`. Solved immediately → `resolved` → enquiry `closed`.
 - Cannot solve → `escalated`; visible to everyone, worked by Ticket Team.
-- Never appears in follow-up queues or funnel analytics.
+- An after-sale call may set `next_follow_up_date` as a **reminder**. It does not create a follow-up queue entry.
+- After-sale enquiries **never** appear in the §6 recommended list, in any follow-up bucket, or in funnel analytics. They appear only on the Tickets screen (§5.11).
 
 ### Overdue
-- A follow-up not called on its date rolls to the next working day automatically and is flagged overdue. The daily overdue report can be dismissed by admin/manager (items still roll forward).
-- Follow-up dates landing on a holiday/Sunday move to the next working day (admin-managed holiday list).
+- A follow-up not called on its date is **flagged overdue and computed forward at read time** — the stored `next_follow_up_date` is never rewritten. `overdue = next_follow_up_date < today (IST)`; the queue position is `next_working_day(greatest(next_follow_up_date, today))`. This keeps the original date, which is what §6 sorts by ("oldest follow-up date first"), and needs no nightly job.
+- **Working days:** Saturday is a working day. Only Sundays and the admin-managed holiday list are skipped.
+- A follow-up date chosen on a Sunday or a holiday is snapped forward to the next working day **when it is written**, so the stored date is always a working day. Adding a holiday later does not retrospectively re-snap dates already stored.
+- The daily overdue report can be dismissed by admin/manager (items still roll forward).
 
 ---
 
@@ -124,7 +136,7 @@ sources · teachers · courses · subjects (belongs to course) · contents (Full
 ### 5.1 Quick Add (phone rings)
 Single box: type a mobile number. Live lookup as you type.
 - New number → creates student + enquiry, opens the call-logging panel.
-- Existing number → shows full history immediately and asks: **Open new enquiry (close previous)** or **Update existing enquiry**.
+- Existing number → shows full history immediately and asks: **Open new enquiry (close previous)** or **Update existing enquiry**. Closing the previous enquiry sets `close_reason = superseded`, never `wrong_number`.
 
 ### 5.2 Student History
 One page per number: name, all enquiries (old and new, stacked), every call under each with who/when/outcome/note, WhatsApp sends, assignments. Nothing is ever hidden here.
@@ -166,7 +178,10 @@ Imported leads land in the unassigned pool. The import report is kept; skipped r
 Master lists (add/edit/deactivate), WhatsApp templates, holidays, offers, users and roles.
 
 ### 5.10 WhatsApp button
-Choose template 1/2/3 → placeholders `{name}`, `{course}` auto-filled from the enquiry → editable preview → opens WhatsApp Web (`wa.me/91<number>?text=…`) in the browser where WhatsApp Web is logged in → logs `whatsapp_sent` on the call.
+Choose a template → placeholders `{name}`, `{course}` auto-filled from the enquiry → editable preview → opens WhatsApp Web (`wa.me/91<number>?text=…`) in the browser where WhatsApp Web is logged in → logs `whatsapp_sent` on the call. Templates are an unbounded master list managed in Settings; the picker surfaces the first three.
+
+### 5.11 Tickets (after-sale)
+The only place after-sale enquiries are worked. Lists `open` and `escalated` after-sale enquiries, sortable by reminder date (`next_follow_up_date`), filterable by issue category, counsellor and date range. Ticket Team's My Day links here by default. After-sale work never enters the recommended list or an assignment bucket.
 
 ---
 
@@ -180,6 +195,8 @@ Buckets, in order:
 5. **Today's call backs** — always last (done in the evening)
 
 Within every bucket, sort by: Importance (A → D), then Content priority (Full → FT → EO → Test Series → Books), then oldest follow-up date first.
+
+Purchase enquiries only. After-sale enquiries never appear in any of these buckets — they live on the Tickets screen (§5.11).
 
 Admin sees the whole list and assigns from it; each counsellor sees only their assigned slice.
 
@@ -199,8 +216,9 @@ Admin sees the whole list and assigns from it; each counsellor sees only their a
 - **No lag.** Server-side pagination on every table; indexes on `students.mobile`, `enquiries.next_follow_up_date`, `enquiries.status`, `assignments (date, counsellor_id)`, `calls.enquiry_id`; lists virtualised; call logging saves optimistically.
 - Validation of the mobile rule in the browser, in the API and as a DB constraint.
 - RLS on every table from the first migration — no world-writable window (lesson from the Library).
-- Audit log via DB trigger, not application code, so nothing is missed.
-- Timezone: IST throughout.
+- Audit log via DB trigger, not application code, so nothing is missed. Covers `enquiries`, `enquiry_items`, `calls`, `assignments`, `students` and `profiles`. Derived columns are excluded from the change test, so trigger churn does not bury human edits.
+  - `auth.uid()` is null for service-role work, so server-side scripts must `set local app.actor = '<uuid>'`. The log records which path the actor came from.
+- Timezone: IST throughout. Timestamps are stored as `timestamptz`; the IST calendar day is materialised as `calls.call_date` by trigger, because `timezone('Asia/Kolkata', …)` is `stable`, not `immutable`, and so cannot be a generated column.
 - Stack: Next.js (App Router) + Supabase (Postgres, Auth, RLS) + Vercel.
 - Deployment: `calman.zeroinfy.in`; new Supabase project (Mumbai), repo `bajajrohit10/calman`, Vercel team Zeroinfy.
 - No self-signup. Accounts created by Super Admin / Manager.
@@ -217,9 +235,34 @@ Offers + expiry bucket · teacher-wise analytics · other analytics dashboards �
 
 ---
 
-## 10. Open point to confirm
+## 10. Decisions log
 
-The follow-up slot rule in §4.3 is my formalisation of "3rd follow-up is the limit, same-day call-backs count once". Confirm before the schema is built, because the auto-lost trigger depends on it.
+The §4.3 slot rule and fourteen other open points were settled on 10 Sep 2026, before the first migration. Recorded here so the spec and the schema agree.
+
+**Settled**
+
+| # | Point | Decision |
+|---|---|---|
+| 1 | Slot rule | Confirmed as formalised in §4.3. Fresh day never counts; 1 fresh + 3 follow-up days. Three days of `call_back` = lost. Same-day revival accepted — state is purely derived (§4.4). |
+| 2 | "Edit own, same day" vs the workflow | Logging a call on any enquiry is open to all staff and drives status/dates through the trigger. "Edit own, same day only" governs only manual correction of fields the person typed. |
+| 3 | Who ticks items purchased | Any staff member may update `enquiry_items`; the audit log is the control, not a permission check. |
+| 4 | After-sale outcomes | Renamed `noted` / `escalated` / `resolved`. Reminder dates allowed; no §6 bucket; Tickets screen added as §5.11. |
+| 5 | Overloaded `closed` | Split into `close_reason` = `wrong_number` \| `superseded`. Only `wrong_number` is flagged on import. |
+| 6 | "Won when no open items remain" | Corrected: `won` needs at least one won item, else `lost` with reason `competitor` or `dropped` (§4.5). |
+| 7 | PLI | Derived from `importance = A` for now. Known simplification, flagged in §3. |
+| 8 | Assignments vs "never delete" | An assignment is a schedule, not a record. Admin may delete one; the audit log keeps the trail. |
+| 9 | One counsellor per enquiry per day | Yes — `unique (enquiry_id, date)`. |
+| 10 | Multiple open enquiries per student | Allowed. No partial unique index. |
+| 11 | `lead_verification` | Stays on the enquiry, not the item. |
+| 12 | Working days | Saturday is a working day. Only Sundays and the holiday list are skipped. |
+| 13 | `term` | Master list; `term_id` foreign key. |
+| 14 | Mandatory fields | Mobile only. Source, term, importance and lead verification are all nullable. |
+| 15 | WhatsApp templates | Unbounded list in Settings; picker shows the first three. |
+
+**Still open**
+
+- The §3 source list ends in "…" — `sources` is seeded with the five named values only (AC, Indv WhatsApp, Knowlarity, Interakt, Vsmart). Add the rest in Settings.
+- Teachers, courses and subjects are not enumerated anywhere in this spec. The seed carries only the examples the spec itself names (Bhanwar Borana; CA Final; DT, IDT) so the schema can be exercised — the real lists have to come from you.
 
 ---
 ---
