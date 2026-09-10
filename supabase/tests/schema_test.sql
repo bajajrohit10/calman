@@ -96,9 +96,12 @@ $$;
 -- 2. Composite foreign keys
 -- ---------------------------------------------------------------------------
 
-insert into public.courses (name) values ('CA Inter');
+-- A course and subject that exist only for this test. Named so they cannot
+-- collide with the seeded master lists, which now carry the real Zeroinfy
+-- courses — an earlier version used 'CA Inter' and broke once that was seeded.
+insert into public.courses (name) values ('ZZ Test Course');
 insert into public.subjects (course_id, name)
-  select id, 'FM' from public.courses where name = 'CA Inter';
+  select id, 'ZZ Test Subject' from public.courses where name = 'ZZ Test Course';
 
 insert into public.enquiries (id, student_id, type, created_by)
   overriding system value
@@ -110,7 +113,7 @@ select pg_temp.rejects('composite FK: subject from another course is rejected',
     select 1001,
            (select id from public.teachers where name = 'Bhanwar Borana'),
            (select id from public.courses  where name = 'CA Final'),
-           (select id from public.subjects where name = 'FM')$$);
+           (select id from public.subjects where name = 'ZZ Test Subject')$$);
 
 select pg_temp.rejects('composite FK: after-sale outcome on a purchase enquiry is rejected',
   $$insert into public.calls (enquiry_id, called_by, outcome)
