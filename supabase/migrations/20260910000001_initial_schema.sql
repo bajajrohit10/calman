@@ -19,6 +19,10 @@
 -- 1. Extensions and private schemas
 -- ---------------------------------------------------------------------------
 
+-- Supabase hosted projects already have an `extensions` schema; a bare
+-- Postgres may not. `if not exists` on the extension is a no-op when pg_trgm
+-- is already installed, wherever it happens to live.
+create schema if not exists extensions;
 create extension if not exists pg_trgm with schema extensions;
 
 -- `app` holds policy helpers and the state machine; `audit` holds the log
@@ -866,10 +870,32 @@ create index audit_log_at_idx on public.audit_log (at desc);
 
 -- §5.6's "discussion contains" filter. Without trigram indexes this is a
 -- sequential scan of the largest table in the database on every keystroke.
-create index calls_discussion_trgm_idx
-  on public.calls using gin (discussion extensions.gin_trgm_ops);
-create index enquiries_product_text_trgm_idx
-  on public.enquiries using gin (product_text extensions.gin_trgm_ops);
+-- The operator class has to be schema-qualified, but a project that already
+-- had pg_trgm installed may hold it somewhere other than `extensions` — in
+-- which case hard-coding the schema fails at push time. Resolve it instead.
+do $trgm$
+declare
+  opc_schema text;
+begin
+  select n.nspname
+    into opc_schema
+    from pg_catalog.pg_opclass o
+    join pg_catalog.pg_namespace n on n.oid = o.opcnamespace
+   where o.opcname = 'gin_trgm_ops'
+   limit 1;
+
+  if opc_schema is null then
+    raise exception 'pg_trgm is not installed: the §5.6 discussion filter needs it';
+  end if;
+
+  execute format(
+    'create index calls_discussion_trgm_idx on public.calls using gin (discussion %I.gin_trgm_ops)',
+    opc_schema);
+  execute format(
+    'create index enquiries_product_text_trgm_idx on public.enquiries using gin (product_text %I.gin_trgm_ops)',
+    opc_schema);
+end
+$trgm$;
 
 -- ---------------------------------------------------------------------------
 -- 9. Row level security (§8 — on every table from the first migration)
