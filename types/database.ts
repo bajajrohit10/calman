@@ -1082,6 +1082,38 @@ export type Database = {
         }[]
       }
       supersede_enquiry: { Args: { p_enquiry_id: number }; Returns: undefined }
+      tickets_list: {
+        Args: {
+          p_counsellor_id?: string
+          p_dir?: string
+          p_from?: string
+          p_include_resolved?: boolean
+          p_issue_category?: Database["public"]["Enums"]["issue_category"]
+          p_limit?: number
+          p_offset?: number
+          p_sort?: string
+          p_status?: Database["public"]["Enums"]["enquiry_status"]
+          p_to?: string
+        }
+        Returns: {
+          call_count: number
+          created_at: string
+          enquiry_id: number
+          issue_category: Database["public"]["Enums"]["issue_category"]
+          last_call_at: string
+          last_caller_id: string
+          last_caller_name: string
+          last_discussion: string
+          last_outcome: Database["public"]["Enums"]["call_outcome"]
+          mobile: string
+          order_id: string
+          reminder_date: string
+          status: Database["public"]["Enums"]["enquiry_status"]
+          student_id: string
+          student_name: string
+          total_count: number
+        }[]
+      }
     }
     Enums: {
       assignment_bucket:
