@@ -35,7 +35,6 @@ export type LogCallInput = {
   outcome: CallOutcome | "";
   discussion: string;
   nextFollowUpDate: string | null;
-  whatsappSent: boolean;
   issueCategory: IssueCategory | "" | null;
   orderId: string | null;
   existingItems: ItemDecision[];
@@ -50,6 +49,7 @@ export type PanelPayload = {
   studentName: string | null;
   mobile: string;
   term: string | null;
+  productText: string | null;
   items: {
     id: string;
     status: string;
@@ -74,7 +74,7 @@ export async function loadPanelEnquiry(
   const { data, error } = await supabase
     .from("enquiries")
     .select(
-      `id, type,
+      `id, type, product_text,
        term:terms ( name ),
        students ( name, mobile ),
        enquiry_items (
@@ -101,6 +101,7 @@ export async function loadPanelEnquiry(
       studentName: student?.name ?? null,
       mobile: student?.mobile ?? "",
       term: (data.term as { name: string } | null)?.name ?? null,
+      productText: data.product_text,
       items: (data.enquiry_items ?? []).map((i) => ({
         id: i.id,
         status: i.status,
@@ -208,6 +209,9 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
         status: item.won ? ("won" as const) : ("open" as const),
         order_id: item.won ? orderId : null,
         amount: item.won ? amount : null,
+        // §5.8 credits the day's revenue from this, so it is written with the
+        // sale rather than inferred from the call afterwards.
+        won_at: item.won ? new Date().toISOString() : null,
       });
     }
 
@@ -231,7 +235,12 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
         if (amount === "invalid") return { error: "An amount must be a number." };
         const { error } = await supabase
           .from("enquiry_items")
-          .update({ status: "won", order_id: orderId, amount })
+          .update({
+            status: "won",
+            order_id: orderId,
+            amount,
+            won_at: new Date().toISOString(),
+          })
           .eq("id", decision.id);
         if (error) return { error: error.message };
       } else if (decision.close) {
@@ -269,7 +278,8 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
     outcome,
     discussion: input.discussion.trim() || null,
     next_follow_up_date: input.nextFollowUpDate || null,
-    whatsapp_sent: input.whatsappSent,
+    // whatsapp_sent is legacy: sends are recorded in whatsapp_sends (§5.10),
+    // outside the calls table so the slot rule never counts one.
     issue_category: type === "after_sale" ? (input.issueCategory as IssueCategory) : null,
     order_id: orderId,
   });

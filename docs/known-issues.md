@@ -60,3 +60,25 @@ What is known:
 Because no batch was created, the failure mode is *safe* — it loses a click,
 not data. If it recurs, the things worth capturing are whether the review table
 was large, and whether the browser tab had been left idle before the click.
+
+## Reports: PLI issued is inflated by historical test imports
+
+**Status: cosmetic, historical only. Will not recur.**
+
+"PLI issued" counts audit rows where an enquiry's importance became `a`. Bulk
+imports are excluded by checking whether an `import_rows` row points at the
+enquiry — but that check needs the import log to still exist. The Brief 5 test
+imports were purged *including* their `import_rows`, so several thousand
+audit rows from those runs now look like human decisions and are attributed to
+`counsellor.test`.
+
+Two consequences worth knowing:
+
+- The figure is right for anything imported from here on, because real imports
+  keep their `import_rows` — §5.7 exists to preserve them.
+- `audit_log` was deliberately not cleaned. It is an append-only record of who
+  did what, and deleting from it to tidy a metric is a worse trade than the
+  noise.
+
+If the pilot's numbers need to start clean, the honest fix is a dated cutoff in
+the report rather than deleting audit history.

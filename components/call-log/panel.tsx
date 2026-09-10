@@ -15,6 +15,8 @@ import {
 } from "@/lib/enquiry-labels";
 import { istDatePlus, istNextMonday, istToday } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
+import { WhatsAppButton } from "@/components/whatsapp/button";
+import { courseTextFor } from "@/lib/whatsapp-text";
 
 import { logCall, type LogCallResult } from "./actions";
 
@@ -43,6 +45,7 @@ export type PanelEnquiry = {
   studentName: string | null;
   mobile: string;
   term: string | null;
+  productText: string | null;
   items: PanelItem[];
 };
 
@@ -185,7 +188,6 @@ export function CallLogPanel({
   const [discussion, setDiscussion] = useState("");
   const [outcome, setOutcome] = useState<CallOutcome | "">("");
   const [followUpDate, setFollowUpDate] = useState("");
-  const [whatsapp, setWhatsapp] = useState(false);
   const [issueCategory, setIssueCategory] = useState<IssueCategory | "">("");
   const [orderId, setOrderId] = useState("");
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
@@ -272,7 +274,6 @@ export function CallLogPanel({
         outcome,
         discussion,
         nextFollowUpDate: outcomeTakesDate(outcome) ? followUpDate || null : null,
-        whatsappSent: whatsapp,
         issueCategory: enquiry.type === "after_sale" ? issueCategory : null,
         orderId: purchased ? orderId : enquiry.type === "after_sale" ? orderId : null,
         existingItems: openItems.map((i) => ({
@@ -430,14 +431,14 @@ export function CallLogPanel({
             </div>
           ) : null}
 
-          <label className="flex cursor-pointer items-center gap-1.5 pb-1.5 text-[12.5px] text-ink-2">
-            <input
-              type="checkbox"
-              checked={whatsapp}
-              onChange={(e) => setWhatsapp(e.target.checked)}
+          <div className="pb-0.5">
+            <WhatsAppButton
+              enquiryId={enquiry.id}
+              mobile={enquiry.mobile}
+              studentName={enquiry.studentName}
+              courseText={courseTextFor(enquiry.items, enquiry.productText)}
             />
-            WhatsApp sent
-          </label>
+          </div>
         </div>
 
         {purchased ? (

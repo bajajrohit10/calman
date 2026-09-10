@@ -48,6 +48,14 @@ export type HistoryItem = {
   content: { name: string } | null;
 };
 
+export type HistorySend = {
+  id: number;
+  message_text: string;
+  sent_at: string;
+  template: { name: string } | null;
+  sender: { full_name: string | null } | null;
+};
+
 export type HistoryAssignment = {
   id: string;
   date: string;
@@ -74,6 +82,7 @@ export type HistoryEnquiry = {
   calls: HistoryCall[];
   enquiry_items: HistoryItem[];
   assignments: HistoryAssignment[];
+  whatsapp_sends: HistorySend[];
 };
 
 export type StudentHistory = {
@@ -107,6 +116,11 @@ const SELECT = `
     assignments (
       id, date, bucket,
       counsellor:profiles!assignments_counsellor_id_fkey ( full_name )
+    ),
+    whatsapp_sends (
+      id, message_text, sent_at,
+      template:whatsapp_templates ( name ),
+      sender:profiles!whatsapp_sends_sent_by_fkey ( full_name )
     )
   )
 `;
@@ -126,6 +140,9 @@ function sortHistory(student: StudentHistory): StudentHistory {
       (a, b) => Date.parse(b.called_at) - Date.parse(a.called_at) || b.id - a.id,
     );
     enquiry.assignments.sort((a, b) => b.date.localeCompare(a.date));
+    enquiry.whatsapp_sends.sort(
+      (a, b) => Date.parse(b.sent_at) - Date.parse(a.sent_at) || b.id - a.id,
+    );
   }
 
   return { ...student, enquiries };

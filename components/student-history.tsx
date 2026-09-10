@@ -1,6 +1,8 @@
 import Link from "next/link";
 
 import { Badge, cx } from "@/components/ui";
+import { WhatsAppButton } from "@/components/whatsapp/button";
+import { courseTextFor } from "@/lib/whatsapp-text";
 import {
   BUCKET_LABELS,
   CLOSE_REASON_LABELS,
@@ -95,7 +97,15 @@ function CallLine({ call }: { call: HistoryEnquiry["calls"][number] }) {
   );
 }
 
-export function EnquiryCard({ enquiry }: { enquiry: HistoryEnquiry }) {
+export function EnquiryCard({
+  enquiry,
+  mobile,
+  studentName,
+}: {
+  enquiry: HistoryEnquiry;
+  mobile?: string;
+  studentName?: string | null;
+}) {
   const resolution =
     enquiry.status === "lost" && enquiry.lost_reason
       ? LOST_REASON_LABELS[enquiry.lost_reason]
@@ -118,6 +128,25 @@ export function EnquiryCard({ enquiry }: { enquiry: HistoryEnquiry }) {
           opened {formatDateTime(enquiry.created_at)}
         </span>
       </header>
+
+      {enquiry.status === "open" && mobile ? (
+        <div className="border-b border-line px-4 py-2">
+          <WhatsAppButton
+            enquiryId={enquiry.id}
+            mobile={mobile}
+            studentName={studentName ?? null}
+            courseText={courseTextFor(
+              enquiry.enquiry_items.map((i) => ({
+                teacher: i.teacher?.name ?? null,
+                course: i.course?.name ?? null,
+                subject: i.subject?.name ?? null,
+                content: i.content?.name ?? null,
+              })),
+              enquiry.product_text,
+            )}
+          />
+        </div>
+      ) : null}
 
       <div className="grid gap-x-6 gap-y-1 px-4 py-2.5 text-[12px] sm:grid-cols-2 lg:grid-cols-3">
         <Meta label="Term" value={enquiry.term?.name ?? "—"} />
@@ -184,6 +213,26 @@ export function EnquiryCard({ enquiry }: { enquiry: HistoryEnquiry }) {
         </section>
       ) : null}
 
+      {enquiry.whatsapp_sends.length ? (
+        <section className="border-t border-line px-4 py-2.5">
+          <h4 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+            WhatsApp ({enquiry.whatsapp_sends.length})
+          </h4>
+          <ul className="mt-1 flex flex-col gap-1 text-[12.5px]">
+            {enquiry.whatsapp_sends.map((w) => (
+              <li key={w.id} className="border-l-2 border-ok/50 py-1 pl-3">
+                <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-ink-3">
+                  <span>{formatDateTime(w.sent_at)}</span>
+                  <span>by {w.sender?.full_name ?? "unknown"}</span>
+                  {w.template?.name ? <Badge tone="neutral">{w.template.name}</Badge> : null}
+                </div>
+                <p className="mt-0.5 whitespace-pre-wrap text-ink-2">{w.message_text}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <section className="border-t border-line px-4 py-2.5">
         <h4 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
           Calls ({enquiry.calls.length})
@@ -233,7 +282,12 @@ export function StudentHistoryView({
 
       {student.enquiries.length ? (
         student.enquiries.map((enquiry) => (
-          <EnquiryCard key={enquiry.id} enquiry={enquiry} />
+          <EnquiryCard
+            key={enquiry.id}
+            enquiry={enquiry}
+            mobile={student.mobile}
+            studentName={student.name}
+          />
         ))
       ) : (
         <p className="text-[13px] text-ink-3">No enquiries yet.</p>

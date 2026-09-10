@@ -5,6 +5,7 @@ import { isAdmin, requireUser } from "@/lib/auth";
 import { loadEnquiries } from "@/lib/enquiries";
 import { EXPORT_COLUMNS, loadExportRows, MAX_EXPORT, type ExportRow } from "@/lib/export";
 import { loadAllMatching } from "@/lib/recommended";
+import { loadReport, REPORT_COLUMNS } from "@/lib/reports";
 
 export type ExportResult = {
   error: string | null;
@@ -25,13 +26,41 @@ export async function exportCurrentView(
   input:
     | { source: "enquiries"; search: string }
     | { source: "desk"; search: string }
-    | { source: "myday"; date: string; counsellorId: string | null },
+    | { source: "myday"; date: string; counsellorId: string | null }
+    | { source: "report"; from: string; to: string; counsellorId: string | null },
 ): Promise<ExportResult> {
   const viewer = await requireUser();
   if (!viewer.profile) return { error: "Your account is not active." };
 
   let ids: number[] = [];
   let stem = "calman-export";
+
+  // The report is a different row shape from an enquiry, so it returns
+  // directly rather than collecting ids — but it still goes out through the
+  // same client-side file builder.
+  if (input.source === "report") {
+    const admin = isAdmin(viewer.profile.role);
+    const scope = admin ? input.counsellorId : viewer.userId!;
+    const { rows, error } = await loadReport(input.from, input.to, scope);
+    if (error) return { error };
+    if (!rows.length) return { error: "No activity in that range." };
+
+    return {
+      error: null,
+      rows: rows.map((r) => ({
+        day: r.day,
+        counsellor: r.counsellor_name,
+        ...Object.fromEntries(REPORT_COLUMNS.map((c) => [c.key, r[c.key]])),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      })) as any,
+      columns: [
+        { key: "day", label: "Day" },
+        { key: "counsellor", label: "Counsellor" },
+        ...REPORT_COLUMNS.map((c) => ({ key: c.key as string, label: c.label })),
+      ],
+      filename: `calman-report-${input.from}-to-${input.to}`,
+    };
+  }
 
   if (input.source === "enquiries") {
     const params = new URLSearchParams(input.search);

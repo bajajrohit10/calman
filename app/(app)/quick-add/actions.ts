@@ -55,6 +55,7 @@ export type NewEnquiryResult = {
     studentName: string | null;
     mobile: string;
     term: string | null;
+    productText: string | null;
     items: never[];
   };
 };
@@ -145,6 +146,7 @@ export async function createEnquiry(
       studentName,
       mobile,
       term: (enquiry.term as { name: string } | null)?.name ?? null,
+      productText: input.productText?.trim() || null,
       items: [],
     },
   };

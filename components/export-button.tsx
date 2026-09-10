@@ -8,7 +8,8 @@ import { exportCurrentView } from "@/lib/export-actions";
 type Source =
   | { source: "enquiries" }
   | { source: "desk" }
-  | { source: "myday"; date: string; counsellorId: string | null };
+  | { source: "myday"; date: string; counsellorId: string | null }
+  | { source: "report"; from: string; to: string; counsellorId: string | null };
 
 /**
  * Builds the file in the browser.
@@ -41,9 +42,16 @@ export function ExportButton(props: Source & { className?: string }) {
       const payload =
         props.source === "myday"
           ? { source: "myday" as const, date: props.date, counsellorId: props.counsellorId }
-          : props.source === "desk"
-            ? { source: "desk" as const, search: window.location.search }
-            : { source: "enquiries" as const, search: window.location.search };
+          : props.source === "report"
+            ? {
+                source: "report" as const,
+                from: props.from,
+                to: props.to,
+                counsellorId: props.counsellorId,
+              }
+            : props.source === "desk"
+              ? { source: "desk" as const, search: window.location.search }
+              : { source: "enquiries" as const, search: window.location.search };
 
       const res = await exportCurrentView(payload);
       if (res.error || !res.rows || !res.columns) {

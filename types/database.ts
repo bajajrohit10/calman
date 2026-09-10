@@ -331,6 +331,7 @@ export type Database = {
           status: Database["public"]["Enums"]["item_status"]
           subject_id: string | null
           teacher_id: string
+          won_at: string | null
         }
         Insert: {
           amount?: number | null
@@ -344,6 +345,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["item_status"]
           subject_id?: string | null
           teacher_id: string
+          won_at?: string | null
         }
         Update: {
           amount?: number | null
@@ -357,6 +359,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["item_status"]
           subject_id?: string | null
           teacher_id?: string
+          won_at?: string | null
         }
         Relationships: [
           {
@@ -900,6 +903,55 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_sends: {
+        Row: {
+          enquiry_id: number
+          id: number
+          message_text: string
+          sent_at: string
+          sent_by: string
+          template_id: string | null
+        }
+        Insert: {
+          enquiry_id: number
+          id?: never
+          message_text: string
+          sent_at?: string
+          sent_by: string
+          template_id?: string | null
+        }
+        Update: {
+          enquiry_id?: number
+          id?: never
+          message_text?: string
+          sent_at?: string
+          sent_by?: string
+          template_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_sends_enquiry_id_fkey"
+            columns: ["enquiry_id"]
+            isOneToOne: false
+            referencedRelation: "enquiries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_sends_sent_by_fkey"
+            columns: ["sent_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_sends_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_templates: {
         Row: {
           body: string
@@ -932,6 +984,24 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      daily_counsellor_report: {
+        Args: { p_counsellor_id?: string; p_from: string; p_to: string }
+        Returns: {
+          call_backs: number
+          calls_made: number
+          closed: number
+          competitor: number
+          counsellor_id: string
+          counsellor_name: string
+          day: string
+          follow_ups_done: number
+          fresh_handled: number
+          overdue_carried_forward: number
+          pli_issued: number
+          purchased_amount: number
+          purchased_calls: number
+        }[]
+      }
       enquiries_table: {
         Args: {
           p_close_reason?: Database["public"]["Enums"]["close_reason"]
