@@ -456,6 +456,38 @@ export type Database = {
           },
         ]
       }
+      import_column_maps: {
+        Row: {
+          fingerprint: string
+          headers: string[]
+          mapping: Json
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          fingerprint: string
+          headers: string[]
+          mapping: Json
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          fingerprint?: string
+          headers?: string[]
+          mapping?: Json
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_column_maps_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       import_rows: {
         Row: {
           batch_id: string
@@ -900,6 +932,105 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      enquiries_table: {
+        Args: {
+          p_close_reason?: Database["public"]["Enums"]["close_reason"]
+          p_content_id?: string
+          p_counsellor_id?: string
+          p_course_id?: string
+          p_created_from?: string
+          p_created_to?: string
+          p_dir?: string
+          p_discussion?: string
+          p_follow_up_from?: string
+          p_follow_up_to?: string
+          p_importance?: Database["public"]["Enums"]["importance"]
+          p_limit?: number
+          p_lost_reason?: Database["public"]["Enums"]["lost_reason"]
+          p_mobile?: string
+          p_offset?: number
+          p_sort?: string
+          p_source_id?: string
+          p_status?: Database["public"]["Enums"]["enquiry_status"]
+          p_subject_id?: string
+          p_teacher_id?: string
+          p_term_id?: string
+          p_type?: Database["public"]["Enums"]["enquiry_type"]
+        }
+        Returns: {
+          assigned_date: string
+          assigned_to_name: string
+          close_reason: Database["public"]["Enums"]["close_reason"]
+          closed_at: string
+          created_at: string
+          enquiry_id: number
+          follow_up_slots_used: number
+          fresh_call_date: string
+          importance: Database["public"]["Enums"]["importance"]
+          item_count: number
+          last_call_at: string
+          last_discussion: string
+          last_outcome: Database["public"]["Enums"]["call_outcome"]
+          lead_verification: Database["public"]["Enums"]["lead_verification"]
+          lost_reason: Database["public"]["Enums"]["lost_reason"]
+          mobile: string
+          next_follow_up_date: string
+          product_text: string
+          source_name: string
+          status: Database["public"]["Enums"]["enquiry_status"]
+          student_id: string
+          student_name: string
+          teacher_names: string
+          term_name: string
+          total_count: number
+          type: Database["public"]["Enums"]["enquiry_type"]
+        }[]
+      }
+      export_enquiries: {
+        Args: { p_ids: number[] }
+        Returns: {
+          amount_total: number
+          assigned_date: string
+          assigned_to_name: string
+          close_reason: Database["public"]["Enums"]["close_reason"]
+          closed_at: string
+          contents: string
+          courses: string
+          created_at: string
+          enquiry_id: number
+          follow_up_slots_used: number
+          fresh_call_date: string
+          importance: Database["public"]["Enums"]["importance"]
+          item_statuses: string
+          last_call_at: string
+          last_discussion: string
+          last_outcome: Database["public"]["Enums"]["call_outcome"]
+          lead_verification: Database["public"]["Enums"]["lead_verification"]
+          lost_reason: Database["public"]["Enums"]["lost_reason"]
+          mobile: string
+          next_follow_up_date: string
+          order_ids: string
+          product_text: string
+          source_name: string
+          status: Database["public"]["Enums"]["enquiry_status"]
+          student_name: string
+          subjects: string
+          teachers: string
+          term_name: string
+          type: Database["public"]["Enums"]["enquiry_type"]
+        }[]
+      }
+      import_update_enquiry: {
+        Args: {
+          p_enquiry_id: number
+          p_importance?: Database["public"]["Enums"]["importance"]
+          p_lead_verification?: Database["public"]["Enums"]["lead_verification"]
+          p_product_text?: string
+          p_source_id?: string
+          p_term_id?: string
+        }
+        Returns: undefined
+      }
       recommended_calls: {
         Args: {
           p_content_id?: string

@@ -1,4 +1,11 @@
-import type { EnquiryStatus, EnquiryType, Importance } from "@/lib/enquiry-labels";
+import type {
+  CloseReason,
+  EnquiryStatus,
+  EnquiryType,
+  Importance,
+  LostReason,
+} from "@/lib/enquiry-labels";
+import type { EnquiryFilters } from "@/lib/enquiries";
 import { istToday } from "@/lib/format";
 import type { RecommendedFilters } from "@/lib/recommended";
 
@@ -49,6 +56,53 @@ export function parseDeskParams(get: ParamReader): {
       followUpFrom: str(get, "followUpFrom"),
       followUpTo: str(get, "followUpTo"),
       discussion: str(get, "q"),
+      limit: PAGE_SIZE,
+      offset: (page - 1) * PAGE_SIZE,
+    },
+  };
+}
+
+/**
+ * §5.6 reads the same query-string keys as the desk — so a filter built on one
+ * screen can be pasted into the other — plus the fields that only make sense
+ * once every status is in scope: status itself, why it was lost or closed, a
+ * mobile-number search, and the sort.
+ */
+export function parseEnquiriesParams(get: ParamReader): {
+  page: number;
+  sort: string;
+  dir: "asc" | "desc";
+  filters: EnquiryFilters;
+} {
+  const page = Math.max(1, Number(str(get, "page") ?? 1) || 1);
+  const sort = str(get, "sort") ?? "created_at";
+  const dir = str(get, "dir") === "asc" ? "asc" : "desc";
+
+  return {
+    page,
+    sort,
+    dir,
+    filters: {
+      type: str(get, "type") as EnquiryType | null,
+      status: str(get, "status") as EnquiryStatus | null,
+      lostReason: str(get, "lostReason") as LostReason | null,
+      closeReason: str(get, "closeReason") as CloseReason | null,
+      counsellorId: str(get, "counsellor"),
+      teacherId: str(get, "teacher"),
+      courseId: str(get, "course"),
+      subjectId: str(get, "subject"),
+      contentId: str(get, "content"),
+      termId: str(get, "term"),
+      sourceId: str(get, "source"),
+      importance: str(get, "importance") as Importance | null,
+      createdFrom: str(get, "createdFrom"),
+      createdTo: str(get, "createdTo"),
+      followUpFrom: str(get, "followUpFrom"),
+      followUpTo: str(get, "followUpTo"),
+      discussion: str(get, "q"),
+      mobile: str(get, "mobile"),
+      sort,
+      dir,
       limit: PAGE_SIZE,
       offset: (page - 1) * PAGE_SIZE,
     },

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 
 import { loadPanelEnquiry, type PanelPayload } from "@/components/call-log/actions";
+import { ExportButton } from "@/components/export-button";
 import { CallLogPanel, type PanelMasters } from "@/components/call-log/panel";
 import { Badge, Button, ErrorNote, Select, cx } from "@/components/ui";
 import { BUCKET_LABELS, type AssignmentBucket } from "@/lib/enquiry-labels";
@@ -125,6 +126,7 @@ export function MyDay({
         <span className="text-[12.5px] text-ink-3">
           {rows.length} assigned for {formatDate(date)}
         </span>
+        <ExportButton source="myday" date={date} counsellorId={counsellorId} className="ml-auto" />
       </div>
 
       {error ? <ErrorNote>{error}</ErrorNote> : null}

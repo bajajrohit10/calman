@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 
-import { Badge, Button, ErrorNote, Input, Select, cx } from "@/components/ui";
+import { ExportButton } from "@/components/export-button";
 import {
-  BUCKET_LABELS,
-  IMPORTANCE_LABELS,
-  type AssignmentBucket,
-} from "@/lib/enquiry-labels";
+  CommonFilterFields,
+  Labelled,
+  type FilterMasters,
+} from "@/components/filter-fields";
+import { Badge, Button, ErrorNote, Input, Select, cx } from "@/components/ui";
+import { BUCKET_LABELS, type AssignmentBucket } from "@/lib/enquiry-labels";
 import { formatDate } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
 import type { RecommendedRow } from "@/lib/recommended";
@@ -21,17 +23,7 @@ import {
   unassignEnquiries,
 } from "./actions";
 
-type Master = { id: string; name: string };
-type Subject = Master & { course_id: string };
-
-export type DeskMasters = {
-  teachers: Master[];
-  courses: Master[];
-  subjects: Subject[];
-  contents: Master[];
-  terms: Master[];
-  sources: Master[];
-};
+export type DeskMasters = FilterMasters;
 
 export type RosterEntry = { id: string; name: string; role: string; count: number };
 
@@ -54,6 +46,7 @@ export function AssignDesk({
   roster,
   masters,
   selected,
+  search,
 }: {
   rows: RecommendedRow[];
   total: number;
@@ -65,6 +58,7 @@ export function AssignDesk({
   roster: RosterEntry[];
   masters: DeskMasters;
   selected: Record<string, string>;
+  search: string;
 }) {
   const router = useRouter();
   const [picked, setPicked] = useState<Map<number, AssignmentBucket>>(new Map());
@@ -75,13 +69,6 @@ export function AssignDesk({
   const [fromId, setFromId] = useState("");
   const [toId, setToId] = useState("");
 
-  const subjectsForCourse = useMemo(
-    () =>
-      selected.course
-        ? masters.subjects.filter((s) => s.course_id === selected.course)
-        : masters.subjects,
-    [masters.subjects, selected.course],
-  );
 
   const allOnPage = rows.length > 0 && rows.every((r) => picked.has(r.enquiry_id));
 
@@ -138,86 +125,7 @@ export function AssignDesk({
             <Labelled label="Date">
               <Input type="date" name="date" defaultValue={date} />
             </Labelled>
-            <Labelled label="Counsellor">
-              <Select name="counsellor" defaultValue={selected.counsellor}>
-                <option value="">Anyone</option>
-                {roster.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
-                ))}
-              </Select>
-            </Labelled>
-            <Labelled label="Teacher">
-              <Select name="teacher" defaultValue={selected.teacher}>
-                <option value="">Any</option>
-                {masters.teachers.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </Select>
-            </Labelled>
-            <Labelled label="Course">
-              <Select name="course" defaultValue={selected.course}>
-                <option value="">Any</option>
-                {masters.courses.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </Select>
-            </Labelled>
-            <Labelled label="Subject">
-              <Select name="subject" defaultValue={selected.subject}>
-                <option value="">Any</option>
-                {subjectsForCourse.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </Select>
-            </Labelled>
-            <Labelled label="Content">
-              <Select name="content" defaultValue={selected.content}>
-                <option value="">Any</option>
-                {masters.contents.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </Select>
-            </Labelled>
-            <Labelled label="Term">
-              <Select name="term" defaultValue={selected.term}>
-                <option value="">Any</option>
-                {masters.terms.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </Select>
-            </Labelled>
-            <Labelled label="Source">
-              <Select name="source" defaultValue={selected.source}>
-                <option value="">Any</option>
-                {masters.sources.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </Select>
-            </Labelled>
-            <Labelled label="Importance">
-              <Select name="importance" defaultValue={selected.importance}>
-                <option value="">Any</option>
-                {Object.entries(IMPORTANCE_LABELS).map(([v, label]) => (
-                  <option key={v} value={v}>
-                    {label}
-                  </option>
-                ))}
-              </Select>
-            </Labelled>
+            <CommonFilterFields masters={masters} selected={selected} roster={roster} />
             <Labelled label="Type">
               <Select name="type" defaultValue={selected.type}>
                 <option value="">Purchase (default)</option>
@@ -233,21 +141,6 @@ export function AssignDesk({
                 <option value="lost">Lost</option>
                 <option value="closed">Closed</option>
               </Select>
-            </Labelled>
-            <Labelled label="Discussion contains">
-              <Input name="q" defaultValue={selected.q} placeholder="text in any call note" />
-            </Labelled>
-            <Labelled label="Enquired from">
-              <Input type="date" name="createdFrom" defaultValue={selected.createdFrom} />
-            </Labelled>
-            <Labelled label="Enquired to">
-              <Input type="date" name="createdTo" defaultValue={selected.createdTo} />
-            </Labelled>
-            <Labelled label="Follow-up from">
-              <Input type="date" name="followUpFrom" defaultValue={selected.followUpFrom} />
-            </Labelled>
-            <Labelled label="Follow-up to">
-              <Input type="date" name="followUpTo" defaultValue={selected.followUpTo} />
             </Labelled>
           </div>
 
@@ -266,6 +159,7 @@ export function AssignDesk({
               {total} enquir{total === 1 ? "y" : "ies"}
               {includeNotDue ? " matching" : ` due ${formatDate(date)}`}
             </span>
+            <ExportButton source="desk" />
           </div>
         </form>
 
@@ -404,7 +298,7 @@ export function AssignDesk({
         </div>
 
         {total > pageSize ? (
-          <Pager page={page} pageSize={pageSize} total={total} />
+          <Pager page={page} pageSize={pageSize} total={total} search={search} />
         ) : null}
       </div>
 
@@ -528,12 +422,20 @@ export function AssignDesk({
   );
 }
 
-function Pager({ page, pageSize, total }: { page: number; pageSize: number; total: number }) {
+function Pager({
+  page,
+  pageSize,
+  total,
+  search,
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  search: string;
+}) {
   const pages = Math.ceil(total / pageSize);
   const href = (p: number) => {
-    const params = new URLSearchParams(
-      typeof window === "undefined" ? "" : window.location.search,
-    );
+    const params = new URLSearchParams(search);
     params.set("page", String(p));
     return `?${params.toString()}`;
   };
@@ -557,13 +459,3 @@ function Pager({ page, pageSize, total }: { page: number; pageSize: number; tota
   );
 }
 
-function Labelled({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-[10.5px] font-medium uppercase tracking-wide text-ink-3">
-        {label}
-      </span>
-      {children}
-    </label>
-  );
-}

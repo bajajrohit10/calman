@@ -23,6 +23,12 @@ export default async function Page({
 
   const { date, page, includeNotDue, filters } = parseDeskParams((k) => one(sp[k]));
 
+  const search = new URLSearchParams(
+    Object.entries(sp).flatMap(([k, v]) =>
+      v == null ? [] : [[k, Array.isArray(v) ? v[0] : v] as [string, string]],
+    ),
+  ).toString();
+
   const supabase = await createClient();
   const [list, teachers, courses, subjects, contents, terms, sources, staff, dayAssignments] =
     await Promise.all([
@@ -68,6 +74,7 @@ export default async function Page({
         page={page}
         pageSize={PAGE_SIZE}
         includeNotDue={includeNotDue}
+        search={search}
         roster={roster}
         masters={{
           teachers: teachers.data ?? [],
