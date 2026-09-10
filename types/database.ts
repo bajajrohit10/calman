@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       assignments: {
@@ -146,7 +121,7 @@ export type Database = {
           whatsapp_sent: boolean
         }
         Insert: {
-          call_date: string
+          call_date?: string
           called_at?: string
           called_by: string
           discussion?: string | null
@@ -432,16 +407,19 @@ export type Database = {
         Row: {
           created_at: string
           date: string
+          is_active: boolean
           name: string
         }
         Insert: {
           created_at?: string
           date: string
+          is_active?: boolean
           name: string
         }
         Update: {
           created_at?: string
           date?: string
+          is_active?: boolean
           name?: string
         }
         Relationships: []
@@ -922,7 +900,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      supersede_enquiry: { Args: { p_enquiry_id: number }; Returns: undefined }
     }
     Enums: {
       assignment_bucket:
@@ -1084,9 +1062,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       assignment_bucket: [

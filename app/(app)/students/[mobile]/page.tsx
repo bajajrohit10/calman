@@ -1,0 +1,50 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+
+import { StudentHistoryView } from "@/components/student-history";
+import { PageHeader } from "@/components/ui";
+import { requireUser } from "@/lib/auth";
+import { formatDateTime } from "@/lib/format";
+import { isValidMobile, normaliseMobile } from "@/lib/mobile";
+import { loadStudentByMobile } from "@/lib/students";
+
+export const metadata = { title: "Student · Calman" };
+
+/**
+ * §5.2. The URL is the mobile number, so any number anywhere in the product
+ * links straight here without needing an id.
+ */
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ mobile: string }>;
+}) {
+  await requireUser();
+
+  const { mobile: raw } = await params;
+  const mobile = normaliseMobile(decodeURIComponent(raw));
+  if (!isValidMobile(mobile)) notFound();
+
+  const student = await loadStudentByMobile(mobile);
+  if (!student) notFound();
+
+  return (
+    <div className="flex flex-col gap-5">
+      <PageHeader
+        title={student.name || "Student"}
+        description={`Every enquiry and every call on this number. First seen ${formatDateTime(student.created_at)}.`}
+      />
+
+      <div>
+        <Link
+          href="/quick-add"
+          className="text-[12.5px] text-ink-2 underline-offset-2 hover:underline"
+        >
+          ← Quick Add
+        </Link>
+      </div>
+
+      <StudentHistoryView student={student} />
+    </div>
+  );
+}
