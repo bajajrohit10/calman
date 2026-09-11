@@ -128,3 +128,28 @@ export async function loadMyDay(input: {
     error: day.error ?? tickets.error?.message ?? null,
   };
 }
+
+/**
+ * The enquiry ids on one counsellor's day, for the export.
+ *
+ * The export used to re-derive the day from recommended_calls(), which is the
+ * open-only list — so the moment My Day started counting closed rows in its
+ * totals, "export my day" would have quietly left them out. One definition of
+ * the day, read twice.
+ */
+export async function loadMyDayIds(input: {
+  date: string;
+  counsellorId: string;
+}): Promise<{ ids: number[]; error: string | null }> {
+  const supabase = await createClient();
+  const { rows, error } = await fetchAllRows<{ enquiry_id: number }>((from, to) =>
+    supabase
+      .rpc("my_day", {
+        p_date: input.date,
+        p_counsellor_id: input.counsellorId,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any)
+      .range(from, to) as never,
+  );
+  return { ids: rows.map((r) => r.enquiry_id), error };
+}

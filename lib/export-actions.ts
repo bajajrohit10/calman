@@ -4,6 +4,7 @@ import { parseDeskParams, parseEnquiriesParams } from "@/app/(app)/assign/filter
 import { isAdmin, requireUser } from "@/lib/auth";
 import { loadEnquiries } from "@/lib/enquiries";
 import { EXPORT_COLUMNS, loadExportRows, MAX_EXPORT, type ExportRow } from "@/lib/export";
+import { loadMyDayIds } from "@/lib/my-day";
 import { loadAllMatching } from "@/lib/recommended";
 import {
   loadReport,
@@ -147,13 +148,12 @@ export async function exportCurrentView(
     // A counsellor exports their own day whatever the query string says.
     const admin = isAdmin(viewer.profile.role);
     const counsellorId = admin ? (input.counsellorId ?? viewer.userId!) : viewer.userId!;
-    const all = await loadAllMatching({
-      date: input.date,
-      counsellorId,
-      includeNotDue: true,
-    });
+    // The same source the screen renders: the day's assignments, including the
+    // ones whose enquiry has since closed. Reading recommended_calls() here
+    // instead would export the tabs minus everything in Done.
+    const all = await loadMyDayIds({ date: input.date, counsellorId });
     if (all.error) return { error: all.error };
-    ids = all.rows.map((r) => r.enquiryId);
+    ids = all.ids;
     stem = "calman-my-day";
   }
 
