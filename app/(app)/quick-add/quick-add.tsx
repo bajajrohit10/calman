@@ -138,8 +138,14 @@ export function QuickAdd({
     });
   }
 
+  // §9: an archived enquiry is shown in the history below, but it is not
+  // something to update or supersede — doing so would write into a batch that
+  // has already been exported, and un-archive it by the back door. As far as
+  // "is there anything open on this number?" goes, an archived row is not.
   const openEnquiryRow =
-    stage.kind === "known" ? stage.student.enquiries.find((e) => e.status === "open") : null;
+    stage.kind === "known"
+      ? stage.student.enquiries.find((e) => e.status === "open" && !e.archived_at)
+      : null;
 
   return (
     <div className="flex flex-col gap-5">

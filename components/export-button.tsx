@@ -60,13 +60,25 @@ export function ExportButton(props: Source & { className?: string }) {
         return;
       }
 
-      const header = res.columns.map((c) => c.label);
-      const body = res.rows.map((row) =>
-        res.columns!.map((c) => {
-          const v = (row as Record<string, unknown>)[c.key];
-          return v === null || v === undefined ? "" : String(v);
-        }),
-      );
+      const table = (
+        cols: { key: string; label: string }[],
+        rows: Record<string, unknown>[],
+      ) => ({
+        header: cols.map((c) => c.label),
+        body: rows.map((row) =>
+          cols.map((c) => {
+            const v = row[c.key];
+            return v === null || v === undefined ? "" : String(v);
+          }),
+        ),
+      });
+
+      const main = table(res.columns, res.rows as unknown as Record<string, unknown>[]);
+      const { header, body } = main;
+      const extras = (res.extraSheets ?? []).map((sheet) => ({
+        name: sheet.name,
+        ...table(sheet.columns, sheet.rows),
+      }));
 
       if (format === "csv") {
         const Papa = (await import("papaparse")).default;
@@ -79,13 +91,17 @@ export function ExportButton(props: Source & { className?: string }) {
       } else {
         const ExcelJS = (await import("exceljs")).default;
         const wb = new ExcelJS.Workbook();
-        const ws = wb.addWorksheet("Enquiries");
-        ws.addRow(header);
-        ws.getRow(1).font = { bold: true };
-        for (const r of body) ws.addRow(r);
-        ws.columns.forEach((col, i) => {
-          col.width = Math.min(40, Math.max(12, header[i].length + 4));
-        });
+        const sheet = (name: string, h: string[], b: string[][]) => {
+          const ws = wb.addWorksheet(name);
+          ws.addRow(h);
+          ws.getRow(1).font = { bold: true };
+          for (const r of b) ws.addRow(r);
+          ws.columns.forEach((col, i) => {
+            col.width = Math.min(40, Math.max(12, h[i].length + 4));
+          });
+        };
+        sheet("Enquiries", header, body);
+        for (const extra of extras) sheet(extra.name, extra.header, extra.body);
         const buffer = await wb.xlsx.writeBuffer();
         download(
           new Blob([buffer], {

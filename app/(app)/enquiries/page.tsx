@@ -20,6 +20,7 @@ export default async function Page({
   const viewer = await requireUser();
   const sp = await searchParams;
   const { page, sort, dir, filters } = parseEnquiriesParams((k) => one(sp[k]));
+  const includeArchived = filters.includeArchived ?? false;
 
   // Passed down rather than read from window.location during render: on the
   // server that is empty, so the sort links hydrated with the filters missing
@@ -56,6 +57,7 @@ export default async function Page({
       <EnquiriesTable
         rows={list.rows}
         total={list.total}
+        includeArchived={includeArchived}
         error={list.error}
         page={page}
         pageSize={PAGE_SIZE}

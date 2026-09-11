@@ -39,6 +39,75 @@ export type Database = {
   }
   public: {
     Tables: {
+      archive_batches: {
+        Row: {
+          call_count: number
+          created_at: string
+          created_by: string
+          enquiry_count: number
+          filter: Json
+          id: string
+          item_count: number
+          purged_assignments: number | null
+          purged_at: string | null
+          purged_by: string | null
+          purged_calls: number | null
+          purged_enquiries: number | null
+          purged_import_rows: number | null
+          purged_items: number | null
+          purged_whatsapp_sends: number | null
+        }
+        Insert: {
+          call_count: number
+          created_at?: string
+          created_by: string
+          enquiry_count: number
+          filter: Json
+          id?: string
+          item_count: number
+          purged_assignments?: number | null
+          purged_at?: string | null
+          purged_by?: string | null
+          purged_calls?: number | null
+          purged_enquiries?: number | null
+          purged_import_rows?: number | null
+          purged_items?: number | null
+          purged_whatsapp_sends?: number | null
+        }
+        Update: {
+          call_count?: number
+          created_at?: string
+          created_by?: string
+          enquiry_count?: number
+          filter?: Json
+          id?: string
+          item_count?: number
+          purged_assignments?: number | null
+          purged_at?: string | null
+          purged_by?: string | null
+          purged_calls?: number | null
+          purged_enquiries?: number | null
+          purged_import_rows?: number | null
+          purged_items?: number | null
+          purged_whatsapp_sends?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "archive_batches_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "archive_batches_purged_by_fkey"
+            columns: ["purged_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       assignments: {
         Row: {
           assigned_by: string
@@ -87,6 +156,13 @@ export type Database = {
             columns: ["enquiry_id"]
             isOneToOne: false
             referencedRelation: "enquiries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignments_enquiry_id_fkey"
+            columns: ["enquiry_id"]
+            isOneToOne: false
+            referencedRelation: "live_enquiries"
             referencedColumns: ["id"]
           },
         ]
@@ -189,10 +265,24 @@ export type Database = {
             referencedColumns: ["id", "type"]
           },
           {
+            foreignKeyName: "calls_enquiry_id_enquiry_type_fkey"
+            columns: ["enquiry_id", "enquiry_type"]
+            isOneToOne: false
+            referencedRelation: "live_enquiries"
+            referencedColumns: ["id", "type"]
+          },
+          {
             foreignKeyName: "calls_enquiry_id_fkey"
             columns: ["enquiry_id"]
             isOneToOne: false
             referencedRelation: "enquiries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calls_enquiry_id_fkey"
+            columns: ["enquiry_id"]
+            isOneToOne: false
+            referencedRelation: "live_enquiries"
             referencedColumns: ["id"]
           },
         ]
@@ -244,6 +334,9 @@ export type Database = {
       }
       enquiries: {
         Row: {
+          archive_batch_id: string | null
+          archived_at: string | null
+          archived_by: string | null
           close_reason: Database["public"]["Enums"]["close_reason"] | null
           closed_at: string | null
           created_at: string
@@ -267,6 +360,9 @@ export type Database = {
           type: Database["public"]["Enums"]["enquiry_type"]
         }
         Insert: {
+          archive_batch_id?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
           close_reason?: Database["public"]["Enums"]["close_reason"] | null
           closed_at?: string | null
           created_at?: string
@@ -290,6 +386,9 @@ export type Database = {
           type: Database["public"]["Enums"]["enquiry_type"]
         }
         Update: {
+          archive_batch_id?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
           close_reason?: Database["public"]["Enums"]["close_reason"] | null
           closed_at?: string | null
           created_at?: string
@@ -313,6 +412,20 @@ export type Database = {
           type?: Database["public"]["Enums"]["enquiry_type"]
         }
         Relationships: [
+          {
+            foreignKeyName: "enquiries_archive_batch_id_fkey"
+            columns: ["archive_batch_id"]
+            isOneToOne: false
+            referencedRelation: "archive_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enquiries_archived_by_fkey"
+            columns: ["archived_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "enquiries_created_by_fkey"
             columns: ["created_by"]
@@ -413,6 +526,13 @@ export type Database = {
             columns: ["enquiry_id"]
             isOneToOne: false
             referencedRelation: "enquiries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enquiry_items_enquiry_id_fkey"
+            columns: ["enquiry_id"]
+            isOneToOne: false
+            referencedRelation: "live_enquiries"
             referencedColumns: ["id"]
           },
           {
@@ -569,6 +689,13 @@ export type Database = {
             columns: ["enquiry_id"]
             isOneToOne: false
             referencedRelation: "enquiries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_rows_enquiry_id_fkey"
+            columns: ["enquiry_id"]
+            isOneToOne: false
+            referencedRelation: "live_enquiries"
             referencedColumns: ["id"]
           },
           {
@@ -962,6 +1089,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "whatsapp_sends_enquiry_id_fkey"
+            columns: ["enquiry_id"]
+            isOneToOne: false
+            referencedRelation: "live_enquiries"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "whatsapp_sends_sent_by_fkey"
             columns: ["sent_by"]
             isOneToOne: false
@@ -1009,9 +1143,173 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      live_enquiries: {
+        Row: {
+          archive_batch_id: string | null
+          archived_at: string | null
+          archived_by: string | null
+          close_reason: Database["public"]["Enums"]["close_reason"] | null
+          closed_at: string | null
+          created_at: string | null
+          created_by: string | null
+          follow_up_slots_used: number | null
+          fresh_call_date: string | null
+          id: number | null
+          importance: Database["public"]["Enums"]["importance"] | null
+          last_slot_date: string | null
+          lead_verification:
+            | Database["public"]["Enums"]["lead_verification"]
+            | null
+          lost_reason: Database["public"]["Enums"]["lost_reason"] | null
+          next_follow_up_date: string | null
+          product_text: string | null
+          source_id: string | null
+          status: Database["public"]["Enums"]["enquiry_status"] | null
+          student_id: string | null
+          term_id: string | null
+          top_content_priority: number | null
+          type: Database["public"]["Enums"]["enquiry_type"] | null
+        }
+        Insert: {
+          archive_batch_id?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
+          close_reason?: Database["public"]["Enums"]["close_reason"] | null
+          closed_at?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          follow_up_slots_used?: number | null
+          fresh_call_date?: string | null
+          id?: number | null
+          importance?: Database["public"]["Enums"]["importance"] | null
+          last_slot_date?: string | null
+          lead_verification?:
+            | Database["public"]["Enums"]["lead_verification"]
+            | null
+          lost_reason?: Database["public"]["Enums"]["lost_reason"] | null
+          next_follow_up_date?: string | null
+          product_text?: string | null
+          source_id?: string | null
+          status?: Database["public"]["Enums"]["enquiry_status"] | null
+          student_id?: string | null
+          term_id?: string | null
+          top_content_priority?: number | null
+          type?: Database["public"]["Enums"]["enquiry_type"] | null
+        }
+        Update: {
+          archive_batch_id?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
+          close_reason?: Database["public"]["Enums"]["close_reason"] | null
+          closed_at?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          follow_up_slots_used?: number | null
+          fresh_call_date?: string | null
+          id?: number | null
+          importance?: Database["public"]["Enums"]["importance"] | null
+          last_slot_date?: string | null
+          lead_verification?:
+            | Database["public"]["Enums"]["lead_verification"]
+            | null
+          lost_reason?: Database["public"]["Enums"]["lost_reason"] | null
+          next_follow_up_date?: string | null
+          product_text?: string | null
+          source_id?: string | null
+          status?: Database["public"]["Enums"]["enquiry_status"] | null
+          student_id?: string | null
+          term_id?: string | null
+          top_content_priority?: number | null
+          type?: Database["public"]["Enums"]["enquiry_type"] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "enquiries_archive_batch_id_fkey"
+            columns: ["archive_batch_id"]
+            isOneToOne: false
+            referencedRelation: "archive_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enquiries_archived_by_fkey"
+            columns: ["archived_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enquiries_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enquiries_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "sources"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enquiries_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enquiries_term_id_fkey"
+            columns: ["term_id"]
+            isOneToOne: false
+            referencedRelation: "terms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
+      archive_enquiries: {
+        Args: { p_filter: Json; p_ids: number[] }
+        Returns: string
+      }
+      archive_ids: {
+        Args: {
+          p_archived?: boolean
+          p_created_from?: string
+          p_created_to?: string
+          p_lost_reason?: Database["public"]["Enums"]["lost_reason"]
+          p_statuses?: Database["public"]["Enums"]["enquiry_status"][]
+          p_type?: Database["public"]["Enums"]["enquiry_type"]
+        }
+        Returns: {
+          enquiry_id: number
+        }[]
+      }
+      archive_preview: {
+        Args: {
+          p_archived?: boolean
+          p_created_from?: string
+          p_created_to?: string
+          p_lost_reason?: Database["public"]["Enums"]["lost_reason"]
+          p_statuses?: Database["public"]["Enums"]["enquiry_status"][]
+          p_type?: Database["public"]["Enums"]["enquiry_type"]
+        }
+        Returns: {
+          assignment_count: number
+          call_count: number
+          enquiry_count: number
+          item_count: number
+          whatsapp_count: number
+        }[]
+      }
+      archive_surface_check: {
+        Args: { p_enquiry_id: number }
+        Returns: {
+          sees_it: boolean
+          surface: string
+        }[]
+      }
       daily_counsellor_report: {
         Args: { p_counsellor_id?: string; p_from: string; p_to: string }
         Returns: {
@@ -1061,6 +1359,7 @@ export type Database = {
           p_follow_up_from?: string
           p_follow_up_to?: string
           p_importance?: Database["public"]["Enums"]["importance"]
+          p_include_archived?: boolean
           p_limit?: number
           p_lost_reason?: Database["public"]["Enums"]["lost_reason"]
           p_mobile?: string
@@ -1100,6 +1399,22 @@ export type Database = {
           term_name: string
           total_count: number
           type: Database["public"]["Enums"]["enquiry_type"]
+        }[]
+      }
+      export_calls: {
+        Args: { p_ids: number[] }
+        Returns: {
+          call_date: string
+          called_at: string
+          called_by_name: string
+          discussion: string
+          enquiry_id: number
+          issue_category: Database["public"]["Enums"]["issue_category"]
+          mobile: string
+          next_follow_up_date: string
+          order_id: string
+          outcome: Database["public"]["Enums"]["call_outcome"]
+          student_name: string
         }[]
       }
       export_enquiries: {
@@ -1191,6 +1506,17 @@ export type Database = {
           teacher_names: string
           term_name: string
           total_count: number
+        }[]
+      }
+      purge_archived: {
+        Args: { p_expected_count: number; p_ids: number[] }
+        Returns: {
+          purged_assignments: number
+          purged_calls: number
+          purged_enquiries: number
+          purged_import_rows: number
+          purged_items: number
+          purged_whatsapp_sends: number
         }[]
       }
       recommended_calls: {
@@ -1303,6 +1629,7 @@ export type Database = {
           total_count: number
         }[]
       }
+      unarchive_enquiry: { Args: { p_id: number }; Returns: undefined }
     }
     Enums: {
       assignment_bucket:

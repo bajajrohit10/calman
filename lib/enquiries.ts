@@ -60,6 +60,7 @@ export type EnquiryFilters = {
   followUpTo?: string | null;
   discussion?: string | null;
   mobile?: string | null;
+  includeArchived?: boolean;
   sort?: string;
   dir?: "asc" | "desc";
   limit?: number;
@@ -91,6 +92,7 @@ export async function loadEnquiries(
     p_follow_up_to: clean(f.followUpTo),
     p_discussion: clean(f.discussion),
     p_mobile: clean(f.mobile),
+    p_include_archived: f.includeArchived ?? false,
     p_sort: f.sort ?? "created_at",
     p_dir: f.dir ?? "desc",
     p_limit: f.limit ?? 50,

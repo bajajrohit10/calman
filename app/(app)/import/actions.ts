@@ -96,7 +96,7 @@ export async function lookupNumbers(mobiles: string[]): Promise<{
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("students")
-    .select("id, mobile, name, enquiries ( id, type, status, close_reason )")
+    .select("id, mobile, name, enquiries ( id, type, status, close_reason, archived_at )")
     .in("mobile", mobiles);
 
   if (error) return { error: error.message };
@@ -108,9 +108,19 @@ export async function lookupNumbers(mobiles: string[]): Promise<{
       type: string;
       status: string;
       close_reason: string | null;
+      archived_at: string | null;
     }[];
-    const open = enquiries.find((e) => e.status === "open" && e.type === "purchase");
-    const wrong = enquiries.find((e) => e.close_reason === "wrong_number");
+    // §9: duplicate detection still *sees* archived enquiries — the number is
+    // known and the count reflects them — but an archived one is not something
+    // to update or supersede. Treating it as open would let an import write
+    // into a batch that has already been exported, and un-archive it by the
+    // back door.
+    const open = enquiries.find(
+      (e) => e.status === "open" && e.type === "purchase" && !e.archived_at,
+    );
+    const wrong = enquiries.find(
+      (e) => e.close_reason === "wrong_number" && !e.archived_at,
+    );
 
     byMobile.set(s.mobile, {
       mobile: s.mobile,

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { StudentHistoryView } from "@/components/student-history";
 import { PageHeader } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
+import { isAdmin, requireUser } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
 import { isValidMobile, normaliseMobile } from "@/lib/mobile";
 import { loadStudentByMobile } from "@/lib/students";
@@ -72,6 +72,7 @@ export default async function Page({
           contents: contents.data ?? [],
         }}
         counsellorName={viewer.profile?.full_name ?? null}
+        canUnarchive={isAdmin(viewer.profile?.role ?? "counsellor")}
       />
     </div>
   );

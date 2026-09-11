@@ -47,6 +47,7 @@ const SORTABLE = [
 export function EnquiriesTable({
   rows,
   total,
+  includeArchived,
   error,
   page,
   pageSize,
@@ -61,6 +62,7 @@ export function EnquiriesTable({
 }: {
   rows: EnquiryRow[];
   total: number;
+  includeArchived?: boolean;
   error: string | null;
   page: number;
   pageSize: number;
@@ -161,6 +163,17 @@ export function EnquiriesTable({
           <Button type="submit" variant="primary" size="sm">
             Apply filters
           </Button>
+          {/* §9: the one list that can be asked to show archived rows. Every
+              other surface reads live_enquiries and cannot. */}
+          <label className="flex cursor-pointer items-center gap-1.5 text-[12.5px] text-ink-2">
+            <input
+              type="checkbox"
+              name="archived"
+              value="1"
+              defaultChecked={includeArchived}
+            />
+            Include archived
+          </label>
           <Link
             href="/enquiries"
             className="text-[12.5px] text-ink-3 underline-offset-2 hover:underline"

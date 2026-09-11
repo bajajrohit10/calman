@@ -101,6 +101,9 @@ export function parseEnquiriesParams(get: ParamReader): {
       followUpTo: str(get, "followUpTo"),
       discussion: str(get, "q"),
       mobile: str(get, "mobile"),
+      // §9: the Enquiries table is the investigative screen, so it is the one
+      // list that can be asked to include archived rows.
+      includeArchived: str(get, "archived") === "1",
       sort,
       dir,
       limit: PAGE_SIZE,

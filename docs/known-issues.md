@@ -82,6 +82,44 @@ The `Function Scan` line an `explain` gives you for an RPC hides all of this.
 
 ---
 
+## Deliberate audit gaps
+
+The audit log is meant to be complete. There is exactly one place it is not,
+and this is it.
+
+**`app.purge_archived()` suppresses the audit rows for a purged enquiry's
+children** — `calls`, `enquiry_items`, `assignments`, `whatsapp_sends`,
+`import_rows` — and the `enquiries` UPDATE rows that
+`app.recompute_enquiry()` fires while those children are being deleted.
+
+Why: without it, purging grows the log instead of shrinking it. A measured
+purge of 99 enquiries wrote 189 audit rows where the intent is 100. The extra
+89 were 75 recompute updates on rows about to be deleted, and 14 assignment
+deletes — all of them churn about data that is being destroyed on purpose and
+is itemised elsewhere.
+
+**What is never suppressed:**
+
+- the `enquiries` DELETE row, one per purged enquiry, carrying full `old_data`
+  — so a purged enquiry is still reconstructable from the log alone;
+- the batch summary row (`table_name = 'archive_batches'`, `action = 'delete'`)
+  listing the enquiry ids and the count of every child type destroyed.
+
+**Two guards, both required** (`audit.log_change`):
+
+1. `current_setting('app.purging')` is `'on'`, and
+2. `PG_CONTEXT` shows `app.purge_archived` in the current call stack.
+
+Setting the GUC from anywhere else does nothing — verified by setting it by
+hand outside the function, deleting a call, and confirming the audit row was
+still written. Both conditions have to hold, so the gap cannot be opened by a
+stray `set_config` or by a future function that happens to reuse the name.
+
+`app.purge_archived()` is itself `super_admin` only, and refuses to run unless
+the caller passes the exact count of archived enquiries about to be destroyed.
+
+---
+
 ## Import: a Commit click that did not register
 
 **Status: unreproduced. Watch for it during the pilot.**

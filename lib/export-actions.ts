@@ -13,11 +13,22 @@ import {
   STAGE_MEMO_COLUMNS,
 } from "@/lib/reports";
 
+export type ExportSheet = {
+  name: string;
+  rows: Record<string, unknown>[];
+  columns: { key: string; label: string }[];
+};
+
 export type ExportResult = {
   error: string | null;
   rows?: ExportRow[];
   columns?: { key: string; label: string }[];
   filename?: string;
+  /**
+   * Extra sheets for the workbook (§9). XLSX gets one worksheet each; CSV
+   * cannot hold more than one table, so each becomes its own file.
+   */
+  extraSheets?: ExportSheet[];
 };
 
 /**

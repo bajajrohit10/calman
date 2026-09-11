@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { EnquiryDetailsEditor, type DetailMasters } from "@/components/enquiry-details";
 import { EnquiryInterests } from "@/components/enquiry-interests";
+import { UnarchiveButton } from "@/components/unarchive-button";
 import type { ItemMasters } from "@/components/interest-lines";
 import { Badge, cx } from "@/components/ui";
 import { WhatsAppButton } from "@/components/whatsapp/button";
@@ -95,6 +96,7 @@ export function EnquiryCard({
   studentName,
   counsellorName,
   masters,
+  canUnarchive,
   onEdited,
 }: {
   enquiry: HistoryEnquiry;
@@ -103,6 +105,8 @@ export function EnquiryCard({
   counsellorName?: string | null;
   /** Omit to render the card read-only. */
   masters?: DetailMasters & ItemMasters;
+  /** §9: only an admin may put an archived enquiry back. */
+  canUnarchive?: boolean;
   onEdited?: () => void;
 }) {
   const resolution =
@@ -112,8 +116,17 @@ export function EnquiryCard({
         ? CLOSE_REASON_LABELS[enquiry.close_reason]
         : null;
 
+  const archived = Boolean(enquiry.archived_at);
+
   return (
-    <article className="rounded-lg border border-line bg-surface">
+    <article
+      className={cx(
+        "rounded-lg border bg-surface",
+        // §9: archived enquiries stay on the history page — this is the one
+        // screen that must still show them — but they are visibly out of play.
+        archived ? "border-dashed border-line-2 opacity-70" : "border-line",
+      )}
+    >
       <header className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5">
         <span className="text-[13px] font-semibold text-ink">#{enquiry.id}</span>
         <Badge tone="neutral">{ENQUIRY_TYPE_LABELS[enquiry.type]}</Badge>
@@ -123,10 +136,25 @@ export function EnquiryCard({
         {resolution ? (
           <span className="text-[11.5px] text-ink-3">({resolution})</span>
         ) : null}
+        {archived ? <Badge tone="neutral">Archived</Badge> : null}
         <span className="ml-auto text-[11.5px] text-ink-3">
           opened {formatDateTime(enquiry.created_at)}
         </span>
       </header>
+
+      {archived ? (
+        <div className="flex flex-wrap items-center gap-2 border-b border-line bg-sunk/40 px-4 py-2">
+          <span className="text-[12px] text-ink-2">
+            Archived {formatDateTime(enquiry.archived_at!)}. It is out of every list,
+            count and report, and still counts as a duplicate on this number.
+          </span>
+          {canUnarchive ? (
+            <span className="ml-auto">
+              <UnarchiveButton enquiryId={enquiry.id} onDone={onEdited} />
+            </span>
+          ) : null}
+        </div>
+      ) : null}
 
       {masters ? (
         <div className="border-b border-line px-4 py-2">
@@ -268,6 +296,7 @@ export function StudentHistoryView({
   showHeader = true,
   masters,
   counsellorName,
+  canUnarchive,
   onEdited,
 }: {
   student: StudentHistory;
@@ -275,6 +304,7 @@ export function StudentHistoryView({
   showHeader?: boolean;
   masters?: DetailMasters & ItemMasters;
   counsellorName?: string | null;
+  canUnarchive?: boolean;
   onEdited?: () => void;
 }) {
   return (
@@ -306,6 +336,7 @@ export function StudentHistoryView({
             studentName={student.name}
             masters={masters}
             counsellorName={counsellorName}
+            canUnarchive={canUnarchive}
             onEdited={onEdited}
           />
         ))
