@@ -1,13 +1,7 @@
 import { PageHeader } from "@/components/ui";
 import { isAdmin, requireUser } from "@/lib/auth";
-import { istDatePlus, istToday } from "@/lib/format";
-import {
-  groupByGrain,
-  groupStageByGrain,
-  loadReport,
-  loadStageReport,
-  type Grain,
-} from "@/lib/reports";
+import { istToday, istWeekStart } from "@/lib/format";
+import { loadCallReport } from "@/lib/reports";
 import { createClient } from "@/lib/supabase/server";
 
 import { ReportsView } from "./reports-view";
@@ -26,18 +20,20 @@ export default async function Page({
   const sp = await searchParams;
   const admin = isAdmin(viewer.profile?.role ?? "counsellor");
 
-  const from = one(sp.from) ?? istDatePlus(-6);
+  // This week, Monday to today. The week in progress is what anyone opening
+  // Reports is asking about; a range ending on Sunday would print empty rows
+  // for days that have not happened.
+  const from = one(sp.from) ?? istWeekStart();
   const to = one(sp.to) ?? istToday();
-  const grain = (one(sp.grain) ?? "day") as Grain;
 
   // A counsellor sees only themselves. The RPC pins this as well — a query
   // string is not a permission — but there is no reason to offer the control.
   const counsellorId = admin ? one(sp.counsellor) : viewer.userId!;
 
   const supabase = await createClient();
-  const [report, stage, staff] = await Promise.all([
-    loadReport(from, to, counsellorId),
-    loadStageReport(from, to, counsellorId),
+  const [byDay, byCounsellor, staff] = await Promise.all([
+    loadCallReport(from, to, counsellorId, "day"),
+    loadCallReport(from, to, counsellorId, "counsellor"),
     admin
       ? supabase
           .from("profiles")
@@ -51,17 +47,14 @@ export default async function Page({
     <div className="flex flex-col gap-5">
       <PageHeader
         title="Reports"
-        description="What was actually done, per counsellor per day."
+        description="Every call counted once by type and once by outcome — per day, and per counsellor."
       />
       <ReportsView
-        rows={report.rows}
-        error={report.error ?? stage.error}
-        summary={groupByGrain(report.rows, grain)}
-        stageRows={stage.rows}
-        stageSummary={groupStageByGrain(stage.rows, grain)}
+        byDay={byDay.rows}
+        byCounsellor={byCounsellor.rows}
+        error={byDay.error ?? byCounsellor.error}
         from={from}
         to={to}
-        grain={grain}
         isAdmin={admin}
         counsellorId={counsellorId}
         roster={(staff.data ?? []).map((p) => ({

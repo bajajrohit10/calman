@@ -73,3 +73,15 @@ export function istNextMonday(): string {
   d.setUTCDate(d.getUTCDate() + delta);
   return d.toISOString().slice(0, 10);
 }
+
+/**
+ * The Monday of the current IST week. Reports open on "this week", and a week
+ * that starts on Monday matches how the team talks about one — Sunday belongs
+ * to the week that is ending, not the one about to start.
+ */
+export function istWeekStart(): string {
+  const parts = istToday().split("-").map(Number);
+  const d = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}

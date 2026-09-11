@@ -16,8 +16,7 @@ type Source =
       tab: MyDayTabKey;
       view: MyDayView;
     }
-  | { source: "report"; from: string; to: string; counsellorId: string | null }
-  | { source: "stage"; from: string; to: string; counsellorId: string | null };
+  | { source: "report"; from: string; to: string; counsellorId: string | null };
 
 /**
  * Builds the file in the browser.
@@ -56,7 +55,7 @@ export function ExportButton(props: Source & { className?: string }) {
               tab: props.tab,
               view: props.view,
             }
-          : props.source === "report" || props.source === "stage"
+          : props.source === "report"
             ? {
                 source: props.source,
                 from: props.from,
@@ -95,7 +94,14 @@ export function ExportButton(props: Source & { className?: string }) {
 
       if (format === "csv") {
         const Papa = (await import("papaparse")).default;
-        const csv = Papa.unparse([header, ...body]);
+        // A CSV has no worksheets, so extra tables follow the first one down
+        // the same file under their own heading. Two downloads would be the
+        // tidier shape and the browser blocks the second one.
+        const matrix: string[][] = [header, ...body];
+        for (const extra of extras) {
+          matrix.push([], [extra.name], extra.header, ...extra.body);
+        }
+        const csv = Papa.unparse(matrix);
         // BOM so Excel opens UTF-8 names (and ₹) correctly rather than as mojibake.
         download(
           new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8;" }),
@@ -113,7 +119,7 @@ export function ExportButton(props: Source & { className?: string }) {
             col.width = Math.min(40, Math.max(12, h[i].length + 4));
           });
         };
-        sheet("Enquiries", header, body);
+        sheet(res.sheetName ?? "Enquiries", header, body);
         for (const extra of extras) sheet(extra.name, extra.header, extra.body);
         const buffer = await wb.xlsx.writeBuffer();
         download(

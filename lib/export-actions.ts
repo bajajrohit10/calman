@@ -3,6 +3,7 @@
 import { parseDeskParams, parseEnquiriesParams } from "@/app/(app)/assign/filters";
 import { isAdmin, requireUser } from "@/lib/auth";
 import { loadEnquiries } from "@/lib/enquiries";
+import type { CallReportRow } from "@/lib/report-shape";
 import { EXPORT_COLUMNS, loadExportRows, MAX_EXPORT, type ExportRow } from "@/lib/export";
 import { loadMyDayIds } from "@/lib/my-day";
 import {
@@ -11,13 +12,7 @@ import {
   type MyDayView,
 } from "@/lib/my-day-tabs";
 import { loadAllMatching } from "@/lib/recommended";
-import {
-  loadReport,
-  loadStageReport,
-  REPORT_COLUMNS,
-  STAGE_COLUMNS,
-  STAGE_MEMO_COLUMNS,
-} from "@/lib/reports";
+import { CALL_REPORT_COLUMNS, loadCallReport } from "@/lib/reports";
 
 export type ExportSheet = {
   name: string;
@@ -35,6 +30,8 @@ export type ExportResult = {
    * cannot hold more than one table, so each becomes its own file.
    */
   extraSheets?: ExportSheet[];
+  /** Name for the first worksheet. Defaults to the enquiry export's own. */
+  sheetName?: string;
 };
 
 /**
@@ -56,8 +53,7 @@ export async function exportCurrentView(
         tab: MyDayTabKey;
         view: MyDayView;
       }
-    | { source: "report"; from: string; to: string; counsellorId: string | null }
-    | { source: "stage"; from: string; to: string; counsellorId: string | null },
+    | { source: "report"; from: string; to: string; counsellorId: string | null },
 ): Promise<ExportResult> {
   const viewer = await requireUser();
   if (!viewer.profile) return { error: "Your account is not active." };
@@ -68,61 +64,48 @@ export async function exportCurrentView(
   // The report is a different row shape from an enquiry, so it returns
   // directly rather than collecting ids — but it still goes out through the
   // same client-side file builder.
+  //
+  // Both tables, with the same columns, because they are the same numbers cut
+  // two ways: a workbook holding only one of them invites the reader to do the
+  // other cut by hand and get it wrong.
   if (input.source === "report") {
     const admin = isAdmin(viewer.profile.role);
     const scope = admin ? input.counsellorId : viewer.userId!;
-    const { rows, error } = await loadReport(input.from, input.to, scope);
-    if (error) return { error };
-    if (!rows.length) return { error: "No activity in that range." };
+    const [byDay, byCounsellor] = await Promise.all([
+      loadCallReport(input.from, input.to, scope, "day"),
+      loadCallReport(input.from, input.to, scope, "counsellor"),
+    ]);
+    if (byDay.error || byCounsellor.error) {
+      return { error: byDay.error ?? byCounsellor.error };
+    }
+    if (!byDay.rows.some((r) => Number(r.total_calls ?? 0) !== 0)) {
+      return { error: "No calls in that range." };
+    }
+
+    const shape = (rows: CallReportRow[], firstKey: string) =>
+      rows.map((r) => ({
+        [firstKey]: r.is_total ? "Total" : r.grain_label,
+        ...Object.fromEntries(CALL_REPORT_COLUMNS.map((c) => [c.key, r[c.key]])),
+      }));
+    const columns = (firstKey: string, firstLabel: string) => [
+      { key: firstKey, label: firstLabel },
+      ...CALL_REPORT_COLUMNS.map((c) => ({ key: c.key as string, label: c.label })),
+    ];
 
     return {
       error: null,
-      rows: rows.map((r) => ({
-        day: r.day,
-        counsellor: r.counsellor_name,
-        ...Object.fromEntries(REPORT_COLUMNS.map((c) => [c.key, r[c.key]])),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      })) as any,
-      columns: [
-        { key: "day", label: "Day" },
-        { key: "counsellor", label: "Counsellor" },
-        ...REPORT_COLUMNS.map((c) => ({ key: c.key as string, label: c.label })),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      rows: shape(byDay.rows, "date") as any,
+      columns: columns("date", "Date"),
+      sheetName: "By day",
+      extraSheets: [
+        {
+          name: "By counsellor",
+          rows: shape(byCounsellor.rows, "counsellor"),
+          columns: columns("counsellor", "Counsellor"),
+        },
       ],
       filename: `calman-report-${input.from}-to-${input.to}`,
-    };
-  }
-
-  // The stage table exports on the same terms, with the memo columns suffixed
-  // so a spreadsheet reader cannot sum the row and get twice the calls.
-  if (input.source === "stage") {
-    const admin = isAdmin(viewer.profile.role);
-    const scope = admin ? input.counsellorId : viewer.userId!;
-    const { rows, error } = await loadStageReport(input.from, input.to, scope);
-    if (error) return { error };
-
-    const withCalls = rows.filter((r) => Number(r.total_calls ?? 0) !== 0);
-    if (!withCalls.length) return { error: "No calls in that range." };
-
-    return {
-      error: null,
-      rows: withCalls.map((r) => ({
-        day: r.day,
-        counsellor: r.counsellor_name,
-        ...Object.fromEntries(
-          [...STAGE_COLUMNS, ...STAGE_MEMO_COLUMNS].map((c) => [c.key, r[c.key]]),
-        ),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      })) as any,
-      columns: [
-        { key: "day", label: "Day" },
-        { key: "counsellor", label: "Counsellor" },
-        ...STAGE_COLUMNS.map((c) => ({ key: c.key as string, label: c.label })),
-        ...STAGE_MEMO_COLUMNS.map((c) => ({
-          key: c.key as string,
-          label: `Of which: ${c.label}`,
-        })),
-      ],
-      filename: `calman-stage-report-${input.from}-to-${input.to}`,
     };
   }
 

@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       archive_batches: {
@@ -1436,43 +1411,39 @@ export type Database = {
           surface: string
         }[]
       }
-      confirm_batch_export: { Args: { p_batch_id: string }; Returns: undefined }
-      daily_counsellor_report: {
-        Args: { p_counsellor_id?: string; p_from: string; p_to: string }
+      call_report: {
+        Args: {
+          p_counsellor_id?: string
+          p_from: string
+          p_grain?: string
+          p_to: string
+        }
         Returns: {
-          call_backs: number
-          calls_made: number
-          closed: number
-          competitor: number
-          counsellor_id: string
-          counsellor_name: string
-          day: string
-          follow_ups_done: number
-          fresh_handled: number
-          overdue_carried_forward: number
-          pli_issued: number
-          purchased_amount: number
-          purchased_calls: number
-        }[]
-      }
-      daily_stage_report: {
-        Args: { p_counsellor_id?: string; p_from: string; p_to: string }
-        Returns: {
-          after_sale_calls: number
-          call_backs: number
-          closed: number
-          competitor: number
-          counsellor_id: string
-          counsellor_name: string
-          day: string
+          customers_purchased: number
+          customised: number
           follow_up_1: number
           follow_up_2: number
           follow_up_3: number
-          fresh_calls: number
-          purchased: number
+          grain_key: string
+          grain_label: string
+          is_total: boolean
+          mismatch: boolean
+          new_calls: number
+          offers: number
+          out_after_sale: number
+          out_call_back: number
+          out_closed: number
+          out_competitor: number
+          out_follow_up: number
+          out_purchased: number
+          pli_issued: number
+          purchase_amount: number
+          tickets: number
           total_calls: number
+          total_outcomes: number
         }[]
       }
+      confirm_batch_export: { Args: { p_batch_id: string }; Returns: undefined }
       enquiries_table: {
         Args: {
           p_close_reason?: Database["public"]["Enums"]["close_reason"]
@@ -2021,9 +1992,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       assignment_bucket: [
