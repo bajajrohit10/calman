@@ -42,10 +42,13 @@ export function BatchReport({
   rows,
   counts,
   note,
+  warnings,
 }: {
   rows: ReportRow[];
   counts: Record<string, number>;
   note?: string | null;
+  /** Recoverable problems during the commit; the import still finished. */
+  warnings?: string[];
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -80,6 +83,24 @@ export function BatchReport({
           Only skipped rows
         </label>
       </div>
+
+      {/* The import finished; these are things that went wrong on the way and
+          recovered. Shown here rather than only in the server log, because the
+          person who needs to know is the one who ran the import. */}
+      {warnings?.length ? (
+        <div className="rounded-md border border-warn/50 bg-warn-soft/40 px-3 py-2.5">
+          <p className="text-[12px] font-medium text-ink">
+            {warnings.length === 1 ? "One warning" : `${warnings.length} warnings`}
+          </p>
+          <ul className="mt-1 flex flex-col gap-0.5">
+            {warnings.map((w, i) => (
+              <li key={i} className="text-[12px] text-ink-2">
+                {w}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {note ? <ErrorNote>{note}</ErrorNote> : null}
       {error ? <ErrorNote>{error}</ErrorNote> : null}

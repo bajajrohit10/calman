@@ -358,6 +358,19 @@ export async function commitChunk(
         status.set(r.enquiry_id, { ok: r.ok, message: r.message });
       }
     } else {
+      // The batch path failed. It is recoverable — the loop below finishes the
+      // work — but it must not be silent: a broken batch that the fallback
+      // quietly completes looks exactly like a healthy import, only slower.
+      // That is how an ambiguous column reference survived a whole test pass.
+      console.error(
+        `[import] batch re-enquiry failed for ${updating.length} rows, falling back to one call per row: ${error.message}`,
+      );
+      await supabase.rpc("import_add_warning", {
+        p_batch_id: batchId,
+        p_warning: `Batch path failed: ${error.message}; completed row by row (${updating.length} rows).`,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any);
+
       // One row at a time, so a single failure is attributed to its own row
       // rather than losing every re-enquiry in the chunk.
       for (const row of updating) {

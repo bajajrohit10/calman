@@ -23,7 +23,7 @@ export default async function Page({
 
   const { data: batch } = await supabase
     .from("import_batches")
-    .select("id, filename, uploaded_at, total_rows, uploader:profiles ( full_name )")
+    .select("id, filename, uploaded_at, total_rows, warnings, uploader:profiles ( full_name )")
     .eq("id", batchId)
     .maybeSingle();
 
@@ -87,6 +87,7 @@ export default async function Page({
       <BatchReport
         rows={rows}
         counts={counts}
+        warnings={(batch.warnings ?? []) as string[]}
         note={
           rowsError
             ? `Could not load every row: ${rowsError}`

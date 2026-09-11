@@ -644,6 +644,7 @@ export type Database = {
           total_rows: number | null
           uploaded_at: string
           uploaded_by: string | null
+          warnings: string[]
         }
         Insert: {
           filename?: string | null
@@ -651,6 +652,7 @@ export type Database = {
           total_rows?: number | null
           uploaded_at?: string
           uploaded_by?: string | null
+          warnings?: string[]
         }
         Update: {
           filename?: string | null
@@ -658,6 +660,7 @@ export type Database = {
           total_rows?: number | null
           uploaded_at?: string
           uploaded_by?: string | null
+          warnings?: string[]
         }
         Relationships: [
           {
@@ -1559,6 +1562,10 @@ export type Database = {
           term_name: string
           type: Database["public"]["Enums"]["enquiry_type"]
         }[]
+      }
+      import_add_warning: {
+        Args: { p_batch_id: string; p_warning: string }
+        Returns: undefined
       }
       import_lookup: {
         Args: { p_mobiles: string[] }
