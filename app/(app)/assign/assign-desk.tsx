@@ -9,6 +9,8 @@ import {
   CommonFilterFields,
   FacetSelect,
   Labelled,
+  LastCalledByField,
+  LastOutcomeField,
   type FilterMasters,
 } from "@/components/filter-fields";
 import { Badge, Button, ErrorNote, ImportanceMark, Input, Select, cx } from "@/components/ui";
@@ -31,12 +33,84 @@ import {
 
 export type DeskMasters = FilterMasters;
 
-export type RosterEntry = { id: string; name: string; role: string; count: number };
+export type RosterEntry = {
+  id: string;
+  name: string;
+  role: string;
+  /** Assigned to them on this date, across the whole day. */
+  count: number;
+  /** Leads in the list currently on screen whose last call was theirs. */
+  lastCalled: number;
+};
 
 const STATUS_OPTIONS = Object.entries(ENQUIRY_STATUS_LABELS).map(([id, name]) => ({
   id,
   name,
 }));
+
+/**
+ * Starting points for the two things a manager does at a fixed time of day
+ * (§17.2). Each is just a URL, so it can be shared, bookmarked and backed out
+ * of; nothing about them is special to this component.
+ */
+const PRESETS: { label: string; query: (date: string) => string }[] = [
+  {
+    label: "Evening call backs",
+    query: (date) =>
+      new URLSearchParams({
+        date,
+        assignment: "any",
+        lastOutcome: "call_back",
+        lastCalledFrom: date,
+        lastCalledTo: date,
+        // Campaign mode on purpose. A call back logged this morning with no
+        // next date set has no due date at all under §6, so the due-date rule
+        // would hide exactly the leads this list is for.
+        notDue: "1",
+        more: "1",
+      }).toString(),
+  },
+  {
+    // Importance A, re-graded today: §5.8 counts exactly that as a price list
+    // issued, and "who did I promise a price list to today" is the follow-up.
+    label: "PLI issued today",
+    query: (date) =>
+      new URLSearchParams({
+        date,
+        assignment: "any",
+        importance: "a",
+        lastCalledFrom: date,
+        lastCalledTo: date,
+        notDue: "1",
+        more: "1",
+      }).toString(),
+  },
+];
+
+/** The filters hidden inside the collapsed panel, named for the chips. */
+const CHIP_LABELS: Record<string, string> = {
+  source: "Source",
+  teacher: "Teacher",
+  course: "Course",
+  subject: "Subject",
+  content: "Content",
+  importance: "Importance",
+  term: "Term",
+  institute: "Institute",
+  counsellor: "Counsellor",
+  stage: "Stage",
+  lastCalledBy: "Last called by",
+  lastOutcome: "Last outcome",
+  q: "Discussion",
+  type: "Type",
+  status: "Status",
+  lastCalledFrom: "Last called from",
+  lastCalledTo: "Last called to",
+  createdFrom: "Enquired from",
+  createdTo: "Enquired to",
+  followUpFrom: "Follow-up from",
+  followUpTo: "Follow-up to",
+};
 
 /**
  * §5.5. Left: the recommended list for one date, with every input field
@@ -61,6 +135,8 @@ export function AssignDesk({
   masters,
   selected,
   search,
+  assignment,
+  showMore,
 }: {
   rows: RecommendedRow[];
   total: number;
@@ -78,6 +154,10 @@ export function AssignDesk({
   masters: DeskMasters;
   selected: Record<string, string>;
   search: string;
+  /** 'unassigned' | 'assigned' | 'any'. The desk opens on unassigned (§17.1). */
+  assignment: string;
+  /** Whether the More filters panel is open, carried in the URL (§17.1). */
+  showMore: boolean;
 }) {
   const router = useRouter();
   const [picked, setPicked] = useState<Map<number, AssignmentBucket>>(new Map());
@@ -87,6 +167,30 @@ export function AssignDesk({
 
   const [fromId, setFromId] = useState("");
   const [toId, setToId] = useState("");
+
+  // The panel toggle is a link to this same page with `more` flipped, so the
+  // open/closed state rides in the URL rather than in storage the server
+  // cannot see (§17.1).
+  const toggleMore = (() => {
+    const params = new URLSearchParams(search);
+    if (showMore) params.delete("more");
+    else params.set("more", "1");
+    return params.toString();
+  })();
+
+  // What is set but out of sight. Read from the query string rather than from
+  // the parsed filters so a chip appears for anything the URL carries, even a
+  // parameter this component does not otherwise render.
+  const activeChips = (() => {
+    const params = new URLSearchParams(search);
+    const chips: string[] = [];
+    for (const [key, label] of Object.entries(CHIP_LABELS)) {
+      const values = params.getAll(key).filter(Boolean);
+      if (!values.length) continue;
+      chips.push(values.length > 1 ? `${label} ×${values.length}` : label);
+    }
+    return chips;
+  })();
 
 
   const allOnPage = rows.length > 0 && rows.every((r) => picked.has(r.enquiry_id));
@@ -139,18 +243,90 @@ export function AssignDesk({
     <div className="flex flex-col gap-4 xl:flex-row">
       {/* ------------------------------- left ------------------------------- */}
       <div className="min-w-0 flex-1 flex flex-col gap-3">
+        {/* One-click starting points (§17.2). They are plain links, not
+            buttons: a preset is a filter state, so it should be shareable,
+            bookmarkable and reachable with the back button like any other. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+            Presets
+          </span>
+          {PRESETS.map((preset) => (
+            <Link
+              key={preset.label}
+              href={`/assign?${preset.query(date)}`}
+              className="inline-flex h-[24px] items-center rounded-full border border-line-2 bg-surface px-2.5 text-[12px] text-ink-2 hover:border-accent hover:text-accent"
+            >
+              {preset.label}
+            </Link>
+          ))}
+        </div>
+
         <form method="GET" className="rounded-lg border border-line bg-surface shadow-card">
-          <div className="flex flex-wrap gap-2 p-2.5">
+          {/* Always visible: the two questions the desk is actually about. */}
+          <div className="flex flex-wrap items-end gap-2 p-2.5">
             <Labelled label="Date">
               <Input type="date" name="date" defaultValue={date} />
             </Labelled>
+            <Labelled label="Assignment">
+              <Select name="assignment" defaultValue={assignment}>
+                <option value="unassigned">Unassigned</option>
+                <option value="assigned">Assigned</option>
+                <option value="any">Any</option>
+              </Select>
+            </Labelled>
+
+            <span className="flex flex-1 flex-wrap items-center gap-1.5 pb-1">
+              {/* The toggle carries its own state in the URL, so an opened
+                  panel survives Apply, the back button and a shared link —
+                  and needs no storage of any kind. */}
+              <Link
+                href={`?${toggleMore}`}
+                scroll={false}
+                className="inline-flex h-[26px] items-center rounded-md border border-line-2 bg-surface px-2.5 text-[12.5px] font-medium text-ink-2 hover:border-ink-3 hover:text-ink"
+              >
+                More filters {showMore ? "−" : "+"}
+              </Link>
+              {/* What is hidden, when it is hidden. A filter you cannot see is
+                  a filter you forget you set. */}
+              {!showMore && activeChips.length
+                ? activeChips.map((chip) => (
+                    <span
+                      key={chip}
+                      className="inline-flex h-[20px] items-center rounded-full border border-accent/40 bg-accent-soft px-2 text-[11px] text-accent"
+                    >
+                      {chip}
+                    </span>
+                  ))
+                : null}
+              {!showMore && !activeChips.length ? (
+                <span className="text-[11.5px] text-ink-3">No other filters set</span>
+              ) : null}
+            </span>
+          </div>
+
+          {/* Hidden rather than unmounted: an unmounted field submits nothing,
+              which would silently clear every filter in the panel the moment
+              somebody collapsed it and pressed Apply. */}
+          <div
+            className={cx(
+              "flex-wrap gap-2 border-t border-line px-2.5 pb-2.5 pt-2",
+              showMore ? "flex" : "hidden",
+            )}
+          >
             <CommonFilterFields
               masters={masters}
               selected={selected}
               multi={multi}
               roster={roster}
               facets={facets}
+              noDetail
             />
+            <LastCalledByField
+              roster={roster}
+              values={multi?.lastCalledBy ?? []}
+              facets={facets}
+            />
+            <LastOutcomeField values={multi?.lastOutcome ?? []} facets={facets} />
             <Labelled label="Type">
               <Select name="type" defaultValue={selected.type}>
                 <option value="">Purchase (default)</option>
@@ -174,6 +350,7 @@ export function AssignDesk({
             <Button type="submit" variant="primary" size="sm">
               Apply filters
             </Button>
+            {showMore ? <input type="hidden" name="more" value="1" /> : null}
             <label className="flex cursor-pointer items-center gap-1.5 text-[12.5px] text-ink-2">
               <input type="checkbox" name="notDue" value="1" defaultChecked={includeNotDue} />
               Campaign mode — ignore the due date
@@ -345,12 +522,25 @@ export function AssignDesk({
             <h2 className="text-[13px] font-semibold text-ink">
               Counsellors · {formatDate(date)}
             </h2>
+            <p className="text-[11px] text-ink-3">
+              &ldquo;Last called&rdquo; counts the list on screen; &ldquo;assigned
+              today&rdquo; is their whole day.
+            </p>
           </header>
           <ul className="px-3 py-2 text-[12.5px]">
             {roster.map((r) => (
-              <li key={r.id} className="flex items-center justify-between py-1">
-                <span className="text-ink-2">{r.name}</span>
-                <span className="tabular-nums text-ink-3">{r.count}</span>
+              <li key={r.id} className="flex items-center justify-between gap-2 py-1">
+                <span className="truncate text-ink-2">{r.name}</span>
+                <span className="shrink-0 whitespace-nowrap text-[11.5px] tabular-nums text-ink-3">
+                  last called{" "}
+                  <span className={cx("font-medium", r.lastCalled ? "text-ink" : "")}>
+                    {r.lastCalled}
+                  </span>{" "}
+                  · assigned today{" "}
+                  <span className={cx("font-medium", r.count ? "text-ink" : "")}>
+                    {r.count}
+                  </span>
+                </span>
               </li>
             ))}
           </ul>

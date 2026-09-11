@@ -56,7 +56,9 @@ async function authorise() {
  *
  * §10 decision 9 puts a unique constraint on (enquiry_id, date): one owner per
  * enquiry per day. Reassignment is therefore an upsert on that key rather than
- * a delete-then-insert, so moving a row never leaves it briefly unowned.
+ * a delete-then-insert, so moving a row never leaves it briefly unowned — and
+ * re-assigning a lead that is already on somebody's list today updates who
+ * holds it instead of failing.
  */
 export async function assignEnquiries(input: {
   /**
@@ -78,12 +80,19 @@ export async function assignEnquiries(input: {
   if (!input.date) return { error: "Choose a date." };
 
   const supabase = await createClient();
+  // assigned_at is sent explicitly, not left to its column default: on the
+  // update half of the upsert a default does not fire, and it is the update
+  // half that matters. Refreshing it is what makes a six o'clock re-assignment
+  // put the lead back in the new owner's Pending list rather than showing it
+  // as already done by somebody else's morning call (Brief 17).
+  const now = new Date().toISOString();
   const rows = input.rows.map((r) => ({
     enquiry_id: r.enquiryId,
     date: input.date,
     counsellor_id: input.counsellorId,
     bucket: r.bucket,
     assigned_by: auth.userId!,
+    assigned_at: now,
   }));
 
   const { error } = await supabase

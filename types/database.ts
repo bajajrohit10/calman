@@ -116,6 +116,7 @@ export type Database = {
       }
       assignments: {
         Row: {
+          assigned_at: string
           assigned_by: string
           bucket: Database["public"]["Enums"]["assignment_bucket"]
           counsellor_id: string
@@ -125,6 +126,7 @@ export type Database = {
           id: string
         }
         Insert: {
+          assigned_at?: string
           assigned_by: string
           bucket: Database["public"]["Enums"]["assignment_bucket"]
           counsellor_id: string
@@ -134,6 +136,7 @@ export type Database = {
           id?: string
         }
         Update: {
+          assigned_at?: string
           assigned_by?: string
           bucket?: Database["public"]["Enums"]["assignment_bucket"]
           counsellor_id?: string
@@ -1604,7 +1607,7 @@ export type Database = {
           p_source_id?: string
           p_term_id?: string
         }
-        Returns: undefined
+        Returns: string
       }
       import_re_enquire_many: {
         Args: { p_import_batch_id?: string; p_rows: Json }
@@ -1617,6 +1620,7 @@ export type Database = {
       my_day: {
         Args: { p_counsellor_id?: string; p_date?: string }
         Returns: {
+          assigned_at: string
           bucket: Database["public"]["Enums"]["assignment_bucket"]
           bucket_rank: number
           called_today: boolean
@@ -1704,6 +1708,7 @@ export type Database = {
       }
       recommended_calls: {
         Args: {
+          p_assignment?: string
           p_content_ids?: string[]
           p_counsellor_id?: string
           p_course_id?: string
@@ -1716,9 +1721,12 @@ export type Database = {
           p_importance?: Database["public"]["Enums"]["importance"]
           p_include_not_due?: boolean
           p_institute_id?: string
+          p_last_called_by?: string[]
           p_last_called_from?: string
           p_last_called_to?: string
+          p_last_outcomes?: string[]
           p_limit?: number
+          p_no_detail?: string[]
           p_offset?: number
           p_source_id?: string
           p_stages?: string[]
@@ -1729,6 +1737,7 @@ export type Database = {
           p_type?: Database["public"]["Enums"]["enquiry_type"]
         }
         Returns: {
+          assigned_at: string
           assigned_to: string
           assigned_to_name: string
           bucket: Database["public"]["Enums"]["assignment_bucket"]
@@ -1740,11 +1749,15 @@ export type Database = {
           importance: Database["public"]["Enums"]["importance"]
           is_overdue: boolean
           item_count: number
+          last_called_by: string
+          last_called_by_name: string
+          last_outcome: Database["public"]["Enums"]["call_outcome"]
           mobile: string
           next_follow_up_date: string
           product_text: string
           source_id: string
           source_name: string
+          stage: string
           status: Database["public"]["Enums"]["enquiry_status"]
           student_id: string
           student_name: string
@@ -1758,6 +1771,7 @@ export type Database = {
       }
       recommended_facets: {
         Args: {
+          p_assignment?: string
           p_content_ids?: string[]
           p_counsellor_id?: string
           p_course_id?: string
@@ -1770,8 +1784,11 @@ export type Database = {
           p_importance?: Database["public"]["Enums"]["importance"]
           p_include_not_due?: boolean
           p_institute_id?: string
+          p_last_called_by?: string[]
           p_last_called_from?: string
           p_last_called_to?: string
+          p_last_outcomes?: string[]
+          p_no_detail?: string[]
           p_source_id?: string
           p_stages?: string[]
           p_status?: Database["public"]["Enums"]["enquiry_status"]

@@ -37,6 +37,8 @@ export default async function Page({
   const sp = await searchParams;
 
   const { date, page, includeNotDue, filters } = parseDeskParams(read(sp));
+  const assignment = one(sp.assignment) ?? "unassigned";
+  const showMore = one(sp.more) === "1";
 
   const search = new URLSearchParams(
     Object.entries(sp).flatMap(([k, v]) =>
@@ -65,6 +67,15 @@ export default async function Page({
   // Counted per counsellor by the database. Fetching the day's assignment rows
   // and tallying them in JS was wrong above a thousand rows on a busy day, and
   // wrong without saying so — an exact head count cannot truncate.
+  //
+  // Two different numbers on purpose (§17.2). "last called" is scoped to the
+  // list currently on screen and comes from the facet pass, so it answers "who
+  // has been working *these* leads". "today" is the whole day's load, because a
+  // number scoped to the filtered list would read zero for everybody in the
+  // desk's default Unassigned view — true, and useless for deciding who has
+  // room. The facet pass also returns assigned_today if the filtered reading is
+  // ever wanted.
+  const lastCalledCounts = facetResult.facets?.byFacet.last_called_by ?? {};
   const roster = await Promise.all(
     (staff.data ?? []).map(async (p) => {
       const { count } = await supabase
@@ -77,6 +88,7 @@ export default async function Page({
         name: p.full_name ?? "(no name)",
         role: p.role,
         count: count ?? 0,
+        lastCalled: lastCalledCounts[p.id]?.numbers ?? 0,
       };
     }),
   );
@@ -102,6 +114,8 @@ export default async function Page({
             : null)
         }
         date={date}
+        assignment={assignment}
+        showMore={showMore}
         page={page}
         pageSize={PAGE_SIZE}
         includeNotDue={includeNotDue}
@@ -120,6 +134,8 @@ export default async function Page({
           teacher: filters.teacherIds ?? [],
           content: filters.contentIds ?? [],
           stage: filters.stages ?? [],
+          lastCalledBy: filters.lastCalledBy ?? [],
+          lastOutcome: filters.lastOutcomes ?? [],
         }}
         selected={{
           counsellor: one(sp.counsellor) ?? "",

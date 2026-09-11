@@ -29,6 +29,13 @@ export type FacetMap = {
  * Institute is one of these: it is reached through the line's teacher, so
  * "3 numbers · 4 items" means the same thing there as it does for a teacher.
  */
+/**
+ * The option id meaning "nothing recorded for this field" (Brief 17). Kept
+ * here as well as in enquiry-labels so this module stays importable from both
+ * sides without pulling the label table in.
+ */
+export const NO_DETAIL_ID = "__none__";
+
 const ITEM_FACETS = new Set([
   "teacher",
   "course",
@@ -66,8 +73,12 @@ export function countLabel(
   name: string,
   facet: string,
   counts: FacetCounts | undefined,
+  id?: string,
 ): string {
   const c = counts ?? { numbers: 0, items: 0 };
+  // "No detail" counts leads, never items — its whole meaning is that there
+  // are no items — so it takes the plain form even on an item facet.
+  if (id === NO_DETAIL_ID) return `${name} (${c.numbers})`;
   if (ITEM_FACETS.has(facet)) {
     return `${name} (${plural(c.numbers, "number", "numbers")} · ${plural(c.items, "item", "items")})`;
   }
@@ -90,7 +101,15 @@ export function orderOptions<T extends { id: string; name: string }>(
   if (!counts) return options;
   return options
     .map((option, index) => ({ option, index, n: counts[option.id]?.numbers ?? 0 }))
-    .sort((a, b) => b.n - a.n || a.index - b.index)
+    // "No detail" is pinned to the bottom however many leads are behind it:
+    // it is a different kind of answer from the rest of the list, and a
+    // counsellor scanning for a teacher should never have to read past it.
+    .sort(
+      (a, b) =>
+        Number(a.option.id === NO_DETAIL_ID) - Number(b.option.id === NO_DETAIL_ID) ||
+        b.n - a.n ||
+        a.index - b.index,
+    )
     .map((x) => x.option);
 }
 

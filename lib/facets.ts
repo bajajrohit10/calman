@@ -57,6 +57,10 @@ export async function loadDeskFacets(f: RecommendedFilters): Promise<Loaded> {
       p_follow_up_from: clean(f.followUpFrom),
       p_follow_up_to: clean(f.followUpTo),
       p_discussion: clean(f.discussion),
+      p_assignment: clean(f.assignment),
+      p_last_called_by: f.lastCalledBy?.length ? f.lastCalledBy : undefined,
+      p_last_outcomes: f.lastOutcomes?.length ? f.lastOutcomes : undefined,
+      p_no_detail: f.noDetail?.length ? f.noDetail : undefined,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any)
     .limit(FACET_CEILING);

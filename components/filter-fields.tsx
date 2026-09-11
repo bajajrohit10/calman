@@ -4,7 +4,13 @@ import { useMemo } from "react";
 
 import { MultiSelect } from "@/components/multi-select";
 import { FIELD_LABEL, FILLED, Input, Select, cx } from "@/components/ui";
-import { IMPORTANCE_LABELS, STAGE_FILTER_LABELS } from "@/lib/enquiry-labels";
+import {
+  IMPORTANCE_LABELS,
+  LAST_OUTCOME_FILTER,
+  NO_DETAIL,
+  OUTCOME_LABELS,
+  STAGE_FILTER_LABELS,
+} from "@/lib/enquiry-labels";
 import {
   countLabel,
   isEmptyOption,
@@ -42,6 +48,7 @@ export function FacetSelect({
   value,
   anyLabel = "Any",
   facets,
+  noDetail = false,
 }: {
   name: string;
   /** The facet key in the map; often but not always the same as `name`. */
@@ -50,9 +57,16 @@ export function FacetSelect({
   value: string;
   anyLabel?: string;
   facets?: FacetMap;
+  /** Offer "No detail" — leads with nothing recorded for this field (§17.4). */
+  noDetail?: boolean;
 }) {
   const counts = facets?.byFacet[facet];
-  const ordered = useMemo(() => orderOptions(options, counts), [options, counts]);
+  const withNone = useMemo(
+    () =>
+      noDetail ? [...options, { id: NO_DETAIL, name: "No detail" }] : options,
+    [options, noDetail],
+  );
+  const ordered = useMemo(() => orderOptions(withNone, counts), [withNone, counts]);
 
   return (
     // A filter that is doing something says so: the same accent edge the
@@ -68,7 +82,7 @@ export function FacetSelect({
             value={o.id}
             className={empty ? "text-ink-3" : undefined}
           >
-            {facets ? countLabel(o.name, facet, counts?.[o.id]) : o.name}
+            {facets ? countLabel(o.name, facet, counts?.[o.id], o.id) : o.name}
           </option>
         );
       })}
@@ -125,12 +139,18 @@ const STAGE_OPTIONS: FilterMaster[] = Object.entries(STAGE_FILTER_LABELS).map(
  * then disagree about what a pasted URL means — the parser is only half the
  * guarantee if the forms emit different keys.
  */
+/** Append the "No detail" option to a multi-select's list (§17.4). */
+function withNoDetail(options: FilterMaster[]): FilterMaster[] {
+  return [...options, { id: NO_DETAIL, name: "No detail" }];
+}
+
 export function CommonFilterFields({
   masters,
   selected,
   roster,
   facets,
   multi,
+  noDetail = false,
 }: {
   masters: FilterMasters;
   selected: Record<string, string>;
@@ -139,6 +159,12 @@ export function CommonFilterFields({
   roster?: { id: string; name: string }[];
   /** Omit for a screen with no faceted counts. */
   facets?: FacetMap;
+  /**
+   * Offer "No detail" on every facet (§17.4). The Assignment Desk only: the
+   * Enquiries parser has no branch for it, and letting the option through
+   * there would post __none__ into a uuid parameter.
+   */
+  noDetail?: boolean;
 }) {
   const subjectsForCourse = useMemo(
     () =>
@@ -164,7 +190,7 @@ export function CommonFilterFields({
         <MultiSelect
           name="teacher"
           facet="teacher"
-          options={masters.teachers}
+          options={noDetail ? withNoDetail(masters.teachers) : masters.teachers}
           values={multi?.teacher ?? []}
           facets={facets}
         />
@@ -177,6 +203,7 @@ export function CommonFilterFields({
           options={masters.courses}
           value={selected.course ?? ""}
           facets={facets}
+          noDetail={noDetail}
         />
       </Labelled>
 
@@ -187,6 +214,7 @@ export function CommonFilterFields({
           options={subjectsForCourse}
           value={selected.subject ?? ""}
           facets={facets}
+          noDetail={noDetail}
         />
       </Labelled>
 
@@ -194,7 +222,7 @@ export function CommonFilterFields({
         <MultiSelect
           name="content"
           facet="content"
-          options={masters.contents}
+          options={noDetail ? withNoDetail(masters.contents) : masters.contents}
           values={multi?.content ?? []}
           facets={facets}
         />
@@ -207,6 +235,7 @@ export function CommonFilterFields({
           options={IMPORTANCE_OPTIONS}
           value={selected.importance ?? ""}
           facets={facets}
+          noDetail={noDetail}
         />
       </Labelled>
 
@@ -217,6 +246,7 @@ export function CommonFilterFields({
           options={masters.terms}
           value={selected.term ?? ""}
           facets={facets}
+          noDetail={noDetail}
         />
       </Labelled>
 
@@ -227,6 +257,7 @@ export function CommonFilterFields({
           options={masters.institutes}
           value={selected.institute ?? ""}
           facets={facets}
+          noDetail={noDetail}
         />
       </Labelled>
 
@@ -287,5 +318,61 @@ export function CommonFilterFields({
         </div>
       </Labelled>
     </>
+  );
+}
+
+/**
+ * "Last called by" — who made the most recent call on each lead (§17.2).
+ *
+ * Distinct from the Counsellor filter above it, which is who the lead is
+ * assigned to today. The two answer different questions and a manager needs
+ * both: "who has been working this list" and "whose list is it".
+ */
+export function LastCalledByField({
+  roster,
+  values,
+  facets,
+}: {
+  roster: FilterMaster[];
+  values: string[];
+  facets?: FacetMap;
+}) {
+  return (
+    <Labelled label="Last called by">
+      <MultiSelect
+        name="lastCalledBy"
+        facet="last_called_by"
+        options={roster}
+        values={values}
+        facets={facets}
+        anyLabel="Anyone"
+      />
+    </Labelled>
+  );
+}
+
+const LAST_OUTCOME_OPTIONS: FilterMaster[] = LAST_OUTCOME_FILTER.map((id) => ({
+  id,
+  name: OUTCOME_LABELS[id],
+}));
+
+/** "Last outcome" — how the most recent call ended (§17.2). */
+export function LastOutcomeField({
+  values,
+  facets,
+}: {
+  values: string[];
+  facets?: FacetMap;
+}) {
+  return (
+    <Labelled label="Last outcome">
+      <MultiSelect
+        name="lastOutcome"
+        facet="last_outcome"
+        options={LAST_OUTCOME_OPTIONS}
+        values={values}
+        facets={facets}
+      />
+    </Labelled>
   );
 }

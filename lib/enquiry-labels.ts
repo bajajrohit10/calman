@@ -159,10 +159,30 @@ export function statusTone(status: EnquiryStatus): "ok" | "danger" | "neutral" |
  */
 export const STAGE_FILTER_LABELS = {
   uncalled: "Not yet called",
-  fresh_only: "Fresh done, no follow-up",
-  fu1: "1 follow-up done",
-  fu2: "2 done",
-  fu3: "3 done",
+  // The fresh call splits (Brief 17). "Fresh done, no follow-up" could not tell
+  // a lead that was spoken to from one that never picked up, and those are two
+  // different piles of work: the second is the evening call-back list.
+  fresh_follow_up: "Fresh – Follow-up",
+  fresh_call_back: "Fresh – Call back",
+  fu1: "1st follow-up",
+  fu2: "2nd",
+  fu3: "3rd",
 } as const;
+
+/** The outcomes a "Last outcome" filter offers, in the order the panel lists them. */
+export const LAST_OUTCOME_FILTER = [
+  "follow_up",
+  "call_back",
+  "purchased",
+  "competitor",
+  "closed",
+] as const;
+
+/**
+ * The facet value that means "nothing recorded for this field" (Brief 17).
+ * Travels as a real option id so a multi-select can carry it alongside real
+ * values; the filter parser splits it back out into its own list.
+ */
+export const NO_DETAIL = "__none__";
 
 export type StageFilter = keyof typeof STAGE_FILTER_LABELS;

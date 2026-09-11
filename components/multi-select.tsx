@@ -239,7 +239,7 @@ export function MultiSelect({
                     />
                     <span className="truncate">
                       {facet && facets
-                        ? countLabel(o.name, facet, counts?.[o.id])
+                        ? countLabel(o.name, facet, counts?.[o.id], o.id)
                         : o.name}
                     </span>
                   </label>

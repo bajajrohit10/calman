@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/database";
 import type {
   AssignmentBucket,
+  CallOutcome,
   EnquiryStatus,
   EnquiryType,
   Importance,
@@ -40,6 +41,12 @@ export type RecommendedRow = {
   item_count: number;
   assigned_to: string | null;
   assigned_to_name: string | null;
+  /** Brief 17: where the lead has got to, and who touched it last. */
+  stage: string;
+  last_outcome: CallOutcome | null;
+  last_called_by: string | null;
+  last_called_by_name: string | null;
+  assigned_at: string | null;
   total_count: number;
 };
 
@@ -65,6 +72,12 @@ export type RecommendedFilters = {
   followUpFrom?: string | null;
   followUpTo?: string | null;
   discussion?: string | null;
+  /** 'unassigned' | 'assigned' | null for any. Brief 17; the desk defaults to unassigned. */
+  assignment?: string | null;
+  lastCalledBy?: string[] | null;
+  lastOutcomes?: string[] | null;
+  /** Facet names whose "No detail" option is selected. */
+  noDetail?: string[] | null;
   limit?: number;
   offset?: number;
 };
@@ -99,6 +112,10 @@ function args(f: RecommendedFilters): Args {
     p_follow_up_from: clean(f.followUpFrom),
     p_follow_up_to: clean(f.followUpTo),
     p_discussion: clean(f.discussion),
+    p_assignment: clean(f.assignment),
+    p_last_called_by: list(f.lastCalledBy),
+    p_last_outcomes: list(f.lastOutcomes),
+    p_no_detail: list(f.noDetail),
     p_limit: f.limit ?? 50,
     p_offset: f.offset ?? 0,
   } as Args;
