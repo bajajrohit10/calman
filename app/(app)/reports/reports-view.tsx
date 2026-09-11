@@ -74,22 +74,22 @@ export function ReportsView({
 
   return (
     <div className="flex flex-col gap-4">
-      <form method="GET" className="rounded-lg border border-line bg-surface p-3">
-        <div className="flex flex-wrap items-end gap-3">
+      <form method="GET" className="rounded-lg border border-line bg-surface shadow-card">
+        <div className="flex flex-wrap items-end gap-3 p-2.5">
           <label className="flex flex-col gap-1">
-            <span className="text-[10.5px] font-medium uppercase tracking-wide text-ink-3">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
               From
             </span>
             <Input type="date" name="from" defaultValue={from} />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-[10.5px] font-medium uppercase tracking-wide text-ink-3">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
               To
             </span>
             <Input type="date" name="to" defaultValue={to} />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-[10.5px] font-medium uppercase tracking-wide text-ink-3">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
               Summary by
             </span>
             <Select name="grain" defaultValue={grain} className="w-[120px]">
@@ -100,7 +100,7 @@ export function ReportsView({
           </label>
           {isAdmin ? (
             <label className="flex flex-col gap-1">
-              <span className="text-[10.5px] font-medium uppercase tracking-wide text-ink-3">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
                 Counsellor
               </span>
               <Select name="counsellor" defaultValue={counsellorId ?? ""} className="w-[190px]">
@@ -139,13 +139,13 @@ export function ReportsView({
         <h2 className="mb-1.5 text-[13px] font-semibold text-ink">
           Team summary — by {grain}
         </h2>
-        <div className="overflow-x-auto rounded-lg border border-line bg-surface">
+        <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
           <table className="w-full min-w-[900px] border-collapse text-[12.5px]">
             <thead>
-              <tr className="border-b border-line bg-sunk/40 text-left text-[11px] uppercase tracking-wider text-ink-3">
-                <th className="px-2 py-2">{grain === "day" ? "Day" : grain}</th>
+              <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+                <th className="px-2 py-[7px]">{grain === "day" ? "Day" : grain}</th>
                 {REPORT_COLUMNS.map((c) => (
-                  <th key={c.key} className="px-2 py-2 text-right">
+                  <th key={c.key} className="px-2 py-[7px] text-right">
                     {c.label}
                   </th>
                 ))}
@@ -154,13 +154,13 @@ export function ReportsView({
             <tbody>
               {summary.map((s) => (
                 <tr key={s.bucket} className="border-b border-line last:border-b-0">
-                  <td className="px-2 py-1.5 whitespace-nowrap text-ink">
+                  <td className="px-2 py-[5px] whitespace-nowrap text-ink">
                     {grain === "day" ? formatDate(s.bucket) : s.bucket}
                   </td>
                   {REPORT_COLUMNS.map((c) => (
                     <td
                       key={c.key}
-                      className="px-2 py-1.5 text-right tabular-nums text-ink-2"
+                      className="px-2 py-[5px] text-right tabular-nums text-ink-2"
                     >
                       {fmt(c.key, s.totals[c.key])}
                     </td>
@@ -186,14 +186,14 @@ export function ReportsView({
         <h2 className="mb-1.5 text-[13px] font-semibold text-ink">
           Daily, by counsellor
         </h2>
-        <div className="overflow-x-auto rounded-lg border border-line bg-surface">
+        <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
           <table className="w-full min-w-[980px] border-collapse text-[12.5px]">
             <thead>
-              <tr className="border-b border-line bg-sunk/40 text-left text-[11px] uppercase tracking-wider text-ink-3">
-                <th className="px-2 py-2">Day</th>
-                <th className="px-2 py-2">Counsellor</th>
+              <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+                <th className="px-2 py-[7px]">Day</th>
+                <th className="px-2 py-[7px]">Counsellor</th>
                 {REPORT_COLUMNS.map((c) => (
-                  <th key={c.key} className="px-2 py-2 text-right">
+                  <th key={c.key} className="px-2 py-[7px] text-right">
                     {c.label}
                   </th>
                 ))}
@@ -205,14 +205,14 @@ export function ReportsView({
                   key={`${r.day}-${r.counsellor_id}`}
                   className={cx("border-b border-line last:border-b-0")}
                 >
-                  <td className="px-2 py-1.5 whitespace-nowrap text-ink-3">
+                  <td className="px-2 py-[5px] whitespace-nowrap text-ink-3">
                     {formatDate(r.day)}
                   </td>
-                  <td className="px-2 py-1.5 text-ink">{r.counsellor_name}</td>
+                  <td className="px-2 py-[5px] text-ink">{r.counsellor_name}</td>
                   {REPORT_COLUMNS.map((c) => (
                     <td
                       key={c.key}
-                      className="px-2 py-1.5 text-right tabular-nums text-ink-2"
+                      className="px-2 py-[5px] text-right tabular-nums text-ink-2"
                     >
                       {fmt(c.key, Number(r[c.key] ?? 0))}
                     </td>
@@ -253,35 +253,35 @@ export function ReportsView({
             />
           </div>
         </div>
-        <div className="overflow-x-auto rounded-lg border border-line bg-surface">
+        <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
           <table className="w-full min-w-[1040px] border-collapse text-[12.5px]">
             <thead>
               {/* Two header rows so the memo columns can never be read as part
                   of the total. The stage columns are a partition; the memos cut
                   the same calls a second way. */}
-              <tr className="border-b border-line bg-sunk/40 text-left text-[11px] uppercase tracking-wider text-ink-3">
-                <th className="px-2 py-1.5" colSpan={2} />
+              <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+                <th className="px-2 py-[7px]" colSpan={2} />
                 <th
-                  className="border-l border-line px-2 py-1.5 text-center"
+                  className="border-l border-line px-2 py-[7px] text-center"
                   colSpan={STAGE_COLUMNS.length}
                 >
                   By stage — these add up to Total calls
                 </th>
                 <th
-                  className="border-l border-line px-2 py-1.5 text-center"
+                  className="border-l border-line px-2 py-[7px] text-center"
                   colSpan={STAGE_MEMO_COLUMNS.length}
                 >
                   Of which — do not add these in
                 </th>
               </tr>
-              <tr className="border-b border-line bg-sunk/40 text-left text-[11px] uppercase tracking-wider text-ink-3">
-                <th className="px-2 py-2">Day</th>
-                <th className="px-2 py-2">Counsellor</th>
+              <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+                <th className="px-2 py-[7px]">Day</th>
+                <th className="px-2 py-[7px]">Counsellor</th>
                 {STAGE_COLUMNS.map((c, i) => (
                   <th
                     key={c.key}
                     className={cx(
-                      "px-2 py-2 text-right",
+                      "px-2 py-[7px] text-right",
                       i === 0 && "border-l border-line",
                       c.key === "total_calls" && "text-ink-2",
                     )}
@@ -292,7 +292,7 @@ export function ReportsView({
                 {STAGE_MEMO_COLUMNS.map((c, i) => (
                   <th
                     key={c.key}
-                    className={cx("px-2 py-2 text-right", i === 0 && "border-l border-line")}
+                    className={cx("px-2 py-[7px] text-right", i === 0 && "border-l border-line")}
                   >
                     {c.label}
                   </th>
@@ -305,15 +305,15 @@ export function ReportsView({
                   key={`${r.day}-${r.counsellor_id}`}
                   className="border-b border-line last:border-b-0"
                 >
-                  <td className="px-2 py-1.5 whitespace-nowrap text-ink-3">
+                  <td className="px-2 py-[5px] whitespace-nowrap text-ink-3">
                     {formatDate(r.day)}
                   </td>
-                  <td className="px-2 py-1.5 text-ink">{r.counsellor_name}</td>
+                  <td className="px-2 py-[5px] text-ink">{r.counsellor_name}</td>
                   {STAGE_COLUMNS.map((c, i) => (
                     <td
                       key={c.key}
                       className={cx(
-                        "px-2 py-1.5 text-right tabular-nums",
+                        "px-2 py-[5px] text-right tabular-nums",
                         i === 0 && "border-l border-line",
                         c.key === "total_calls" ? "font-medium text-ink" : "text-ink-2",
                       )}
@@ -325,7 +325,7 @@ export function ReportsView({
                     <td
                       key={c.key}
                       className={cx(
-                        "px-2 py-1.5 text-right tabular-nums text-ink-3",
+                        "px-2 py-[5px] text-right tabular-nums text-ink-3",
                         i === 0 && "border-l border-line",
                       )}
                     >
@@ -348,14 +348,14 @@ export function ReportsView({
             {stageSummary.length ? (
               <tfoot>
                 <tr className="border-t-2 border-line bg-sunk/30 text-[12px]">
-                  <td className="px-2 py-1.5 font-medium text-ink" colSpan={2}>
+                  <td className="px-2 py-[5px] font-medium text-ink" colSpan={2}>
                     Total
                   </td>
                   {STAGE_COLUMNS.map((c, i) => (
                     <td
                       key={c.key}
                       className={cx(
-                        "px-2 py-1.5 text-right font-medium tabular-nums text-ink",
+                        "px-2 py-[5px] text-right font-medium tabular-nums text-ink",
                         i === 0 && "border-l border-line",
                       )}
                     >
@@ -366,7 +366,7 @@ export function ReportsView({
                     <td
                       key={c.key}
                       className={cx(
-                        "px-2 py-1.5 text-right tabular-nums text-ink-3",
+                        "px-2 py-[5px] text-right tabular-nums text-ink-3",
                         i === 0 && "border-l border-line",
                       )}
                     >

@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 
+import { clearMasters } from "@/lib/masters";
+
 import { TABLES } from "./config";
 
 export type ListActionResult = { error: string | null; ok?: string };
@@ -100,6 +102,9 @@ export async function createItem(
 
   if (error) return { error: friendly(error.message, spec.label) };
 
+  // The filter bars read master lists from a one-minute memory cache; drop it
+  // so an admin who just renamed a teacher sees it on the next navigation.
+  clearMasters();
   revalidatePath("/settings/master-lists");
   return { error: null, ok: "Added." };
 }
@@ -131,6 +136,9 @@ export async function updateItem(
 
   if (error) return { error: friendly(error.message, spec.label) };
 
+  // The filter bars read master lists from a one-minute memory cache; drop it
+  // so an admin who just renamed a teacher sees it on the next navigation.
+  clearMasters();
   revalidatePath("/settings/master-lists");
   return { error: null, ok: "Saved." };
 }
@@ -152,6 +160,9 @@ export async function setItemActive(
 
   if (error) return { error: friendly(error.message, spec.label) };
 
+  // The filter bars read master lists from a one-minute memory cache; drop it
+  // so an admin who just renamed a teacher sees it on the next navigation.
+  clearMasters();
   revalidatePath("/settings/master-lists");
   return { error: null, ok: active ? "Reactivated." : "Deactivated." };
 }
@@ -228,6 +239,9 @@ export async function moveItem(
   const b = await writer.update({ sort_order: row.sort_order }).eq(spec.pk, other.id);
   if (b.error) return { error: friendly(b.error.message, spec.label) };
 
+  // The filter bars read master lists from a one-minute memory cache; drop it
+  // so an admin who just renamed a teacher sees it on the next navigation.
+  clearMasters();
   revalidatePath("/settings/master-lists");
   return { error: null, ok: "Moved." };
 }

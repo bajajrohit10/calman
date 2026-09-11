@@ -207,9 +207,9 @@ export function DataManagement({
         ))}
       </div>
 
-      <form method="GET" className="rounded-lg border border-line bg-surface p-3">
+      <form method="GET" className="rounded-lg border border-line bg-surface shadow-card">
         <input type="hidden" name="mode" value={mode} />
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 p-2.5">
           <Field label="Enquiry created from">
             <Input type="date" name="createdFrom" defaultValue={filter.createdFrom ?? ""} />
           </Field>
@@ -237,7 +237,7 @@ export function DataManagement({
             </Select>
           </Field>
           <div className="sm:col-span-2 lg:col-span-4">
-            <span className="text-[10.5px] font-medium uppercase tracking-wide text-ink-3">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
               Status (none ticked means any)
             </span>
             <div className="mt-1 flex flex-wrap gap-3">
@@ -259,7 +259,7 @@ export function DataManagement({
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5 border-t border-line bg-sunk px-2.5 py-2.5">
           <Button type="submit" variant="primary" size="sm">
             Count matching
           </Button>
@@ -278,7 +278,7 @@ export function DataManagement({
 
       {error ? <ErrorNote>{error}</ErrorNote> : null}
 
-      <section className="rounded-lg border border-line bg-surface p-3">
+      <section className="rounded-lg border border-line bg-surface shadow-card p-3">
         <h2 className="text-[13px] font-semibold text-ink">
           {purging ? "Archived and matching" : "Live and matching"}
         </h2>
@@ -305,7 +305,7 @@ export function DataManagement({
             ) : (
               <div className="mt-2 flex flex-wrap items-end gap-2">
                 <label className="flex flex-col gap-1">
-                  <span className="text-[11px] font-medium uppercase tracking-wide text-ink-3">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
                     Type {n} to confirm
                   </span>
                   <Input
@@ -360,36 +360,36 @@ export function DataManagement({
 
       <section>
         <h2 className="mb-1.5 text-[13px] font-semibold text-ink">Archive log</h2>
-        <div className="overflow-x-auto rounded-lg border border-line bg-surface">
+        <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
           <table className="w-full min-w-[900px] border-collapse text-[12.5px]">
             <thead>
-              <tr className="border-b border-line bg-sunk/40 text-left text-[11px] uppercase tracking-wider text-ink-3">
-                <th className="px-2 py-2">When</th>
-                <th className="px-2 py-2">Who</th>
-                <th className="px-2 py-2">Filter</th>
-                <th className="px-2 py-2 text-right">Enquiries</th>
-                <th className="px-2 py-2 text-right">Calls</th>
-                <th className="px-2 py-2">State</th>
-                <th className="px-2 py-2 text-right">Re-export</th>
+              <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+                <th className="px-2 py-[7px]">When</th>
+                <th className="px-2 py-[7px]">Who</th>
+                <th className="px-2 py-[7px]">Filter</th>
+                <th className="px-2 py-[7px] text-right">Enquiries</th>
+                <th className="px-2 py-[7px] text-right">Calls</th>
+                <th className="px-2 py-[7px]">State</th>
+                <th className="px-2 py-[7px] text-right">Re-export</th>
               </tr>
             </thead>
             <tbody>
               {batches.map((b) => (
                 <tr key={b.id} className="border-b border-line last:border-b-0">
-                  <td className="px-2 py-1.5 whitespace-nowrap text-ink-3">
+                  <td className="px-2 py-[5px] whitespace-nowrap text-ink-3">
                     {formatDateTime(b.created_at)}
                   </td>
-                  <td className="px-2 py-1.5 text-ink">{b.created_by_name ?? "unknown"}</td>
-                  <td className="max-w-[280px] px-2 py-1.5 text-ink-2">
+                  <td className="px-2 py-[5px] text-ink">{b.created_by_name ?? "unknown"}</td>
+                  <td className="max-w-[280px] px-2 py-[5px] text-ink-2">
                     {describe(b.filter)}
                   </td>
-                  <td className="px-2 py-1.5 text-right tabular-nums text-ink-2">
+                  <td className="px-2 py-[5px] text-right tabular-nums text-ink-2">
                     {b.enquiry_count}
                   </td>
-                  <td className="px-2 py-1.5 text-right tabular-nums text-ink-2">
+                  <td className="px-2 py-[5px] text-right tabular-nums text-ink-2">
                     {b.call_count}
                   </td>
-                  <td className="px-2 py-1.5">
+                  <td className="px-2 py-[5px]">
                     {!b.purged_at && !b.exported_at ? (
                       <span className="flex flex-wrap items-center gap-1.5">
                         <Badge tone="warn">Export not confirmed</Badge>
@@ -417,7 +417,7 @@ export function DataManagement({
                       </span>
                     )}
                   </td>
-                  <td className="px-2 py-1.5 text-right">
+                  <td className="px-2 py-[5px] text-right">
                     <span className="inline-flex gap-1.5">
                       {!b.purged_at && !b.exported_at ? (
                         <Button
@@ -488,7 +488,7 @@ function describe(f: ArchiveFilter): string {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-[10.5px] font-medium uppercase tracking-wide text-ink-3">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
         {label}
       </span>
       {children}

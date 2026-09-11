@@ -394,7 +394,7 @@ function NewEnquiryForm({
           submit();
         }
       }}
-      className="rounded-lg border border-line bg-surface"
+      className="rounded-lg border border-line bg-surface shadow-card"
     >
       <header className="flex items-center gap-2 border-b border-line px-4 py-2.5">
         <Badge tone="ok">New number</Badge>
@@ -490,7 +490,7 @@ function NewEnquiryForm({
 function Labelled({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className={cx("flex flex-col gap-1")}>
-      <span className="text-[11px] font-medium uppercase tracking-wide text-ink-3">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
         {label}
       </span>
       {children}

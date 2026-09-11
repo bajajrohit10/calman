@@ -35,7 +35,7 @@ export default async function Page() {
       <section>
         <h2 className="mb-2 text-[13px] font-semibold text-ink">Recent imports</h2>
         {batches.data?.length ? (
-          <ul className="overflow-hidden rounded-lg border border-line bg-surface">
+          <ul className="overflow-hidden rounded-lg border border-line bg-surface shadow-card">
             {batches.data.map((b) => (
               <li
                 key={b.id}

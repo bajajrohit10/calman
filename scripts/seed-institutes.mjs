@@ -118,9 +118,21 @@ const instituteByName = new Map(institutes.map((i) => [norm(i.name).toLowerCase(
 // Deduped case-insensitively, keeping the first spelling the sheet used:
 // "Vsmart Academy" and "VSMART ACADEMY" are one institute, and the unique
 // index on lower(name) would reject the second anyway.
+//
+// Every spelling that collapses onto another is collected rather than quietly
+// swallowed: a name differing only by case or spacing is nearly always a typo
+// somebody wants to know about, not a deliberate second institute.
 const wanted = new Map();
+const variants = new Map();
 for (const r of rows) {
-  if (r.institute) wanted.set(r.institute.toLowerCase(), r.institute);
+  if (!r.institute) continue;
+  const key = r.institute.toLowerCase();
+  if (!wanted.has(key)) wanted.set(key, r.institute);
+  const canonical = instituteByName.get(key)?.name ?? wanted.get(key);
+  if (canonical !== r.institute) {
+    if (!variants.has(key)) variants.set(key, { canonical, seen: new Set() });
+    variants.get(key).seen.add(r.institute);
+  }
 }
 const missing = [...wanted.entries()]
   .filter(([key]) => !instituteByName.has(key))
@@ -199,6 +211,14 @@ console.log(`
   Could not match ${unmatchedTeacher.length}
   Conflicts       ${conflicts.length}${FORCE ? " (overwritten)" : ""}
 `);
+
+if (variants.size) {
+  console.log("  Institute names that differ only by case or spacing — merged into one:");
+  for (const { canonical, seen } of variants.values()) {
+    console.log(`    "${canonical}"  ←  ${[...seen].map((v) => `"${v}"`).join(", ")}`);
+  }
+  console.log("");
+}
 
 if (unmatchedTeacher.length) {
   console.log("  Could not match — fix the spelling in the sheet or in Settings → Teachers:");

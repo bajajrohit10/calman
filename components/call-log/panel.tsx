@@ -248,9 +248,12 @@ export function CallLogPanel({
         e.preventDefault();
         save();
       }}
-      className="rounded-lg border border-accent/40 bg-surface shadow-sm"
+      // The one panel that is never chrome: a full accent edge and a tinted
+      // header lift it off the ground so a counsellor mid-call always knows
+      // which box the keystrokes are going into.
+      className="rounded-lg border border-accent bg-surface shadow-panel"
     >
-      <header className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5">
+      <header className="flex flex-wrap items-center gap-[7px] border-b border-line bg-linear-to-b from-accent-soft to-accent-soft/45 px-3 py-2">
         <span className="text-[13px] font-semibold text-ink">
           {enquiry.studentName || "New student"}
         </span>
@@ -266,7 +269,7 @@ export function CallLogPanel({
 
       <div className="flex flex-col gap-3 px-4 py-3">
         <label className="flex flex-col gap-1">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-ink-3">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
             Discussion note
           </span>
           <Textarea
@@ -281,7 +284,7 @@ export function CallLogPanel({
 
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex min-w-[230px] flex-col gap-1">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-ink-3">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
               Outcome
             </span>
             <Select
@@ -299,7 +302,7 @@ export function CallLogPanel({
 
           {enquiry.type === "after_sale" ? (
             <label className="flex min-w-[180px] flex-col gap-1">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-ink-3">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
                 Issue category
               </span>
               <Select
@@ -318,7 +321,7 @@ export function CallLogPanel({
 
           {outcomeTakesDate(outcome) ? (
             <div className="flex flex-col gap-1">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-ink-3">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
                 {enquiry.type === "after_sale" ? "Reminder" : "Next follow-up"}
                 {outcome === "follow_up" ? " *" : ""}
               </span>
@@ -336,10 +339,10 @@ export function CallLogPanel({
                     type="button"
                     onClick={() => setFollowUpDate(chip.value)}
                     className={cx(
-                      "rounded-full border px-2 py-0.5 text-[11px]",
+                      "inline-flex h-[22px] items-center rounded-full border px-2 text-[11.5px]",
                       followUpDate === chip.value
-                        ? "border-accent/50 bg-accent-soft text-accent"
-                        : "border-line-2 bg-surface-2 text-ink-2 hover:text-ink",
+                        ? "border-accent bg-accent font-medium text-accent-ink"
+                        : "border-line-2 bg-surface text-ink-2 hover:text-ink",
                     )}
                   >
                     {chip.label}
@@ -367,7 +370,7 @@ export function CallLogPanel({
           <section className="rounded-md border border-ok/40 bg-ok-soft/40 px-3 py-2.5">
             <div className="flex flex-wrap items-end gap-3">
               <label className="flex flex-col gap-1">
-                <span className="text-[11px] font-medium uppercase tracking-wide text-ink-3">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
                   Order ID *
                 </span>
                 <Input
@@ -469,7 +472,7 @@ export function CallLogPanel({
             nothing. */}
         {isPurchase ? (
           <section>
-            <h4 className="text-[11px] font-medium uppercase tracking-wide text-ink-3">
+            <h4 className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
               Interests ({enquiry.items.length})
             </h4>
 

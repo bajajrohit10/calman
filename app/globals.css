@@ -2,54 +2,78 @@
 
 /* Calman is a desktop tool people sit in for eight hours. The palette is
    deliberately low-saturation so nothing fatigues, with a single teal accent
-   reserved for interactive state and one semantic set for enquiry status. */
+   reserved for interactive state and one semantic set for enquiry status.
+
+   Refreshed in Brief 13. The accent moved from #0d5b54 — darker and greyer —
+   to #0a6f64, which keeps the family but reads cleaner on white and still
+   passes AA on both. The ground dropped a step so white cards separate from
+   it without needing a heavy border, and the navigation became a dark rail so
+   the eye starts at the work rather than at the chrome. */
 
 :root {
-  --ground: #f4f6f5;
+  --ground: #eef1f0;
   --surface: #ffffff;
-  --surface-2: #eceeed;
-  --sunk: #e4e8e6;
+  --surface-2: #e7ebe9;
+  --sunk: #dde3e1;
+  /* Zebra striping: a hair off white, enough to follow a row across twelve
+     columns and not enough to read as a second surface. */
+  --row-alt: #fafbfb;
 
-  --ink: #16211f;
-  --ink-2: #4a5754;
-  --ink-3: #74817e;
+  --ink: #0f1a18;
+  --ink-2: #41504d;
+  --ink-3: #6b7a77;
 
-  --line: #d9dfdc;
-  --line-2: #c3ccc8;
+  --line: #d3dbd8;
+  --line-2: #b6c2be;
 
-  --accent: #0d5b54;
-  --accent-hover: #0a4741;
+  --accent: #0a6f64;
+  --accent-hover: #08574e;
   --accent-ink: #ffffff;
-  --accent-soft: #dbeae7;
+  --accent-soft: #d3ece7;
+  /* One step past accent-soft, for the row you have actually picked. */
+  --accent-pick: #cfe7e2;
 
-  --ok: #1c6b43;
-  --ok-soft: #dbeade0;
-  --warn: #8a5a0b;
-  --warn-soft: #f2e7d1;
-  --danger: #9d2d39;
-  --danger-soft: #f4dcde;
-  --info: #1c5691;
-  --info-soft: #dbe5f1;
+  --ok: #186b46;
+  --ok-soft: #d8ecdf;
+  --warn: #8a5606;
+  --warn-soft: #f6e8cd;
+  --danger: #a02734;
+  --danger-soft: #f7dade;
+  --info: #17538f;
+  --info-soft: #d9e4f2;
+
+  /* The navigation rail. Fixed rather than derived: it is the one surface
+     that stays dark in both schemes, so it reads as furniture. */
+  --rail: #0d1e1c;
+  --rail-ink: #c8d6d2;
+  --rail-ink-2: #7d938e;
+  --rail-line: #1b322e;
+  --rail-hover: #16302c;
+
+  --shadow-card: 0 1px 2px rgba(15, 26, 24, 0.05), 0 1px 1px rgba(15, 26, 24, 0.04);
+  --shadow-panel: 0 2px 8px rgba(10, 111, 100, 0.1);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     --ground: #0d1413;
     --surface: #141d1b;
-    --surface-2: #1a2422;
+    --surface-2: #1d2725;
     --sunk: #101816;
+    --row-alt: #16201e;
 
     --ink: #e7ecea;
     --ink-2: #a7b3b0;
     --ink-3: #7a8784;
 
     --line: #25302c;
-    --line-2: #33403c;
+    --line-2: #36433f;
 
-    --accent: #4dbfaf;
-    --accent-hover: #63cfc0;
-    --accent-ink: #06201d;
-    --accent-soft: #15302c;
+    --accent: #45c3b1;
+    --accent-hover: #5fd4c4;
+    --accent-ink: #05201d;
+    --accent-soft: #123430;
+    --accent-pick: #17403a;
 
     --ok: #54b17e;
     --ok-soft: #152b1f;
@@ -59,6 +83,15 @@
     --danger-soft: #2e191b;
     --info: #67a8e8;
     --info-soft: #15222e;
+
+    --rail: #0a1413;
+    --rail-ink: #c2d0cc;
+    --rail-ink-2: #748984;
+    --rail-line: #1a2725;
+    --rail-hover: #16221f;
+
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-panel: 0 2px 8px rgba(0, 0, 0, 0.45);
   }
 }
 
@@ -67,6 +100,7 @@
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-sunk: var(--sunk);
+  --color-row-alt: var(--row-alt);
 
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
@@ -79,6 +113,7 @@
   --color-accent-hover: var(--accent-hover);
   --color-accent-ink: var(--accent-ink);
   --color-accent-soft: var(--accent-soft);
+  --color-accent-pick: var(--accent-pick);
 
   --color-ok: var(--ok);
   --color-ok-soft: var(--ok-soft);
@@ -89,6 +124,15 @@
   --color-info: var(--info);
   --color-info-soft: var(--info-soft);
 
+  --color-rail: var(--rail);
+  --color-rail-ink: var(--rail-ink);
+  --color-rail-ink-2: var(--rail-ink-2);
+  --color-rail-line: var(--rail-line);
+  --color-rail-hover: var(--rail-hover);
+
+  --shadow-card: var(--shadow-card);
+  --shadow-panel: var(--shadow-panel);
+
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-mono-stack), ui-monospace, monospace;
 }
@@ -96,6 +140,9 @@
 body {
   background: var(--ground);
   color: var(--ink);
+  /* Mobile numbers, counts and slot ratios all sit in columns; proportional
+     digits make them jitter as the data changes. */
+  font-variant-numeric: tabular-nums;
 }
 
 /* Dense by default: this is a data tool, not a marketing page. */
@@ -115,4 +162,18 @@ body {
 /* Keyboard-first (§5.3): never remove focus rings, only make them tidy. */
 :where(button, a):focus:not(:focus-visible) {
   outline: none;
+}
+
+/* Row striping and hover live in the base layer on purpose: a row that sets
+   its own background with a utility class — the picked rows on the
+   Assignment Desk, the totals row on Reports — still wins, because Tailwind
+   utilities are layered above this. */
+@layer base {
+  tbody tr:nth-child(even) {
+    background-color: var(--row-alt);
+  }
+
+  tbody tr:hover {
+    background-color: var(--accent-soft);
+  }
 }

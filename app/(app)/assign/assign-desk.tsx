@@ -11,7 +11,7 @@ import {
   Labelled,
   type FilterMasters,
 } from "@/components/filter-fields";
-import { Badge, Button, ErrorNote, Input, Select, cx } from "@/components/ui";
+import { Badge, Button, ErrorNote, ImportanceMark, Input, Select, cx } from "@/components/ui";
 import type { FacetMap } from "@/lib/facet-shape";
 import {
   BUCKET_LABELS,
@@ -139,8 +139,8 @@ export function AssignDesk({
     <div className="flex flex-col gap-4 xl:flex-row">
       {/* ------------------------------- left ------------------------------- */}
       <div className="min-w-0 flex-1 flex flex-col gap-3">
-        <form method="GET" className="rounded-lg border border-line bg-surface p-3">
-          <div className="flex flex-wrap gap-2">
+        <form method="GET" className="rounded-lg border border-line bg-surface shadow-card">
+          <div className="flex flex-wrap gap-2 p-2.5">
             <Labelled label="Date">
               <Input type="date" name="date" defaultValue={date} />
             </Labelled>
@@ -170,7 +170,7 @@ export function AssignDesk({
             </Labelled>
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5 border-t border-line bg-sunk px-2.5 py-2.5">
             <Button type="submit" variant="primary" size="sm">
               Apply filters
             </Button>
@@ -234,11 +234,11 @@ export function AssignDesk({
           </div>
         ) : null}
 
-        <div className="overflow-x-auto rounded-lg border border-line bg-surface">
+        <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
           <table className="w-full min-w-[900px] border-collapse text-[12.5px]">
             <thead>
-              <tr className="border-b border-line bg-sunk/40 text-left text-[11px] uppercase tracking-wider text-ink-3">
-                <th className="w-8 px-2 py-2">
+              <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+                <th className="w-8 px-2 py-[7px]">
                   <input
                     type="checkbox"
                     aria-label="Select all on this page"
@@ -252,14 +252,14 @@ export function AssignDesk({
                     }
                   />
                 </th>
-                <th className="px-2 py-2">Bucket</th>
-                <th className="px-2 py-2">Student</th>
-                <th className="px-2 py-2">Imp</th>
-                <th className="px-2 py-2">Teachers</th>
-                <th className="px-2 py-2">Term</th>
-                <th className="px-2 py-2">Follow-up</th>
-                <th className="px-2 py-2">Slots</th>
-                <th className="px-2 py-2">Assigned to</th>
+                <th className="px-2 py-[7px]">Bucket</th>
+                <th className="px-2 py-[7px]">Student</th>
+                <th className="px-2 py-[7px]">Imp</th>
+                <th className="px-2 py-[7px]">Teachers</th>
+                <th className="px-2 py-[7px]">Term</th>
+                <th className="px-2 py-[7px]">Follow-up</th>
+                <th className="px-2 py-[7px]">Slots</th>
+                <th className="px-2 py-[7px]">Assigned to</th>
               </tr>
             </thead>
             <tbody>
@@ -268,10 +268,13 @@ export function AssignDesk({
                   key={r.enquiry_id}
                   className={cx(
                     "border-b border-line last:border-b-0",
-                    picked.has(r.enquiry_id) && "bg-accent-soft/40",
+                    // The picked row keeps its own fill and gains an edge, so a long
+                    // selection stays findable after the table scrolls sideways.
+                    picked.has(r.enquiry_id) &&
+                      "bg-accent-pick shadow-[inset_3px_0_0_var(--accent)]",
                   )}
                 >
-                  <td className="px-2 py-1.5">
+                  <td className="px-2 py-[5px]">
                     <input
                       type="checkbox"
                       aria-label={`Select enquiry ${r.enquiry_id}`}
@@ -279,15 +282,15 @@ export function AssignDesk({
                       onChange={() => toggle(r)}
                     />
                   </td>
-                  <td className="px-2 py-1.5">
+                  <td className="px-2 py-[5px]">
                     <span className="flex items-center gap-1.5">
-                      <Badge tone={r.bucket === "call_back" ? "neutral" : "info"}>
+                      <Badge dot tone={r.bucket === "call_back" ? "warn" : "info"}>
                         {BUCKET_LABELS[r.bucket]}
                       </Badge>
                       {r.is_overdue ? <Badge tone="danger">Overdue</Badge> : null}
                     </span>
                   </td>
-                  <td className="px-2 py-1.5">
+                  <td className="px-2 py-[5px]">
                     <Link
                       href={`/students/${r.mobile}`}
                       className="text-ink underline-offset-2 hover:underline"
@@ -298,23 +301,25 @@ export function AssignDesk({
                       {formatMobile(r.mobile)}
                     </span>
                   </td>
-                  <td className="px-2 py-1.5 uppercase">{r.importance ?? "—"}</td>
-                  <td className="px-2 py-1.5 text-ink-2">
+                  <td className="px-2 py-[5px]">
+                    {r.importance ? <ImportanceMark grade={r.importance} /> : "—"}
+                  </td>
+                  <td className="px-2 py-[5px] text-ink-2">
                     {r.teacher_names?.join(", ") || "—"}
                   </td>
-                  <td className="px-2 py-1.5 text-ink-2">{r.term_name ?? "—"}</td>
+                  <td className="px-2 py-[5px] text-ink-2">{r.term_name ?? "—"}</td>
                   <td
                     className={cx(
-                      "px-2 py-1.5 tabular-nums",
+                      "px-2 py-[5px] tabular-nums",
                       r.is_overdue ? "text-danger" : "text-ink-2",
                     )}
                   >
                     {r.next_follow_up_date ? formatDate(r.next_follow_up_date) : "—"}
                   </td>
-                  <td className="px-2 py-1.5 tabular-nums text-ink-2">
+                  <td className="px-2 py-[5px] tabular-nums text-ink-2">
                     {r.follow_up_slots_used}/3
                   </td>
-                  <td className="px-2 py-1.5 text-ink-2">{r.assigned_to_name ?? "—"}</td>
+                  <td className="px-2 py-[5px] text-ink-2">{r.assigned_to_name ?? "—"}</td>
                 </tr>
               ))}
               {rows.length === 0 ? (
@@ -335,7 +340,7 @@ export function AssignDesk({
 
       {/* ------------------------------- right ------------------------------ */}
       <aside className="flex w-full shrink-0 flex-col gap-3 xl:w-[320px]">
-        <section className="rounded-lg border border-line bg-surface">
+        <section className="rounded-lg border border-line bg-surface shadow-card">
           <header className="border-b border-line px-3 py-2">
             <h2 className="text-[13px] font-semibold text-ink">
               Counsellors · {formatDate(date)}
@@ -407,7 +412,7 @@ export function AssignDesk({
           </div>
         </section>
 
-        <section className="rounded-lg border border-line bg-surface px-3 py-3">
+        <section className="rounded-lg border border-line bg-surface shadow-card px-3 py-3">
           <h2 className="text-[13px] font-semibold text-ink">Leave cover</h2>
           <p className="mt-0.5 text-[11.5px] text-ink-3">
             Move one counsellor&apos;s whole day to someone else.

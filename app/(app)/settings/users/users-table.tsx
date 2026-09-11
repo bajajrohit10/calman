@@ -55,7 +55,7 @@ function CreateUserPanel({ callerRole }: { callerRole: Role }) {
   return (
     <form
       action={action}
-      className="w-full rounded-lg border border-line bg-surface p-4"
+      className="w-full rounded-lg border border-line bg-surface shadow-card p-4"
     >
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-[13px] font-semibold text-ink">New user</h2>
@@ -279,15 +279,15 @@ export function UsersTable({
         <CreateUserPanel callerRole={callerRole} />
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-line bg-surface">
-        <table className="w-full border-collapse text-[13px]">
+      <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-card">
+        <table className="w-full border-collapse text-[12.5px]">
           <thead>
-            <tr className="border-b border-line bg-surface-2 text-left">
+            <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
               {["Name", "Email", "Role", "Status", "Last sign-in", "Password"].map((h) => (
                 <th
                   key={h}
                   scope="col"
-                  className="px-3 py-2 text-[11px] font-medium uppercase tracking-wider text-ink-3"
+                  className="px-3 py-[7px]"
                 >
                   {h}
                 </th>
@@ -303,19 +303,19 @@ export function UsersTable({
                   !user.isActive && "bg-sunk/40 text-ink-3",
                 )}
               >
-                <td className="px-3 py-2 font-medium text-ink">
+                <td className="px-3 py-[5px] font-medium text-ink">
                   {user.fullName || (
                     <span className="text-danger">No profile row</span>
                   )}
                 </td>
-                <td className="px-3 py-2 text-ink-2">{user.email}</td>
-                <td className="px-3 py-2">
+                <td className="px-3 py-[5px] text-ink-2">{user.email}</td>
+                <td className="px-3 py-[5px]">
                   <RoleCell user={user} callerRole={callerRole} callerId={callerId} />
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-3 py-[5px]">
                   <ActiveCell user={user} callerRole={callerRole} callerId={callerId} />
                 </td>
-                <td className="px-3 py-2 tabular-nums text-ink-3">
+                <td className="px-3 py-[5px] tabular-nums text-ink-3">
                   {user.lastSignInAt
                     ? new Date(user.lastSignInAt).toLocaleString("en-IN", {
                         timeZone: "Asia/Kolkata",
@@ -324,7 +324,7 @@ export function UsersTable({
                       })
                     : "never"}
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-3 py-[5px]">
                   {canManage(callerRole, user.role) ? (
                     <ResetPasswordCell user={user} />
                   ) : (

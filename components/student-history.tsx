@@ -130,7 +130,7 @@ export function EnquiryCard({
       <header className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5">
         <span className="text-[13px] font-semibold text-ink">#{enquiry.id}</span>
         <Badge tone="neutral">{ENQUIRY_TYPE_LABELS[enquiry.type]}</Badge>
-        <Badge tone={statusTone(enquiry.status)}>
+        <Badge dot tone={statusTone(enquiry.status)}>
           {ENQUIRY_STATUS_LABELS[enquiry.status]}
         </Badge>
         {resolution ? (
@@ -244,7 +244,7 @@ export function EnquiryCard({
           simply be gone. */}
       {enquiry.enquiry_sources?.length ? (
         <section className="border-t border-line px-4 py-2.5">
-          <h4 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+          <h4 className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
             Sources ({enquiry.enquiry_sources.length})
           </h4>
           <ul className="mt-1 flex flex-col gap-0.5 text-[12.5px]">
@@ -267,7 +267,7 @@ export function EnquiryCard({
 
       {enquiry.assignments.length ? (
         <section className="border-t border-line px-4 py-2.5">
-          <h4 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+          <h4 className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
             Assignments
           </h4>
           <ul className="mt-1 text-[12.5px] text-ink-2">
@@ -283,7 +283,7 @@ export function EnquiryCard({
 
       {enquiry.whatsapp_sends.length ? (
         <section className="border-t border-line px-4 py-2.5">
-          <h4 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+          <h4 className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
             WhatsApp ({enquiry.whatsapp_sends.length})
           </h4>
           <ul className="mt-1 flex flex-col gap-1 text-[12.5px]">
@@ -302,7 +302,7 @@ export function EnquiryCard({
       ) : null}
 
       <section className="border-t border-line px-4 py-2.5">
-        <h4 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+        <h4 className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
           Calls ({enquiry.calls.length})
         </h4>
         {enquiry.calls.length ? (

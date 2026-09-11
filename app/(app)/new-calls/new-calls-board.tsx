@@ -6,7 +6,7 @@ import { useState, useTransition } from "react";
 
 import { FacetSelect, Labelled } from "@/components/filter-fields";
 import { MultiSelect } from "@/components/multi-select";
-import { Badge, Button, ErrorNote, Input, cx } from "@/components/ui";
+import { Badge, Button, ErrorNote, ImportanceMark, Input, cx } from "@/components/ui";
 import type { FacetMap } from "@/lib/facet-shape";
 import { IMPORTANCE_LABELS, type Importance } from "@/lib/enquiry-labels";
 import { formatDate } from "@/lib/format";
@@ -106,8 +106,8 @@ export function NewCallsBoard({
 
   return (
     <div className="flex flex-col gap-3">
-      <form method="GET" className="rounded-lg border border-line bg-surface p-3">
-        <div className="flex flex-wrap gap-2">
+      <form method="GET" className="rounded-lg border border-line bg-surface shadow-card">
+        <div className="flex flex-wrap gap-2 p-2.5">
           <Labelled label="Source">
             <MultiSelect
               name="source"
@@ -191,7 +191,7 @@ export function NewCallsBoard({
           </Labelled>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5 border-t border-line bg-sunk px-2.5 py-2.5">
           <Button type="submit" variant="primary" size="sm">
             Apply filters
           </Button>
@@ -218,10 +218,10 @@ export function NewCallsBoard({
               </Button>
             ))}
           </span>
+          <span className="w-full text-[11px] text-ink-3">
+            Take next acts on this filtered set, in the order shown.
+          </span>
         </div>
-        <p className="mt-1.5 text-[11px] text-ink-3">
-          Take next acts on this filtered set, in the order shown.
-        </p>
       </form>
 
       {error ? <ErrorNote>{error}</ErrorNote> : null}
@@ -237,24 +237,24 @@ export function NewCallsBoard({
         </p>
       ) : null}
 
-      <div className="overflow-x-auto rounded-lg border border-line bg-surface">
+      <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
         <table className="w-full min-w-[900px] border-collapse text-[12.5px]">
           <thead>
-            <tr className="border-b border-line bg-sunk/40 text-left text-[11px] uppercase tracking-wider text-ink-3">
-              <th className="px-2 py-2">Student</th>
-              <th className="px-2 py-2">Imp</th>
-              <th className="px-2 py-2">Source</th>
-              <th className="px-2 py-2">Term</th>
-              <th className="px-2 py-2">Teachers</th>
-              <th className="px-2 py-2">Product</th>
-              <th className="px-2 py-2">Arrived</th>
-              <th className="px-2 py-2 text-right">Take</th>
+            <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+              <th className="px-2 py-[7px]">Student</th>
+              <th className="px-2 py-[7px]">Imp</th>
+              <th className="px-2 py-[7px]">Source</th>
+              <th className="px-2 py-[7px]">Term</th>
+              <th className="px-2 py-[7px]">Teachers</th>
+              <th className="px-2 py-[7px]">Product</th>
+              <th className="px-2 py-[7px]">Arrived</th>
+              <th className="px-2 py-[7px] text-right">Take</th>
             </tr>
           </thead>
           <tbody>
             {visible.map((r) => (
               <tr key={r.enquiry_id} className="border-b border-line last:border-b-0">
-                <td className="px-2 py-1.5">
+                <td className="px-2 py-[5px]">
                   <span className="text-ink">{r.student_name || "No name"}</span>
                   <Link
                     href={`/students/${r.mobile}`}
@@ -263,22 +263,20 @@ export function NewCallsBoard({
                     {formatMobile(r.mobile)}
                   </Link>
                 </td>
-                <td className="px-2 py-1.5">
+                <td className="px-2 py-[5px]">
                   {r.importance ? (
-                    <Badge tone={r.importance === "a" ? "accent" : "neutral"}>
-                      {r.importance.toUpperCase()}
-                    </Badge>
+                    <ImportanceMark grade={r.importance} />
                   ) : (
                     <span className="text-ink-3">—</span>
                   )}
                 </td>
-                <td className="px-2 py-1.5 text-ink-2">{r.source_name ?? "—"}</td>
-                <td className="px-2 py-1.5 text-ink-2">{r.term_name ?? "—"}</td>
-                <td className="px-2 py-1.5 text-ink-2">{r.teacher_names ?? "—"}</td>
-                <td className="max-w-[260px] truncate px-2 py-1.5 text-ink-3">
+                <td className="px-2 py-[5px] text-ink-2">{r.source_name ?? "—"}</td>
+                <td className="px-2 py-[5px] text-ink-2">{r.term_name ?? "—"}</td>
+                <td className="px-2 py-[5px] text-ink-2">{r.teacher_names ?? "—"}</td>
+                <td className="max-w-[260px] truncate px-2 py-[5px] text-ink-3">
                   {r.product_text ?? "—"}
                 </td>
-                <td className="px-2 py-1.5 whitespace-nowrap text-ink-3">
+                <td className="px-2 py-[5px] whitespace-nowrap text-ink-3">
                   {/* The list sorts by arrival, and for a re-enquired lead that
                       is the day it came back — so the column has to say so, or
                       the order reads as a bug. */}
@@ -286,7 +284,7 @@ export function NewCallsBoard({
                     <span className="flex flex-col">
                       <span className="text-ink-2">
                         {formatDate(r.re_enquired_at)}
-                        <Badge tone="accent">back</Badge>
+                        <Badge dot tone="accent">back</Badge>
                       </span>
                       <span className="text-[11px]">
                         first {formatDate(r.created_at)}
@@ -296,7 +294,7 @@ export function NewCallsBoard({
                     formatDate(r.created_at)
                   )}
                 </td>
-                <td className="px-2 py-1.5 text-right">
+                <td className="px-2 py-[5px] text-right">
                   <Button
                     type="button"
                     size="sm"

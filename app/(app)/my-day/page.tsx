@@ -4,6 +4,7 @@ import type { AssignmentBucket } from "@/lib/enquiry-labels";
 import { istDatePlus, istToday } from "@/lib/format";
 import { fetchAllRows } from "@/lib/paged";
 import { loadRecommended } from "@/lib/recommended";
+import { loadMasters } from "@/lib/masters";
 import { createClient } from "@/lib/supabase/server";
 
 import { MyDay } from "./my-day";
@@ -30,7 +31,9 @@ export default async function Page({
 
   const supabase = await createClient();
 
-  const [list, assignments, roster, dismissal, masters] = await Promise.all([
+  const masters = await loadMasters();
+
+  const [list, assignments, roster, dismissal] = await Promise.all([
     // includeNotDue: My Day is "what am I assigned", not "what is due" — a
     // campaign assignment is by definition not due today.
     loadRecommended({ date, counsellorId, includeNotDue: true, limit: 500 }),
@@ -54,12 +57,6 @@ export default async function Page({
       ? supabase.from("overdue_dismissals").select("date").eq("date", date).maybeSingle()
       : Promise.resolve({ data: null }),
     Promise.all([
-      supabase.from("teachers").select("id, name").eq("is_active", true).order("name"),
-      supabase.from("courses").select("id, name").eq("is_active", true).order("sort_order").order("name"),
-      supabase.from("subjects").select("id, name, course_id").eq("is_active", true).order("sort_order").order("name"),
-      supabase.from("contents").select("id, name").eq("is_active", true).order("priority"),
-      supabase.from("terms").select("id, name").eq("is_active", true).order("sort_order"),
-      supabase.from("sources").select("id, name").eq("is_active", true).order("name"),
     ]),
   ]);
 
@@ -85,7 +82,6 @@ export default async function Page({
       })
     : { rows: [], total: 0, error: null };
 
-  const [teachers, courses, subjects, contents, panelTerms, panelSources] = masters;
 
   return (
     <div className="flex flex-col gap-5">
@@ -107,12 +103,12 @@ export default async function Page({
         overdue={overdue.rows.filter((r) => r.is_overdue)}
         overdueDismissed={Boolean(dismissal.data)}
         masters={{
-          teachers: teachers.data ?? [],
-          courses: courses.data ?? [],
-          subjects: subjects.data ?? [],
-          contents: contents.data ?? [],
-          terms: panelTerms.data ?? [],
-          sources: panelSources.data ?? [],
+          teachers: masters.teachers,
+          courses: masters.courses,
+          subjects: masters.subjects,
+          contents: masters.contents,
+          terms: masters.terms,
+          sources: masters.sources,
         }}
       />
     </div>

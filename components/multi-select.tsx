@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 
-import { Input, cx } from "@/components/ui";
+import { FILLED, Input, cx } from "@/components/ui";
 import {
   countLabel,
   isEmptyOption,
@@ -155,13 +155,13 @@ export function MultiSelect({
           window.setTimeout(() => panelRef.current?.focus(), 0);
         }}
         className={cx(
-          "flex h-8 w-full items-center justify-between gap-2 rounded-md border px-2.5 text-left text-[13px]",
-          "border-line-2 bg-surface hover:border-ink-3",
-          selected.length ? "text-ink" : "text-ink-3",
+          "flex h-[30px] w-full items-center justify-between gap-2 rounded-md border px-2 text-left text-[12.5px]",
+          "bg-surface hover:border-ink-3",
+          selected.length ? cx("text-ink", FILLED) : "border-line-2 text-ink-3",
         )}
       >
         <span className="truncate">{label}</span>
-        <span className="shrink-0 text-[10px] text-ink-3">▾</span>
+        <span className="shrink-0 text-[9px] text-ink-3">▾</span>
       </button>
 
       {open ? (

@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import type { EnquiryStatus, IssueCategory } from "@/lib/enquiry-labels";
+import { loadMasters } from "@/lib/masters";
 import { createClient } from "@/lib/supabase/server";
 
 import { TicketsBoard, type TicketRow } from "./tickets-board";
@@ -34,7 +35,9 @@ export default async function Page({
   const dir = one(sp.dir) === "desc" ? "desc" : "asc";
 
   const supabase = await createClient();
-  const [list, staff, masters] = await Promise.all([
+
+  const masters = await loadMasters();
+  const [list, staff] = await Promise.all([
     supabase.rpc("tickets_list", {
       p_include_resolved: includeResolved,
       p_status: status ?? undefined,
@@ -54,17 +57,10 @@ export default async function Page({
       .eq("is_active", true)
       .order("full_name"),
     Promise.all([
-      supabase.from("teachers").select("id, name").eq("is_active", true).order("name"),
-      supabase.from("courses").select("id, name").eq("is_active", true).order("sort_order").order("name"),
-      supabase.from("subjects").select("id, name, course_id").eq("is_active", true).order("sort_order").order("name"),
-      supabase.from("contents").select("id, name").eq("is_active", true).order("priority"),
-      supabase.from("terms").select("id, name").eq("is_active", true).order("sort_order"),
-      supabase.from("sources").select("id, name").eq("is_active", true).order("name"),
     ]),
   ]);
 
   const rows = (list.data ?? []) as unknown as TicketRow[];
-  const [teachers, courses, subjects, contents, panelTerms, panelSources] = masters;
 
   const search = new URLSearchParams(
     Object.entries(sp).flatMap(([k, v]) =>
@@ -94,12 +90,12 @@ export default async function Page({
           name: p.full_name ?? "(no name)",
         }))}
         masters={{
-          teachers: teachers.data ?? [],
-          courses: courses.data ?? [],
-          subjects: subjects.data ?? [],
-          contents: contents.data ?? [],
-          terms: panelTerms.data ?? [],
-          sources: panelSources.data ?? [],
+          teachers: masters.teachers,
+          courses: masters.courses,
+          subjects: masters.subjects,
+          contents: masters.contents,
+          terms: masters.terms,
+          sources: masters.sources,
         }}
         selected={{
           status: status ?? "",

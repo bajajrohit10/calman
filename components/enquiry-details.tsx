@@ -95,7 +95,7 @@ export function EnquiryDetailsEditor({
 
       <div className="mt-2 grid gap-2 rounded-md border border-line bg-sunk/30 px-3 py-2.5 sm:grid-cols-2 lg:grid-cols-3">
         <label className="flex flex-col gap-1">
-          <span className="text-[10.5px] font-medium uppercase tracking-wide text-ink-3">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
             Student name
           </span>
           <Input
@@ -107,7 +107,7 @@ export function EnquiryDetailsEditor({
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-[10.5px] font-medium uppercase tracking-wide text-ink-3">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
             Importance
           </span>
           <Select
@@ -127,7 +127,7 @@ export function EnquiryDetailsEditor({
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-[10.5px] font-medium uppercase tracking-wide text-ink-3">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
             Term
           </span>
           <Select
@@ -145,7 +145,7 @@ export function EnquiryDetailsEditor({
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-[10.5px] font-medium uppercase tracking-wide text-ink-3">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
             Source
           </span>
           <Select
@@ -163,7 +163,7 @@ export function EnquiryDetailsEditor({
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-[10.5px] font-medium uppercase tracking-wide text-ink-3">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
             Lead verification
           </span>
           <Select

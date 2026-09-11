@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { facetsAgreeWithList, loadNewCallsFacets } from "@/lib/facets";
+import { loadMasters } from "@/lib/masters";
 import { createClient } from "@/lib/supabase/server";
 
 import { PAGE_SIZE, parseNewCallsParams } from "./filters";
@@ -34,7 +35,9 @@ export default async function Page({
   const { page, sourceIds, teacherIds, contentIds, filters } = parseNewCallsParams(read(sp));
 
   const supabase = await createClient();
-  const [list, facetResult, teachers, institutes, courses, contents, terms, sources] =
+
+  const masters = await loadMasters();
+  const [list, facetResult] =
     await Promise.all([
       supabase.rpc("new_calls_pool", {
         ...filters,
@@ -43,17 +46,6 @@ export default async function Page({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any),
       loadNewCallsFacets(filters),
-      supabase.from("teachers").select("id, name").eq("is_active", true).order("name"),
-      supabase.from("institutes").select("id, name").eq("is_active", true).order("name"),
-      supabase
-        .from("courses")
-        .select("id, name")
-        .eq("is_active", true)
-        .order("sort_order")
-        .order("name"),
-      supabase.from("contents").select("id, name").eq("is_active", true).order("priority"),
-      supabase.from("terms").select("id, name").eq("is_active", true).order("sort_order"),
-      supabase.from("sources").select("id, name").eq("is_active", true).order("name"),
     ]);
 
   const rows = (list.data ?? []) as unknown as PoolRow[];
@@ -90,12 +82,12 @@ export default async function Page({
         teacherIds={teacherIds}
         contentIds={contentIds}
         masters={{
-          teachers: teachers.data ?? [],
-          institutes: institutes.data ?? [],
-          courses: courses.data ?? [],
-          contents: contents.data ?? [],
-          terms: terms.data ?? [],
-          sources: sources.data ?? [],
+          teachers: masters.teachers,
+          institutes: masters.institutes,
+          courses: masters.courses,
+          contents: masters.contents,
+          terms: masters.terms,
+          sources: masters.sources,
         }}
         selected={{
           course: one(sp.course) ?? "",

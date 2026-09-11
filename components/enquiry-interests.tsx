@@ -72,7 +72,7 @@ export function EnquiryInterests({
 
   return (
     <section className="border-t border-line px-4 py-2.5">
-      <h4 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+      <h4 className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
         Interests ({items.length})
       </h4>
 

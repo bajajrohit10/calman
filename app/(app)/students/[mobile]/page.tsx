@@ -7,7 +7,7 @@ import { isAdmin, requireUser } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
 import { isValidMobile, normaliseMobile } from "@/lib/mobile";
 import { loadStudentByMobile } from "@/lib/students";
-import { createClient } from "@/lib/supabase/server";
+import { loadMasters } from "@/lib/masters";
 
 export const metadata = { title: "Student · Calman" };
 
@@ -29,22 +29,9 @@ export default async function Page({
   const student = await loadStudentByMobile(mobile);
   if (!student) notFound();
 
-  const supabase = await createClient();
+  const masters = await loadMasters();
   // The interests table on each card is open and editable, so this page needs
   // the same four item masters the call panel does.
-  const [terms, sources, teachers, courses, subjects, contents] = await Promise.all([
-    supabase.from("terms").select("id, name").eq("is_active", true).order("sort_order"),
-    supabase.from("sources").select("id, name").eq("is_active", true).order("name"),
-    supabase.from("teachers").select("id, name").eq("is_active", true).order("name"),
-    supabase.from("courses").select("id, name").eq("is_active", true).order("sort_order").order("name"),
-    supabase
-      .from("subjects")
-      .select("id, name, course_id")
-      .eq("is_active", true)
-      .order("sort_order")
-      .order("name"),
-    supabase.from("contents").select("id, name").eq("is_active", true).order("priority"),
-  ]);
 
   return (
     <div className="flex flex-col gap-5">
@@ -65,12 +52,12 @@ export default async function Page({
       <StudentHistoryView
         student={student}
         masters={{
-          terms: terms.data ?? [],
-          sources: sources.data ?? [],
-          teachers: teachers.data ?? [],
-          courses: courses.data ?? [],
-          subjects: subjects.data ?? [],
-          contents: contents.data ?? [],
+          terms: masters.terms,
+          sources: masters.sources,
+          teachers: masters.teachers,
+          courses: masters.courses,
+          subjects: masters.subjects,
+          contents: masters.contents,
         }}
         counsellorName={viewer.profile?.full_name ?? null}
         canUnarchive={isAdmin(viewer.profile?.role ?? "counsellor")}

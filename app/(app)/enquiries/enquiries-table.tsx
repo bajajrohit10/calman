@@ -12,7 +12,15 @@ import {
   Labelled,
   type FilterMasters,
 } from "@/components/filter-fields";
-import { Badge, Button, ErrorNote, Input, Select, cx } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  ErrorNote,
+  ImportanceMark,
+  Input,
+  Select,
+  cx,
+} from "@/components/ui";
 import {
   CLOSE_REASON_LABELS,
   ENQUIRY_STATUS_LABELS,
@@ -109,8 +117,8 @@ export function EnquiriesTable({
 
   return (
     <div className="flex flex-col gap-3">
-      <form method="GET" className="rounded-lg border border-line bg-surface p-3">
-        <div className="flex flex-wrap gap-2">
+      <form method="GET" className="rounded-lg border border-line bg-surface shadow-card">
+        <div className="flex flex-wrap gap-2 p-2.5">
           <Labelled label="Mobile" wide>
             <Input name="mobile" defaultValue={selected.mobile} placeholder="any part" />
           </Labelled>
@@ -167,7 +175,7 @@ export function EnquiriesTable({
         <input type="hidden" name="sort" value={sort} />
         <input type="hidden" name="dir" value={dir} />
 
-        <div className="mt-3 flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5 border-t border-line bg-sunk px-2.5 py-2.5">
           <Button type="submit" variant="primary" size="sm">
             Apply filters
           </Button>
@@ -199,15 +207,15 @@ export function EnquiriesTable({
       {loadError ? <ErrorNote>{loadError}</ErrorNote> : null}
 
       <div className="flex flex-col gap-3 xl:flex-row">
-        <div className="min-w-0 flex-1 overflow-x-auto rounded-lg border border-line bg-surface">
+        <div className="min-w-0 flex-1 overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
           <table className="w-full min-w-[1000px] border-collapse text-[12.5px]">
             <thead>
-              <tr className="border-b border-line bg-sunk/40 text-left text-[11px] uppercase tracking-wider text-ink-3">
+              <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
                 {SORTABLE.map((col) => {
                   const active = sort === col.key;
                   const nextDir = active && dir === "asc" ? "desc" : "asc";
                   return (
-                    <th key={col.key} className="px-2 py-2">
+                    <th key={col.key} className="px-2 py-[7px]">
                       <Link
                         href={withParam({ sort: col.key, dir: nextDir, page: "" })}
                         className="inline-flex items-center gap-1 hover:text-ink"
@@ -218,9 +226,9 @@ export function EnquiriesTable({
                     </th>
                   );
                 })}
-                <th className="px-2 py-2">Teachers</th>
-                <th className="px-2 py-2">Last note</th>
-                <th className="px-2 py-2">Assigned</th>
+                <th className="px-2 py-[7px]">Teachers</th>
+                <th className="px-2 py-[7px]">Last note</th>
+                <th className="px-2 py-[7px]">Assigned</th>
               </tr>
             </thead>
             <tbody>
@@ -234,11 +242,11 @@ export function EnquiriesTable({
                     open?.id === r.enquiry_id && "bg-accent-soft/40",
                   )}
                 >
-                  <td className="px-2 py-1.5 whitespace-nowrap text-ink-3">
+                  <td className="px-2 py-[5px] whitespace-nowrap text-ink-3">
                     {formatDate(r.created_at)}
                   </td>
-                  <td className="px-2 py-1.5 text-ink">{r.student_name || "No name"}</td>
-                  <td className="px-2 py-1.5">
+                  <td className="px-2 py-[5px] text-ink">{r.student_name || "No name"}</td>
+                  <td className="px-2 py-[5px]">
                     <Link
                       href={`/students/${r.mobile}`}
                       onClick={(e) => e.stopPropagation()}
@@ -247,10 +255,10 @@ export function EnquiriesTable({
                       {formatMobile(r.mobile)}
                     </Link>
                   </td>
-                  <td className="px-2 py-1.5 text-ink-2">{ENQUIRY_TYPE_LABELS[r.type]}</td>
-                  <td className="px-2 py-1.5">
+                  <td className="px-2 py-[5px] text-ink-2">{ENQUIRY_TYPE_LABELS[r.type]}</td>
+                  <td className="px-2 py-[5px]">
                     <span className="flex flex-wrap items-center gap-1">
-                      <Badge tone={statusTone(r.status)}>
+                      <Badge dot tone={statusTone(r.status)}>
                         {ENQUIRY_STATUS_LABELS[r.status]}
                       </Badge>
                       {r.lost_reason ? (
@@ -265,11 +273,17 @@ export function EnquiriesTable({
                       ) : null}
                     </span>
                   </td>
-                  <td className="px-2 py-1.5 uppercase text-ink-2">{r.importance ?? "—"}</td>
-                  <td className="px-2 py-1.5 whitespace-nowrap tabular-nums text-ink-2">
+                  <td className="px-2 py-[5px]">
+                    {r.importance ? (
+                      <ImportanceMark grade={r.importance} />
+                    ) : (
+                      <span className="text-ink-3">—</span>
+                    )}
+                  </td>
+                  <td className="px-2 py-[5px] whitespace-nowrap tabular-nums text-ink-2">
                     {r.next_follow_up_date ? formatDate(r.next_follow_up_date) : "—"}
                   </td>
-                  <td className="px-2 py-1.5 whitespace-nowrap text-ink-3">
+                  <td className="px-2 py-[5px] whitespace-nowrap text-ink-3">
                     {r.last_outcome ? (
                       <>
                         {OUTCOME_SHORT[r.last_outcome]}
@@ -279,14 +293,14 @@ export function EnquiriesTable({
                       "never"
                     )}
                   </td>
-                  <td className="px-2 py-1.5 tabular-nums text-ink-3">
+                  <td className="px-2 py-[5px] tabular-nums text-ink-3">
                     {r.follow_up_slots_used}/3
                   </td>
-                  <td className="px-2 py-1.5 text-ink-2">{r.teacher_names ?? "—"}</td>
-                  <td className="max-w-[260px] truncate px-2 py-1.5 text-ink-3">
+                  <td className="px-2 py-[5px] text-ink-2">{r.teacher_names ?? "—"}</td>
+                  <td className="max-w-[260px] truncate px-2 py-[5px] text-ink-3">
                     {r.last_discussion ?? "—"}
                   </td>
-                  <td className="px-2 py-1.5 text-ink-3">{r.assigned_to_name ?? "—"}</td>
+                  <td className="px-2 py-[5px] text-ink-3">{r.assigned_to_name ?? "—"}</td>
                 </tr>
               ))}
               {rows.length === 0 ? (

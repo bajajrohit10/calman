@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 
 import { MultiSelect } from "@/components/multi-select";
-import { Input, Select, cx } from "@/components/ui";
+import { FIELD_LABEL, FILLED, Input, Select, cx } from "@/components/ui";
 import { IMPORTANCE_LABELS, STAGE_FILTER_LABELS } from "@/lib/enquiry-labels";
 import {
   countLabel,
@@ -55,7 +55,10 @@ export function FacetSelect({
   const ordered = useMemo(() => orderOptions(options, counts), [options, counts]);
 
   return (
-    <Select name={name} defaultValue={value}>
+    // A filter that is doing something says so: the same accent edge the
+    // multi-selects wear, so a glance across the bar finds what is narrowing
+    // the list without reading every value.
+    <Select name={name} defaultValue={value} className={value ? FILLED : undefined}>
       <option value="">{anyLabel}</option>
       {ordered.map((o) => {
         const empty = isEmptyOption(facet, o.id, facets);
@@ -95,13 +98,11 @@ export function Labelled({
   return (
     <label
       className={cx(
-        "flex min-w-[11rem] flex-col gap-1",
+        "flex min-w-[11rem] flex-col gap-[3px]",
         wide ? "flex-[2_1_16rem]" : "flex-[1_1_11rem]",
       )}
     >
-      <span className="text-[10.5px] font-medium uppercase tracking-wide text-ink-3">
-        {label}
-      </span>
+      <span className={FIELD_LABEL}>{label}</span>
       {children}
     </label>
   );

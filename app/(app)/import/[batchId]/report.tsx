@@ -105,16 +105,16 @@ export function BatchReport({
       {note ? <ErrorNote>{note}</ErrorNote> : null}
       {error ? <ErrorNote>{error}</ErrorNote> : null}
 
-      <div className="overflow-x-auto rounded-lg border border-line bg-surface">
+      <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
         <table className="w-full min-w-[760px] border-collapse text-[12.5px]">
           <thead>
-            <tr className="border-b border-line bg-sunk/40 text-left text-[11px] uppercase tracking-wider text-ink-3">
-              <th className="px-3 py-2">Row</th>
-              <th className="px-2 py-2">Mobile</th>
-              <th className="px-2 py-2">Outcome</th>
-              <th className="px-2 py-2">Reason</th>
-              <th className="px-2 py-2">Enquiry</th>
-              <th className="px-3 py-2 text-right">Resolve</th>
+            <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+              <th className="px-3 py-[7px]">Row</th>
+              <th className="px-2 py-[7px]">Mobile</th>
+              <th className="px-2 py-[7px]">Outcome</th>
+              <th className="px-2 py-[7px]">Reason</th>
+              <th className="px-2 py-[7px]">Enquiry</th>
+              <th className="px-3 py-[7px] text-right">Resolve</th>
             </tr>
           </thead>
           <tbody>
@@ -126,8 +126,8 @@ export function BatchReport({
                   r.resolved_at && "bg-sunk/30",
                 )}
               >
-                <td className="px-3 py-1.5 tabular-nums text-ink-3">{r.row_number}</td>
-                <td className="px-2 py-1.5 tabular-nums text-ink">
+                <td className="px-3 py-[5px] tabular-nums text-ink-3">{r.row_number}</td>
+                <td className="px-2 py-[5px] tabular-nums text-ink">
                   {r.normalised_mobile ? (
                     <Link
                       href={`/students/${r.normalised_mobile}`}
@@ -139,18 +139,18 @@ export function BatchReport({
                     "—"
                   )}
                 </td>
-                <td className="px-2 py-1.5">
+                <td className="px-2 py-[5px]">
                   <Badge tone={TONES[r.outcome] ?? "neutral"}>
                     {OUTCOME_LABELS[r.outcome] ?? r.outcome}
                   </Badge>
                 </td>
-                <td className="max-w-[320px] px-2 py-1.5 text-ink-3">
+                <td className="max-w-[320px] px-2 py-[5px] text-ink-3">
                   {r.skip_reason ?? "—"}
                 </td>
-                <td className="px-2 py-1.5 tabular-nums text-ink-3">
+                <td className="px-2 py-[5px] tabular-nums text-ink-3">
                   {r.enquiry_id ? `#${r.enquiry_id}` : "—"}
                 </td>
-                <td className="px-3 py-1.5 text-right">
+                <td className="px-3 py-[5px] text-right">
                   {r.outcome === "skipped" && !r.resolved_at ? (
                     <span className="flex justify-end gap-1.5">
                       {r.normalised_mobile ? (

@@ -16,7 +16,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   if (!profile) {
     return (
       <main className="flex min-h-dvh items-center justify-center bg-ground px-6">
-        <div className="w-full max-w-[400px] rounded-lg border border-line bg-surface p-6">
+        <div className="w-full max-w-[400px] rounded-lg border border-line bg-surface shadow-card p-6">
           <h1 className="text-[15px] font-semibold text-ink">
             Account not activated — contact admin
           </h1>
@@ -60,7 +60,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         roleLabel={ROLE_LABELS[profile.role]}
         signOut={signOut}
       />
-      <main className="min-w-0 flex-1 px-7 py-6">
+      <main className="min-w-0 flex-1 px-5 pt-4 pb-7">
         <div className="mx-auto max-w-[1400px]">{children}</div>
       </main>
     </div>

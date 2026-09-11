@@ -501,7 +501,7 @@ export function Importer({ masters }: { masters: ImportMasters }) {
       ) : null}
 
       {stage === "mapping" ? (
-        <div className="rounded-lg border border-line bg-surface p-4">
+        <div className="rounded-lg border border-line bg-surface shadow-card p-4">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-[14px] font-semibold text-ink">Map the columns</h2>
             <Badge tone="neutral">{parsed.length} rows</Badge>
@@ -513,7 +513,7 @@ export function Importer({ masters }: { masters: ImportMasters }) {
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {FIELDS.map((f) => (
               <label key={f.key} className="flex flex-col gap-1">
-                <span className="text-[11px] font-medium uppercase tracking-wide text-ink-3">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
                   {f.label}
                   {f.required ? " *" : ""}
                 </span>
@@ -548,7 +548,7 @@ export function Importer({ masters }: { masters: ImportMasters }) {
       ) : null}
 
       {stage === "committing" ? (
-        <div className="rounded-lg border border-line bg-surface px-4 py-4">
+        <div className="rounded-lg border border-line bg-surface shadow-card px-4 py-4">
           <p className="text-[13px] text-ink">
             Importing… {progress.done} of {progress.total}
           </p>
@@ -569,7 +569,7 @@ export function Importer({ masters }: { masters: ImportMasters }) {
 
       {stage === "review" ? (
         <div className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface shadow-card px-4 py-3">
             <h2 className="text-[14px] font-semibold text-ink">Review</h2>
             <span className="text-[12.5px] text-ink-2">
               {review.length} rows from {filename}
@@ -699,7 +699,7 @@ function Group({
   const all = new Set(rows.map((r) => r.rowNumber));
 
   return (
-    <section className="rounded-lg border border-line bg-surface">
+    <section className="rounded-lg border border-line bg-surface shadow-card">
       <header className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
         <Badge tone={tone}>{rows.length}</Badge>
         <h3 className="text-[13px] font-semibold text-ink">{title}</h3>
@@ -725,14 +725,14 @@ function Group({
           <tbody>
             {rows.map((r) => (
               <tr key={r.rowNumber} className="border-b border-line last:border-b-0">
-                <td className="w-12 px-3 py-1.5 tabular-nums text-ink-3">{r.rowNumber}</td>
-                <td className="px-2 py-1.5 tabular-nums text-ink">
+                <td className="w-12 px-3 py-[5px] tabular-nums text-ink-3">{r.rowNumber}</td>
+                <td className="px-2 py-[5px] tabular-nums text-ink">
                   {r.mobile ?? "—"}
                   {r.status?.studentName ? (
                     <span className="ml-2 text-ink-3">{r.status.studentName}</span>
                   ) : null}
                 </td>
-                <td className="px-2 py-1.5 text-ink-3">
+                <td className="px-2 py-[5px] text-ink-3">
                   <span className="block">
                     {r.invalidReason ??
                       (r.status
@@ -761,7 +761,7 @@ function Group({
                     </span>
                   ) : null}
                 </td>
-                <td className="px-2 py-1.5">
+                <td className="px-2 py-[5px]">
                   {r.mobile && r.status?.studentId ? (
                     <Link
                       href={`/students/${r.mobile}`}
@@ -772,7 +772,7 @@ function Group({
                     </Link>
                   ) : null}
                 </td>
-                <td className="px-3 py-1.5 text-right">
+                <td className="px-3 py-[5px] text-right">
                   {options.length ? (
                     <Select
                       aria-label={`Decision for row ${r.rowNumber}`}

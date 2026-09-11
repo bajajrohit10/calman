@@ -7,7 +7,16 @@ import { useRef, useState, useTransition } from "react";
 import { loadPanelEnquiry, type PanelPayload } from "@/components/call-log/actions";
 import { ExportButton } from "@/components/export-button";
 import { CallLogPanel, type PanelMasters } from "@/components/call-log/panel";
-import { Badge, Button, ErrorNote, Select, cx } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  ErrorNote,
+  FIELD_LABEL,
+  ImportanceMark,
+  Input,
+  Select,
+  cx,
+} from "@/components/ui";
 import { BUCKET_LABELS, type AssignmentBucket } from "@/lib/enquiry-labels";
 import { formatDate } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
@@ -94,24 +103,19 @@ export function MyDay({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <form method="GET" className="flex items-center gap-2">
-          <label className="text-[12.5px] text-ink-2">
-            Date{" "}
-            <input
-              type="date"
-              name="date"
-              defaultValue={date}
-              className="h-8 rounded-md border border-line-2 bg-surface px-2 text-[13px]"
-            />
+      <div className="flex flex-wrap items-end gap-2.5 rounded-lg border border-line bg-surface px-2.5 py-2.5 shadow-card">
+        <form method="GET" className="flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-[3px]">
+            <span className={FIELD_LABEL}>Date</span>
+            <Input type="date" name="date" defaultValue={date} className="w-[150px]" />
           </label>
           {isAdmin ? (
-            <label className="text-[12.5px] text-ink-2">
-              Counsellor{" "}
+            <label className="flex flex-col gap-[3px]">
+              <span className={FIELD_LABEL}>Counsellor</span>
               <Select
                 name="counsellor"
                 defaultValue={counsellorId}
-                className="inline-block w-[190px]"
+                className="w-[190px]"
               >
                 {roster.map((r) => (
                   <option key={r.id} value={r.id}>
@@ -121,11 +125,11 @@ export function MyDay({
               </Select>
             </label>
           ) : null}
-          <Button type="submit" size="sm" variant="secondary">
+          <Button type="submit" variant="primary">
             Show
           </Button>
         </form>
-        <span className="text-[12.5px] text-ink-3">
+        <span className="pb-1 text-[12px] text-ink-3">
           {rows.length} assigned for {formatDate(date)}
         </span>
         <ExportButton source="myday" date={date} counsellorId={counsellorId} className="ml-auto" />
@@ -138,10 +142,10 @@ export function MyDay({
         <div className="min-w-0 flex-1 flex flex-col gap-4">
           {groups.map((group) => (
             <section key={group.bucket}>
-              <h2 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+              <h2 className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
                 {BUCKET_LABELS[group.bucket]} ({group.rows.length})
               </h2>
-              <ul className="overflow-hidden rounded-lg border border-line bg-surface">
+              <ul className="overflow-hidden rounded-lg border border-line bg-surface shadow-card">
                 {group.rows.map((r) => (
                   <li
                     key={r.enquiry_id}
@@ -160,7 +164,7 @@ export function MyDay({
                       {formatMobile(r.mobile)}
                     </span>
                     {r.importance ? (
-                      <Badge tone="neutral">{r.importance.toUpperCase()}</Badge>
+                      <ImportanceMark grade={r.importance} />
                     ) : null}
                     {r.is_overdue ? <Badge tone="danger">Overdue</Badge> : null}
                     <span className="text-[12px] text-ink-3">

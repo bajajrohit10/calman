@@ -127,7 +127,7 @@ function AddForm({ spec, courses, institutes }: { spec: ListSpec; courses: Cours
   }
 
   return (
-    <form action={action} className="rounded-lg border border-line bg-surface p-4">
+    <form action={action} className="rounded-lg border border-line bg-surface shadow-card p-4">
       <input type="hidden" name="table" value={spec.table} />
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-[13px] font-semibold text-ink">New entry</h3>
@@ -270,7 +270,7 @@ function EditableRow({
           <td
             key={field.name}
             className={cx(
-              "px-3 py-2 align-top",
+              "px-3 py-[5px] align-top",
               field.kind === "number" && "tabular-nums",
               field.name === "name" && active && "font-medium text-ink",
               field.kind === "textarea" && "max-w-md whitespace-pre-wrap text-ink-2",
@@ -281,7 +281,7 @@ function EditableRow({
         );
       })}
 
-      <td className="px-3 py-2 align-top">
+      <td className="px-3 py-[5px] align-top">
         {active ? (
           <Badge tone="ok">Active</Badge>
         ) : (
@@ -289,7 +289,7 @@ function EditableRow({
         )}
       </td>
 
-      <td className="px-3 py-2 align-top">
+      <td className="px-3 py-[5px] align-top">
         <div className="flex items-center justify-end gap-1">
           {saved && !noticeDone ? (
             <span className="mr-1 text-[11px] text-ok" role="status">
@@ -426,26 +426,26 @@ export function ListEditor({
         </span>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-line bg-surface">
-        <table className="w-full border-collapse text-[13px]">
+      <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-card">
+        <table className="w-full border-collapse text-[12.5px]">
           <thead>
-            <tr className="border-b border-line bg-surface-2 text-left">
+            <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
               {spec.fields.map((field) => (
                 <th
                   key={field.name}
                   scope="col"
-                  className="px-3 py-2 text-[11px] font-medium uppercase tracking-wider text-ink-3"
+                  className="px-3 py-[7px]"
                 >
                   {field.label}
                 </th>
               ))}
               <th
                 scope="col"
-                className="px-3 py-2 text-[11px] font-medium uppercase tracking-wider text-ink-3"
+                className="px-3 py-[7px]"
               >
                 Status
               </th>
-              <th scope="col" className="px-3 py-2 text-right">
+              <th scope="col" className="px-3 py-[7px] text-right">
                 <span className="sr-only">Actions</span>
               </th>
             </tr>
@@ -457,7 +457,7 @@ export function ListEditor({
                   <tr className="border-b border-line bg-sunk/60">
                     <td
                       colSpan={spec.fields.length + 2}
-                      className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-2"
+                      className="px-3 py-[5px] text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-2"
                     >
                       {group.title}
                     </td>
@@ -539,7 +539,7 @@ function TemplateHelp({ rows }: { rows: Row[] }) {
       </div>
 
       <label className="flex flex-col gap-1">
-        <span className="text-[10.5px] font-medium uppercase tracking-wide text-ink-3">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
           Try a message
         </span>
         <Textarea rows={2} value={preview} onChange={(e) => setPreview(e.target.value)} />

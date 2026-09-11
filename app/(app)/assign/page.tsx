@@ -2,6 +2,7 @@ import { PageHeader } from "@/components/ui";
 import { requireAdminProfile } from "@/lib/auth";
 import { facetsAgreeWithList, loadDeskFacets } from "@/lib/facets";
 import { loadRecommended } from "@/lib/recommended";
+import { loadMasters } from "@/lib/masters";
 import { createClient } from "@/lib/supabase/server";
 
 import { AssignDesk } from "./assign-desk";
@@ -43,20 +44,15 @@ export default async function Page({
   ).toString();
 
   const supabase = await createClient();
+
+  const masters = await loadMasters();
   // The facet counts are a second query over the same scope, issued alongside
   // the list rather than after it, so the page waits for the slower of the two
   // and not for their sum.
-  const [list, facetResult, teachers, institutes, courses, subjects, contents, terms, sources, staff] =
+  const [list, facetResult, staff] =
     await Promise.all([
       loadRecommended(filters),
       loadDeskFacets(filters),
-      supabase.from("teachers").select("id, name").eq("is_active", true).order("name"),
-      supabase.from("institutes").select("id, name").eq("is_active", true).order("name"),
-      supabase.from("courses").select("id, name").eq("is_active", true).order("sort_order").order("name"),
-      supabase.from("subjects").select("id, name, course_id").eq("is_active", true).order("sort_order").order("name"),
-      supabase.from("contents").select("id, name").eq("is_active", true).order("priority"),
-      supabase.from("terms").select("id, name").eq("is_active", true).order("sort_order"),
-      supabase.from("sources").select("id, name").eq("is_active", true).order("name"),
       supabase
         .from("profiles")
         .select("id, full_name, role")
@@ -108,13 +104,13 @@ export default async function Page({
         search={search}
         roster={roster}
         masters={{
-          teachers: teachers.data ?? [],
-          institutes: institutes.data ?? [],
-          courses: courses.data ?? [],
-          subjects: subjects.data ?? [],
-          contents: contents.data ?? [],
-          terms: terms.data ?? [],
-          sources: sources.data ?? [],
+          teachers: masters.teachers,
+          institutes: masters.institutes,
+          courses: masters.courses,
+          subjects: masters.subjects,
+          contents: masters.contents,
+          terms: masters.terms,
+          sources: masters.sources,
         }}
         multi={{
           teacher: filters.teacherIds ?? [],

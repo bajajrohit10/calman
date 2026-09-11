@@ -9,6 +9,8 @@ type Item = {
   href: string;
   label: string;
   hint: string;
+  /** A glyph, not an icon set: one character, no bundle, no licence. */
+  icon: string;
   adminOnly?: boolean;
   /** Key into the counts prop, for a live badge. */
   badge?: "newCalls";
@@ -18,32 +20,45 @@ type Item = {
 // is Super Admin and Manager only. The server also enforces this — hiding a
 // link is presentation, not permission.
 const ITEMS: Item[] = [
-  { href: "/my-day", label: "My Day", hint: "Today's assigned calls" },
+  { href: "/my-day", label: "My Day", hint: "Today's assigned calls", icon: "▣" },
   {
     href: "/new-calls",
     label: "New Calls",
     hint: "Unclaimed leads",
+    icon: "◈",
     badge: "newCalls",
   },
   {
     href: "/assign",
     label: "Assign",
     hint: "Plan and hand out the day",
+    icon: "▤",
     adminOnly: true,
   },
-  { href: "/enquiries", label: "Enquiries", hint: "Every enquiry, filterable" },
-  { href: "/quick-add", label: "Quick Add", hint: "Log a ringing phone" },
-  { href: "/import", label: "Import", hint: "Bulk import with review" },
-  { href: "/reports", label: "Reports", hint: "Daily and team reports" },
-  { href: "/tickets", label: "Tickets", hint: "After-sale queue" },
+  { href: "/enquiries", label: "Enquiries", hint: "Every enquiry, filterable", icon: "≡" },
+  { href: "/quick-add", label: "Quick Add", hint: "Log a ringing phone", icon: "✎" },
+  { href: "/import", label: "Import", hint: "Bulk import with review", icon: "↑" },
+  { href: "/reports", label: "Reports", hint: "Daily and team reports", icon: "◔" },
+  { href: "/tickets", label: "Tickets", hint: "After-sale queue", icon: "✱" },
 ];
 
 const SETTINGS: Item = {
   href: "/settings/users",
   label: "Settings",
   hint: "Users and master lists",
+  icon: "⚙",
 };
 
+/**
+ * The navigation rail.
+ *
+ * Dark, and the only dark surface in the app: it stops being something to read
+ * and becomes the edge of the window, which is what nine hours of looking at
+ * the same eight links actually wants. The one-line-per-item form replaced a
+ * two-line one carrying a description under every label — useful on the first
+ * day, noise on the second — so the descriptions moved to the title attribute
+ * and the rail lost about a third of its height.
+ */
 export function Sidebar({
   showSettings,
   fullName,
@@ -66,14 +81,16 @@ export function Sidebar({
   return (
     <nav
       aria-label="Main"
-      className="flex w-[212px] shrink-0 flex-col border-r border-line bg-surface"
+      className="flex w-[208px] shrink-0 flex-col bg-rail py-3 text-rail-ink"
     >
-      <div className="border-b border-line px-4 py-3.5">
-        <div className="text-[15px] font-semibold tracking-tight text-ink">Calman</div>
-        <div className="text-[11.5px] text-ink-3">Zeroinfy counselling</div>
+      <div className="mb-2 border-b border-rail-line px-4 pb-3.5">
+        <div className="text-[14px] font-semibold tracking-[-0.01em] text-white">
+          Calman
+        </div>
+        <div className="text-[11px] text-rail-ink-2">Zeroinfy counselling</div>
       </div>
 
-      <ul className="flex flex-1 flex-col gap-0.5 p-2">
+      <ul className="flex flex-1 flex-col gap-px px-2">
         {items.map((item) => {
           const active =
             pathname === item.href ||
@@ -85,43 +102,57 @@ export function Sidebar({
             <li key={item.href}>
               <Link
                 href={item.href}
+                title={item.hint}
                 aria-current={active ? "page" : undefined}
                 className={cx(
-                  "block rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
+                  "flex items-center gap-[9px] rounded-md px-2 py-1.5 text-[12.5px] transition-colors",
                   active
-                    ? "bg-accent-soft font-medium text-accent"
-                    : "text-ink-2 hover:bg-surface-2 hover:text-ink",
+                    ? "bg-accent font-medium text-accent-ink"
+                    : "text-rail-ink hover:bg-rail-hover hover:text-white",
                 )}
               >
-                <span className="flex items-center gap-1.5">
-                  {item.label}
-                  {item.badge && counts[item.badge] > 0 ? (
-                    <span
-                      aria-label={`${counts[item.badge]} waiting`}
-                      className="rounded-full bg-accent px-1.5 py-px text-[10.5px] font-semibold text-white"
-                    >
-                      {counts[item.badge]}
-                    </span>
-                  ) : null}
+                <span
+                  aria-hidden
+                  className={cx(
+                    "w-[15px] shrink-0 text-center text-[12px]",
+                    active ? "opacity-100" : "opacity-60",
+                  )}
+                >
+                  {item.icon}
                 </span>
-                <span className="block text-[11px] font-normal text-ink-3">
-                  {item.hint}
-                </span>
+                <span className="truncate">{item.label}</span>
+                {item.badge && counts[item.badge] > 0 ? (
+                  <span
+                    aria-label={`${counts[item.badge]} waiting`}
+                    className={cx(
+                      "ml-auto rounded-[9px] px-1.5 text-[10.5px]/[16px] font-semibold",
+                      active
+                        ? "bg-accent-ink/20 text-accent-ink"
+                        : "bg-accent text-accent-ink",
+                    )}
+                  >
+                    {counts[item.badge]}
+                  </span>
+                ) : null}
               </Link>
             </li>
           );
         })}
       </ul>
 
-      <div className="border-t border-line p-3">
-        <div className="truncate text-[12.5px] font-medium text-ink" title={fullName}>
+      <div className="mt-auto border-t border-rail-line px-4 pt-2.5">
+        <div className="truncate text-[12px] font-medium text-white" title={fullName}>
           {fullName}
         </div>
-        <div className="text-[11.5px] text-ink-3" data-testid="viewer-role">
+        <div className="text-[11.5px] text-rail-ink-2" data-testid="viewer-role">
           {roleLabel}
         </div>
         <form action={signOut} className="mt-2">
-          <Button type="submit" variant="ghost" size="sm" className="w-full justify-start px-2">
+          <Button
+            type="submit"
+            size="sm"
+            className="w-full justify-start border-0 bg-transparent px-2 text-rail-ink-2 hover:bg-rail-hover hover:text-white"
+          >
             Sign out
           </Button>
         </form>

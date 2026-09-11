@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { loadEnquiries } from "@/lib/enquiries";
+import { loadMasters } from "@/lib/masters";
 import { createClient } from "@/lib/supabase/server";
 
 import { PAGE_SIZE, parseEnquiriesParams } from "../assign/filters";
@@ -44,16 +45,11 @@ export default async function Page({
   ).toString();
 
   const supabase = await createClient();
-  const [list, teachers, institutes, courses, subjects, contents, terms, sources, staff] =
+
+  const masters = await loadMasters();
+  const [list, staff] =
     await Promise.all([
       loadEnquiries(filters),
-      supabase.from("teachers").select("id, name").eq("is_active", true).order("name"),
-      supabase.from("institutes").select("id, name").eq("is_active", true).order("name"),
-      supabase.from("courses").select("id, name").eq("is_active", true).order("sort_order").order("name"),
-      supabase.from("subjects").select("id, name, course_id").eq("is_active", true).order("sort_order").order("name"),
-      supabase.from("contents").select("id, name").eq("is_active", true).order("priority"),
-      supabase.from("terms").select("id, name").eq("is_active", true).order("sort_order"),
-      supabase.from("sources").select("id, name").eq("is_active", true).order("name"),
       supabase
         .from("profiles")
         .select("id, full_name")
@@ -88,21 +84,21 @@ export default async function Page({
           stage: filters.stages ?? [],
         }}
         masters={{
-          teachers: teachers.data ?? [],
-          institutes: institutes.data ?? [],
-          courses: courses.data ?? [],
-          subjects: subjects.data ?? [],
-          contents: contents.data ?? [],
-          terms: terms.data ?? [],
-          sources: sources.data ?? [],
+          teachers: masters.teachers,
+          institutes: masters.institutes,
+          courses: masters.courses,
+          subjects: masters.subjects,
+          contents: masters.contents,
+          terms: masters.terms,
+          sources: masters.sources,
         }}
         panelMasters={{
-          teachers: teachers.data ?? [],
-          courses: courses.data ?? [],
-          subjects: subjects.data ?? [],
-          contents: contents.data ?? [],
-          terms: terms.data ?? [],
-          sources: sources.data ?? [],
+          teachers: masters.teachers,
+          courses: masters.courses,
+          subjects: masters.subjects,
+          contents: masters.contents,
+          terms: masters.terms,
+          sources: masters.sources,
         }}
         selected={{
           counsellor: one(sp.counsellor) ?? "",
