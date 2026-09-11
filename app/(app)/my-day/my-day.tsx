@@ -22,6 +22,7 @@ import {
   ENQUIRY_STATUS_LABELS,
   OFFER_STATUS_FILTER,
   OUTCOME_SHORT,
+  offerStatusLabel,
   offerStatusOf,
 } from "@/lib/enquiry-labels";
 import { formatDate, formatTime } from "@/lib/format";
@@ -245,11 +246,9 @@ export function MyDay({
                   {r.offer_names?.length ? (
                     <Badge tone="info">{r.offer_names.join(" · ")}</Badge>
                   ) : null}
-                  {r.status === "lost" ? (
+                  {offerStatusLabel(r.status, r.lost_reason) ? (
                     <Badge tone="warn">
-                      {r.lost_reason === "competitor"
-                        ? "Lost – competitor"
-                        : "Lost – exhausted"}
+                      {offerStatusLabel(r.status, r.lost_reason)}
                     </Badge>
                   ) : null}
                   <span className="text-[12px] text-ink-3">

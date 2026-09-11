@@ -346,6 +346,8 @@ export type Database = {
           next_follow_up_date: string | null
           product_text: string | null
           re_enquired_at: string | null
+          reopened_from_enquiry_id: number | null
+          reopened_via_offer_id: string | null
           source_id: string | null
           status: Database["public"]["Enums"]["enquiry_status"]
           student_id: string
@@ -373,6 +375,8 @@ export type Database = {
           next_follow_up_date?: string | null
           product_text?: string | null
           re_enquired_at?: string | null
+          reopened_from_enquiry_id?: number | null
+          reopened_via_offer_id?: string | null
           source_id?: string | null
           status?: Database["public"]["Enums"]["enquiry_status"]
           student_id: string
@@ -400,6 +404,8 @@ export type Database = {
           next_follow_up_date?: string | null
           product_text?: string | null
           re_enquired_at?: string | null
+          reopened_from_enquiry_id?: number | null
+          reopened_via_offer_id?: string | null
           source_id?: string | null
           status?: Database["public"]["Enums"]["enquiry_status"]
           student_id?: string
@@ -427,6 +433,34 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enquiries_reopened_from_enquiry_id_fkey"
+            columns: ["reopened_from_enquiry_id"]
+            isOneToOne: false
+            referencedRelation: "enquiries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enquiries_reopened_from_enquiry_id_fkey"
+            columns: ["reopened_from_enquiry_id"]
+            isOneToOne: false
+            referencedRelation: "live_enquiries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enquiries_reopened_via_offer_id_fkey"
+            columns: ["reopened_via_offer_id"]
+            isOneToOne: false
+            referencedRelation: "offer_matches"
+            referencedColumns: ["offer_id"]
+          },
+          {
+            foreignKeyName: "enquiries_reopened_via_offer_id_fkey"
+            columns: ["reopened_via_offer_id"]
+            isOneToOne: false
+            referencedRelation: "offers"
             referencedColumns: ["id"]
           },
           {

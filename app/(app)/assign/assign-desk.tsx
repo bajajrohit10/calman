@@ -21,6 +21,7 @@ import {
   BUCKET_LABELS,
   ENQUIRY_STATUS_LABELS,
   type AssignmentBucket,
+  offerStatusLabel,
 } from "@/lib/enquiry-labels";
 import { formatDate } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
@@ -549,11 +550,9 @@ export function AssignDesk({
                           {r.offer_names.join(" · ")}
                         </span>
                       ) : null}
-                      {r.status === "lost" ? (
+                      {offerStatusLabel(r.status, r.lost_reason) ? (
                         <Badge tone="warn">
-                          {r.lost_reason === "competitor"
-                            ? "Lost – competitor"
-                            : "Lost – exhausted"}
+                          {offerStatusLabel(r.status, r.lost_reason)}
                         </Badge>
                       ) : null}
                       {r.is_overdue ? <Badge tone="danger">Overdue</Badge> : null}

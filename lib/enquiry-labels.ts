@@ -201,6 +201,7 @@ export const OFFER_STATUS_FILTER = [
   { id: "open", name: "Open" },
   { id: "lost_exhausted", name: "Lost – exhausted" },
   { id: "lost_competitor", name: "Lost – competitor" },
+  { id: "lost_dropped", name: "Lost – dropped" },
 ] as const;
 
 export type OfferStatusKey = (typeof OFFER_STATUS_FILTER)[number]["id"];
@@ -214,5 +215,16 @@ export function offerStatusOf(
   if (status !== "lost") return null;
   if (lostReason === "max_followups") return "lost_exhausted";
   if (lostReason === "competitor") return "lost_competitor";
+  if (lostReason === "dropped") return "lost_dropped";
   return null;
+}
+
+/** The badge for one row's offer status, or null when it is an open lead. */
+export function offerStatusLabel(
+  status: string,
+  lostReason: string | null,
+): string | null {
+  const key = offerStatusOf(status, lostReason);
+  if (!key || key === "open") return null;
+  return OFFER_STATUS_FILTER.find((o) => o.id === key)?.name ?? null;
 }

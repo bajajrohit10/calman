@@ -382,10 +382,11 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
       .from("offer_matches")
       .select("offer_id, end_date")
       .eq("enquiry_id", input.enquiryId)
-      // The same two line states the offer bucket matches on (migration
-      // 0065): a lead that went to a competitor has no open lines left, and
-      // those are exactly the leads §23.5 is about.
-      .in("item_status", ["open", "competitor"])
+      // The same line test the offer bucket uses (migration 0069): anything
+      // they have not bought. A lead that went to a competitor has no open
+      // lines left and a dropped one has none but closed, and those are
+      // exactly the leads §23.5 is about.
+      .neq("item_status", "won")
       .lte("window_from", today)
       .gte("end_date", today)
       .order("end_date")

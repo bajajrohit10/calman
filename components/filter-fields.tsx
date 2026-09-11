@@ -381,7 +381,7 @@ export function LastOutcomeField({
 }
 
 /**
- * Open / Lost – exhausted / Lost – competitor (§23.4).
+ * Open / Lost – exhausted / Lost – competitor / Lost – dropped (§23.4).
  *
  * Only the offer view has these three to choose between — everywhere else the
  * desk is open-only — so the desk renders it beside the Offer filter rather
