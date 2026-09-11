@@ -4,27 +4,27 @@ import { useState, useTransition } from "react";
 
 import { updateEnquiryDetails } from "@/components/call-log/actions";
 import { Button, ErrorNote, Input, Select } from "@/components/ui";
-import {
-  IMPORTANCE_LABELS,
-  LEAD_VERIFICATION_LABELS,
-  type Importance,
-  type LeadVerification,
-} from "@/lib/enquiry-labels";
+import type { Importance, LeadVerification } from "@/lib/enquiry-labels";
 
 export type DetailMaster = { id: string; name: string };
 export type DetailMasters = { terms: DetailMaster[]; sources: DetailMaster[] };
 
 /**
- * The five fields a counsellor learns on a call: who the student is, which
- * attempt they are sitting, where they came from, whether they have a
- * competitor quote, and how serious they are.
+ * Term, source and the student's name — the details a counsellor corrects
+ * after a call rather than decides during one.
+ *
+ * Importance and lead verification used to live here too and no longer do
+ * (Brief 16). They are graded on the call itself, so they sit next to the
+ * outcome in the panel. This editor still sends their current values back
+ * untouched, so the action's shape is unchanged and a save here cannot
+ * silently clear a grading made in the panel.
  *
  * Its own client component so it can sit both inside the call panel and on the
  * student history page — history renders on the server for /students/[mobile]
  * and in the browser for Quick Add, and neither can hold this state itself.
  *
  * What may actually be written is decided by RLS: the column grant on
- * enquiries covers these four, and students covers `name`. Nothing here
+ * enquiries covers these fields, and students covers `name`. Nothing here
  * re-implements that check.
  */
 export function EnquiryDetailsEditor({
@@ -108,26 +108,6 @@ export function EnquiryDetailsEditor({
 
         <label className="flex flex-col gap-1">
           <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-            Importance
-          </span>
-          <Select
-            aria-label="Importance"
-            value={values.importance}
-            onChange={(e) =>
-              setValues((v) => ({ ...v, importance: e.target.value as Importance | "" }))
-            }
-          >
-            <option value="">—</option>
-            {Object.entries(IMPORTANCE_LABELS).map(([v, label]) => (
-              <option key={v} value={v}>
-                {label}
-              </option>
-            ))}
-          </Select>
-        </label>
-
-        <label className="flex flex-col gap-1">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
             Term
           </span>
           <Select
@@ -157,29 +137,6 @@ export function EnquiryDetailsEditor({
             {masters.sources.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
-              </option>
-            ))}
-          </Select>
-        </label>
-
-        <label className="flex flex-col gap-1">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-            Lead verification
-          </span>
-          <Select
-            aria-label="Lead verification"
-            value={values.leadVerification}
-            onChange={(e) =>
-              setValues((v) => ({
-                ...v,
-                leadVerification: e.target.value as LeadVerification | "",
-              }))
-            }
-          >
-            <option value="">—</option>
-            {Object.entries(LEAD_VERIFICATION_LABELS).map(([v, label]) => (
-              <option key={v} value={v}>
-                {label}
               </option>
             ))}
           </Select>

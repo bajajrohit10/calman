@@ -128,6 +128,22 @@ export function outcomeTakesDate(outcome: CallOutcome | ""): boolean {
   return outcome === "follow_up" || outcome === "call_back" || outcome === "noted";
 }
 
+/**
+ * The pill colour for a call's outcome, so a column of them reads as a shape
+ * rather than as words: green closed the sale, red lost it, amber is waiting
+ * on the student, blue is still in play.
+ */
+export function outcomeTone(
+  outcome: CallOutcome,
+): "ok" | "danger" | "neutral" | "info" | "accent" | "warn" {
+  if (outcome === "purchased" || outcome === "resolved") return "ok";
+  if (outcome === "competitor") return "danger";
+  if (outcome === "closed") return "neutral";
+  if (outcome === "call_back") return "warn";
+  if (outcome === "escalated") return "accent";
+  return "info";
+}
+
 export function statusTone(status: EnquiryStatus): "ok" | "danger" | "neutral" | "info" | "accent" {
   if (status === "won") return "ok";
   if (status === "lost") return "danger";

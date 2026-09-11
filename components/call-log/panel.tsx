@@ -14,6 +14,8 @@ import {
 import {
   ISSUE_CATEGORY_LABELS,
   ITEM_STATUS_LABELS,
+  IMPORTANCE_LABELS,
+  LEAD_VERIFICATION_LABELS,
   OUTCOME_LABELS,
   outcomeTakesDate,
   outcomesFor,
@@ -98,6 +100,14 @@ export function CallLogPanel({
   const openItems = enquiry.items.filter((i) => i.status === "open");
 
   const [discussion, setDiscussion] = useState("");
+  // Graded on the call, not remembered and edited later (Brief 16). Seeded
+  // from the enquiry so an unchanged call re-saves what was already there.
+  const [importance, setImportance] = useState<Importance | "">(
+    enquiry.importance ?? "",
+  );
+  const [leadVerification, setLeadVerification] = useState<LeadVerification | "">(
+    enquiry.leadVerification ?? "",
+  );
   const [outcome, setOutcome] = useState<CallOutcome | "">("");
   const [followUpDate, setFollowUpDate] = useState("");
   const [issueCategory, setIssueCategory] = useState<IssueCategory | "">("");
@@ -194,6 +204,8 @@ export function CallLogPanel({
         discussion,
         nextFollowUpDate: outcomeTakesDate(outcome) ? followUpDate || null : null,
         issueCategory: enquiry.type === "after_sale" ? issueCategory : null,
+        importance,
+        leadVerification,
         orderId: purchased ? orderId : enquiry.type === "after_sale" ? orderId : null,
         existingItems: openItems.map((i) => ({
           id: i.id,
@@ -318,6 +330,44 @@ export function CallLogPanel({
               </Select>
             </label>
           ) : null}
+
+          <label className="flex min-w-[210px] flex-col gap-1">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+              Importance
+            </span>
+            <Select
+              aria-label="Importance"
+              value={importance}
+              onChange={(e) => setImportance(e.target.value as Importance | "")}
+            >
+              <option value="">Not graded</option>
+              {Object.entries(IMPORTANCE_LABELS).map(([v, label]) => (
+                <option key={v} value={v}>
+                  {label}
+                </option>
+              ))}
+            </Select>
+          </label>
+
+          <label className="flex min-w-[190px] flex-col gap-1">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+              Lead verification
+            </span>
+            <Select
+              aria-label="Lead verification"
+              value={leadVerification}
+              onChange={(e) =>
+                setLeadVerification(e.target.value as LeadVerification | "")
+              }
+            >
+              <option value="">Not checked</option>
+              {Object.entries(LEAD_VERIFICATION_LABELS).map(([v, label]) => (
+                <option key={v} value={v}>
+                  {label}
+                </option>
+              ))}
+            </Select>
+          </label>
 
           {outcomeTakesDate(outcome) ? (
             <div className="flex flex-col gap-1">

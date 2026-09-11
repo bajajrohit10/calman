@@ -5,7 +5,6 @@ import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 
 import { requireUser } from "@/lib/auth";
-import { istToday } from "@/lib/format";
 import type { Importance, LeadVerification } from "@/lib/enquiry-labels";
 import { isValidMobile, normaliseMobile } from "@/lib/mobile";
 import { createClient } from "@/lib/supabase/server";
@@ -332,30 +331,6 @@ export async function commitChunk(
   // re-upload is mostly re-enquiries, so the per-row round trip was the common
   // path, not the rare one. Falls back to one call per row if the batch fails,
   // so one bad enquiry id cannot cost the whole chunk.
-  // Who, if anyone, is already working these today. A re-enquiry must not take
-  // a lead off the person holding it, and the report has to be able to say so —
-  // "re-enquired" on its own reads as "it is back in New Calls", which for an
-  // assigned lead is exactly what did not happen.
-  const heldBy = new Map<number, string>();
-  if (updating.length) {
-    const { data: held } = await supabase
-      .from("assignments")
-      .select(
-        "enquiry_id, counsellor:profiles!assignments_counsellor_id_fkey ( full_name )",
-      )
-      .eq("date", istToday())
-      .in(
-        "enquiry_id",
-        updating.map((r) => r.existingEnquiryId!),
-      );
-    for (const a of held ?? []) {
-      heldBy.set(
-        a.enquiry_id,
-        (a.counsellor as { full_name: string | null } | null)?.full_name ?? "someone",
-      );
-    }
-  }
-
   if (updating.length) {
     const payload = updating.map((row) => ({
       enquiry_id: row.existingEnquiryId!,
@@ -364,10 +339,9 @@ export async function commitChunk(
       term_id: row.termId,
       importance: row.importance,
       lead_verification: row.leadVerification,
-      // A lead somebody holds today keeps its follow-up date. The database
-      // enforces this too — it is the assignment that decides, not the caller —
-      // but sending the right thing keeps the two from having to disagree.
-      clear_follow_up: (row.returnToNewCalls ?? false) && !heldBy.has(row.existingEnquiryId!),
+      // Returning it to the pool is what also frees today's assignment; the
+      // RPC does both together so they cannot come apart.
+      clear_follow_up: row.returnToNewCalls ?? false,
     }));
 
     const { data, error } = await supabase.rpc("import_re_enquire_many", {

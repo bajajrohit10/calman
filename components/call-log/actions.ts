@@ -39,6 +39,14 @@ export type LogCallInput = {
   discussion: string;
   nextFollowUpDate: string | null;
   issueCategory: IssueCategory | "" | null;
+  /**
+   * Graded on the call (Brief 16). Written to the enquiry only when it
+   * actually changes, so an unchanged call adds nothing to the audit log —
+   * which matters because §5.8 counts a re-grade to A there as a price list
+   * issued, and a no-op save must not count as one.
+   */
+  importance: Importance | "" | null;
+  leadVerification: LeadVerification | "" | null;
   orderId: string | null;
   existingItems: ItemDecision[];
   newItems: NewItem[];
@@ -160,7 +168,9 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
 
   const { data: enquiry, error: enquiryError } = await supabase
     .from("enquiries")
-    .select("id, type, status, student_id, archived_at, students ( mobile )")
+    .select(
+      "id, type, status, student_id, archived_at, importance, lead_verification, students ( mobile )",
+    )
     .eq("id", input.enquiryId)
     .maybeSingle();
 
@@ -306,6 +316,31 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
         .eq("status", "open");
       if (error) return { error: error.message };
     }
+  }
+
+  // ---- 2b. The grading made on this call -----------------------------------
+  // Before the call rather than after, for the same reason the items are: the
+  // recompute the call fires then sees settled values, and the enquiry is
+  // never briefly inconsistent with the call that changed it.
+  //
+  // Only when something actually changed. The audit trigger is what §5.8 reads
+  // for "PLI issued" — an enquiries row whose new importance is A when the old
+  // one was not — so writing the same value back on every call would be
+  // harmless for the data and wrong for the metric.
+  const nextImportance = (input.importance || null) as Importance | null;
+  const nextLead = (input.leadVerification || null) as LeadVerification | null;
+  const gradingChanged =
+    nextImportance !== (enquiry.importance ?? null) ||
+    nextLead !== (enquiry.lead_verification ?? null);
+
+  if (gradingChanged) {
+    const { error } = await supabase
+      .from("enquiries")
+      .update({ importance: nextImportance, lead_verification: nextLead })
+      .eq("id", input.enquiryId);
+    // Not fatal: the call is the record of what happened and must still be
+    // written. A refused grading is a permissions problem worth a server log.
+    if (error) console.error("Could not save the grading:", error.message);
   }
 
   // ---- 3. The call, last ---------------------------------------------------

@@ -392,7 +392,12 @@ export function Importer({ masters }: { masters: ImportMasters }) {
           decision: r.decision,
           // Rule (c) only: a lead that was never called has no follow-up date
           // to clear and is already in New Calls.
-          returnToNewCalls: r.status?.state === "open_called_earlier",
+          // Any re-enquiry of a lead that has been called goes back in the
+          // pool — rule (c), and rule (d) when the user overrides Dismiss with
+          // "Add to New Calls anyway", which is what that option says it does.
+          // Rule (b) is the exception: never called, so already in the pool and
+          // there is nothing to return it from.
+          returnToNewCalls: r.status?.state !== "open_uncalled",
           skipReason: r.invalidReason,
           name: r.name,
           sourceId: r.sourceId,
