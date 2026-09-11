@@ -25,6 +25,7 @@ export type PoolRow = {
   teacher_names: string | null;
   item_count: number;
   created_at: string;
+  re_enquired_at: string | null;
   total_count: number;
 };
 
@@ -249,7 +250,7 @@ export function NewCallsBoard({
               <th className="px-2 py-2">Term</th>
               <th className="px-2 py-2">Teachers</th>
               <th className="px-2 py-2">Product</th>
-              <th className="px-2 py-2">Enquired</th>
+              <th className="px-2 py-2">Arrived</th>
               <th className="px-2 py-2 text-right">Take</th>
             </tr>
           </thead>
@@ -281,7 +282,22 @@ export function NewCallsBoard({
                   {r.product_text ?? "—"}
                 </td>
                 <td className="px-2 py-1.5 whitespace-nowrap text-ink-3">
-                  {formatDate(r.created_at)}
+                  {/* The list sorts by arrival, and for a re-enquired lead that
+                      is the day it came back — so the column has to say so, or
+                      the order reads as a bug. */}
+                  {r.re_enquired_at ? (
+                    <span className="flex flex-col">
+                      <span className="text-ink-2">
+                        {formatDate(r.re_enquired_at)}
+                        <Badge tone="accent">back</Badge>
+                      </span>
+                      <span className="text-[11px]">
+                        first {formatDate(r.created_at)}
+                      </span>
+                    </span>
+                  ) : (
+                    formatDate(r.created_at)
+                  )}
                 </td>
                 <td className="px-2 py-1.5 text-right">
                   <Button

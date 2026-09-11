@@ -326,28 +326,74 @@ export async function commitChunk(
     }
   }
 
-  // ---- 2. re-enquiries and supersedes: one RPC each ------------------------
-  for (const row of updating) {
-    const { error } = await supabase.rpc("import_re_enquire", {
-      p_enquiry_id: row.existingEnquiryId!,
-      p_source_id: row.sourceId ?? undefined,
-      p_product_text: row.productText ?? undefined,
-      p_term_id: row.termId ?? undefined,
-      p_importance: row.importance ?? undefined,
-      p_lead_verification: row.leadVerification ?? undefined,
+  // ---- 2. re-enquiries: one RPC for the chunk ------------------------------
+  // Batched for the same reason the create path is (Brief 5): a morning
+  // re-upload is mostly re-enquiries, so the per-row round trip was the common
+  // path, not the rare one. Falls back to one call per row if the batch fails,
+  // so one bad enquiry id cannot cost the whole chunk.
+  if (updating.length) {
+    const payload = updating.map((row) => ({
+      enquiry_id: row.existingEnquiryId!,
+      source_id: row.sourceId,
+      product_text: row.productText,
+      term_id: row.termId,
+      importance: row.importance,
+      lead_verification: row.leadVerification,
+      clear_follow_up: row.returnToNewCalls ?? false,
+    }));
+
+    const { data, error } = await supabase.rpc("import_re_enquire_many", {
+      p_rows: payload,
       p_import_batch_id: batchId,
-      p_clear_follow_up: row.returnToNewCalls ?? false,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
-    importRows.push({
-      ...base(row),
-      outcome: error ? "skipped" : "re_enquired",
-      skip_reason: error ? error.message : null,
-      student_id: row.existingStudentId,
-      enquiry_id: error ? null : row.existingEnquiryId,
-    });
-    if (error) counts.skipped += 1;
-    else counts.re_enquired += 1;
+
+    const status = new Map<number, { ok: boolean; message: string | null }>();
+    if (!error) {
+      for (const r of (data ?? []) as unknown as {
+        enquiry_id: number;
+        ok: boolean;
+        message: string | null;
+      }[]) {
+        status.set(r.enquiry_id, { ok: r.ok, message: r.message });
+      }
+    } else {
+      // One row at a time, so a single failure is attributed to its own row
+      // rather than losing every re-enquiry in the chunk.
+      for (const row of updating) {
+        const one = await supabase.rpc("import_re_enquire", {
+          p_enquiry_id: row.existingEnquiryId!,
+          p_source_id: row.sourceId ?? undefined,
+          p_product_text: row.productText ?? undefined,
+          p_term_id: row.termId ?? undefined,
+          p_importance: row.importance ?? undefined,
+          p_lead_verification: row.leadVerification ?? undefined,
+          p_import_batch_id: batchId,
+          p_clear_follow_up: row.returnToNewCalls ?? false,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any);
+        status.set(row.existingEnquiryId!, {
+          ok: !one.error,
+          message: one.error?.message ?? null,
+        });
+      }
+    }
+
+    for (const row of updating) {
+      const r = status.get(row.existingEnquiryId!) ?? {
+        ok: false,
+        message: "The re-enquiry was not confirmed",
+      };
+      importRows.push({
+        ...base(row),
+        outcome: r.ok ? "re_enquired" : "skipped",
+        skip_reason: r.ok ? null : r.message,
+        student_id: row.existingStudentId,
+        enquiry_id: r.ok ? row.existingEnquiryId : null,
+      });
+      if (r.ok) counts.re_enquired += 1;
+      else counts.skipped += 1;
+    }
   }
 
   const superseding = creating.filter((r) => r.decision === "supersede" && r.existingEnquiryId);

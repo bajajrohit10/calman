@@ -1587,6 +1587,14 @@ export type Database = {
         }
         Returns: undefined
       }
+      import_re_enquire_many: {
+        Args: { p_import_batch_id?: string; p_rows: Json }
+        Returns: {
+          enquiry_id: number
+          message: string
+          ok: boolean
+        }[]
+      }
       new_calls_facets: {
         Args: {
           p_course_id?: string
@@ -1627,6 +1635,7 @@ export type Database = {
           item_count: number
           mobile: string
           product_text: string
+          re_enquired_at: string
           source_name: string
           student_id: string
           student_name: string
