@@ -357,7 +357,7 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
   // ---- 3. The call, last ---------------------------------------------------
   // call_date and enquiry_type are set by app.calls_before_write();
   // next_follow_up_date is snapped to a working day by the same trigger.
-  const { error: callError } = await supabase.from("calls").insert({
+  const { data: savedCall, error: callError } = await supabase.from("calls").insert({
     enquiry_id: input.enquiryId,
     // Denormalised from the parent and re-asserted by the before-write trigger;
     // the composite FK (enquiry_id, enquiry_type) means a wrong value here is
@@ -371,7 +371,11 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
     // outside the calls table so the slot rule never counts one.
     issue_category: type === "after_sale" ? (input.issueCategory as IssueCategory) : null,
     order_id: orderId,
-  });
+  })
+    // called_at is a column default, so the only way to know the instant the
+    // database recorded is to read it back. The claim below is stamped with it.
+    .select("called_at")
+    .single();
 
   if (callError) return { error: `Could not log the call: ${callError.message}` };
 
@@ -389,11 +393,19 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
   //
   // Purchase only. After-sale work is worked in Tickets, which is its own tab
   // on My Day; an assignment would have it counted in two places at once.
+  //
+  // assigned_at is the call's own called_at, not now(). The assignment exists
+  // *because* of this call, so recording it as having happened a few
+  // milliseconds afterwards is not a rounding detail — My Day asks whether a
+  // call came at or after assigned_at, and with now() the answer for the call
+  // that caused it was no. The lead the counsellor had just finished came back
+  // as still to do.
   if (type === "purchase") {
     const { error: claimError } = await supabase.from("assignments").insert({
       enquiry_id: input.enquiryId,
       date: istToday(),
       counsellor_id: viewer.userId!,
+      assigned_at: savedCall?.called_at ?? new Date().toISOString(),
       // The same bucket taking a lead from the New Calls pool uses: this is
       // the counsellor picking up work for themselves, not a manager handing
       // it out, and My Day's tabs read the bucket to tell those apart.
