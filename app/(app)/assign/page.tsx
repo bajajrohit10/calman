@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/ui";
 import { requireAdminProfile } from "@/lib/auth";
+import { facetsAgreeWithList, loadDeskFacets } from "@/lib/facets";
 import { loadRecommended } from "@/lib/recommended";
 import { createClient } from "@/lib/supabase/server";
 
@@ -30,9 +31,13 @@ export default async function Page({
   ).toString();
 
   const supabase = await createClient();
-  const [list, teachers, courses, subjects, contents, terms, sources, staff] =
+  // The facet counts are a second query over the same scope, issued alongside
+  // the list rather than after it, so the page waits for the slower of the two
+  // and not for their sum.
+  const [list, facetResult, teachers, courses, subjects, contents, terms, sources, staff] =
     await Promise.all([
       loadRecommended(filters),
+      loadDeskFacets(filters),
       supabase.from("teachers").select("id, name").eq("is_active", true).order("name"),
       supabase.from("courses").select("id, name").eq("is_active", true).order("name"),
       supabase.from("subjects").select("id, name, course_id").eq("is_active", true).order("name"),
@@ -76,6 +81,13 @@ export default async function Page({
         rows={list.rows}
         total={list.total}
         error={list.error}
+        facets={facetsAgreeWithList(facetResult.facets, list.total) ?? undefined}
+        facetError={
+          facetResult.error ??
+          (facetResult.facets && facetResult.facets.total !== list.total
+            ? "Filter counts are out of step with the list and are not being shown."
+            : null)
+        }
         date={date}
         page={page}
         pageSize={PAGE_SIZE}

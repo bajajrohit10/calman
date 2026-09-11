@@ -5,7 +5,13 @@ import { isAdmin, requireUser } from "@/lib/auth";
 import { loadEnquiries } from "@/lib/enquiries";
 import { EXPORT_COLUMNS, loadExportRows, MAX_EXPORT, type ExportRow } from "@/lib/export";
 import { loadAllMatching } from "@/lib/recommended";
-import { loadReport, REPORT_COLUMNS } from "@/lib/reports";
+import {
+  loadReport,
+  loadStageReport,
+  REPORT_COLUMNS,
+  STAGE_COLUMNS,
+  STAGE_MEMO_COLUMNS,
+} from "@/lib/reports";
 
 export type ExportResult = {
   error: string | null;
@@ -27,7 +33,8 @@ export async function exportCurrentView(
     | { source: "enquiries"; search: string }
     | { source: "desk"; search: string }
     | { source: "myday"; date: string; counsellorId: string | null }
-    | { source: "report"; from: string; to: string; counsellorId: string | null },
+    | { source: "report"; from: string; to: string; counsellorId: string | null }
+    | { source: "stage"; from: string; to: string; counsellorId: string | null },
 ): Promise<ExportResult> {
   const viewer = await requireUser();
   if (!viewer.profile) return { error: "Your account is not active." };
@@ -59,6 +66,40 @@ export async function exportCurrentView(
         ...REPORT_COLUMNS.map((c) => ({ key: c.key as string, label: c.label })),
       ],
       filename: `calman-report-${input.from}-to-${input.to}`,
+    };
+  }
+
+  // The stage table exports on the same terms, with the memo columns suffixed
+  // so a spreadsheet reader cannot sum the row and get twice the calls.
+  if (input.source === "stage") {
+    const admin = isAdmin(viewer.profile.role);
+    const scope = admin ? input.counsellorId : viewer.userId!;
+    const { rows, error } = await loadStageReport(input.from, input.to, scope);
+    if (error) return { error };
+
+    const withCalls = rows.filter((r) => Number(r.total_calls ?? 0) !== 0);
+    if (!withCalls.length) return { error: "No calls in that range." };
+
+    return {
+      error: null,
+      rows: withCalls.map((r) => ({
+        day: r.day,
+        counsellor: r.counsellor_name,
+        ...Object.fromEntries(
+          [...STAGE_COLUMNS, ...STAGE_MEMO_COLUMNS].map((c) => [c.key, r[c.key]]),
+        ),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      })) as any,
+      columns: [
+        { key: "day", label: "Day" },
+        { key: "counsellor", label: "Counsellor" },
+        ...STAGE_COLUMNS.map((c) => ({ key: c.key as string, label: c.label })),
+        ...STAGE_MEMO_COLUMNS.map((c) => ({
+          key: c.key as string,
+          label: `Of which: ${c.label}`,
+        })),
+      ],
+      filename: `calman-stage-report-${input.from}-to-${input.to}`,
     };
   }
 

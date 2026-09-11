@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       assignments: {
@@ -1005,6 +1030,24 @@ export type Database = {
           purchased_calls: number
         }[]
       }
+      daily_stage_report: {
+        Args: { p_counsellor_id?: string; p_from: string; p_to: string }
+        Returns: {
+          after_sale_calls: number
+          call_backs: number
+          closed: number
+          competitor: number
+          counsellor_id: string
+          counsellor_name: string
+          day: string
+          follow_up_1: number
+          follow_up_2: number
+          follow_up_3: number
+          fresh_calls: number
+          purchased: number
+          total_calls: number
+        }[]
+      }
       enquiries_table: {
         Args: {
           p_close_reason?: Database["public"]["Enums"]["close_reason"]
@@ -1104,6 +1147,24 @@ export type Database = {
         }
         Returns: undefined
       }
+      new_calls_facets: {
+        Args: {
+          p_course_id?: string
+          p_created_from?: string
+          p_created_to?: string
+          p_importance?: Database["public"]["Enums"]["importance"]
+          p_product_text?: string
+          p_source_ids?: string[]
+          p_teacher_id?: string
+          p_term_id?: string
+        }
+        Returns: {
+          facet: string
+          items: number
+          numbers: number
+          value_id: string
+        }[]
+      }
       new_calls_pool: {
         Args: {
           p_course_id?: string
@@ -1180,6 +1241,33 @@ export type Database = {
           top_content_priority: number
           total_count: number
           type: Database["public"]["Enums"]["enquiry_type"]
+        }[]
+      }
+      recommended_facets: {
+        Args: {
+          p_content_id?: string
+          p_counsellor_id?: string
+          p_course_id?: string
+          p_created_from?: string
+          p_created_to?: string
+          p_date?: string
+          p_discussion?: string
+          p_follow_up_from?: string
+          p_follow_up_to?: string
+          p_importance?: Database["public"]["Enums"]["importance"]
+          p_include_not_due?: boolean
+          p_source_id?: string
+          p_status?: Database["public"]["Enums"]["enquiry_status"]
+          p_subject_id?: string
+          p_teacher_id?: string
+          p_term_id?: string
+          p_type?: Database["public"]["Enums"]["enquiry_type"]
+        }
+        Returns: {
+          facet: string
+          items: number
+          numbers: number
+          value_id: string
         }[]
       }
       supersede_enquiry: { Args: { p_enquiry_id: number }; Returns: undefined }
@@ -1383,6 +1471,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       assignment_bucket: [

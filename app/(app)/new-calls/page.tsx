@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
+import { facetsAgreeWithList, loadNewCallsFacets } from "@/lib/facets";
 import { createClient } from "@/lib/supabase/server";
 
 import { PAGE_SIZE, parseNewCallsParams } from "./filters";
@@ -21,13 +22,14 @@ export default async function Page({
   const { page, sourceIds, filters } = parseNewCallsParams((k) => one(sp[k]));
 
   const supabase = await createClient();
-  const [list, teachers, courses, terms, sources] = await Promise.all([
+  const [list, facetResult, teachers, courses, terms, sources] = await Promise.all([
     supabase.rpc("new_calls_pool", {
       ...filters,
       p_limit: PAGE_SIZE,
       p_offset: (page - 1) * PAGE_SIZE,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any),
+    loadNewCallsFacets(filters),
     supabase.from("teachers").select("id, name").eq("is_active", true).order("name"),
     supabase.from("courses").select("id, name").eq("is_active", true).order("name"),
     supabase.from("terms").select("id, name").eq("is_active", true).order("sort_order"),
@@ -51,6 +53,16 @@ export default async function Page({
         rows={rows}
         total={rows[0]?.total_count ?? 0}
         error={list.error?.message ?? null}
+        facets={
+          facetsAgreeWithList(facetResult.facets, rows[0]?.total_count ?? 0) ?? undefined
+        }
+        facetError={
+          facetResult.error ??
+          (facetResult.facets &&
+          facetResult.facets.total !== (rows[0]?.total_count ?? 0)
+            ? "Filter counts are out of step with the list and are not being shown."
+            : null)
+        }
         page={page}
         pageSize={PAGE_SIZE}
         search={search}

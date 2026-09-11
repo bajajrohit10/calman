@@ -2,7 +2,7 @@ import "server-only";
 
 import { fetchAllRows } from "@/lib/paged";
 import { createClient } from "@/lib/supabase/server";
-import type { ReportRow } from "@/lib/report-shape";
+import type { ReportRow, StageRow } from "@/lib/report-shape";
 
 export * from "@/lib/report-shape";
 
@@ -22,6 +22,33 @@ export async function loadReport(
   const { rows, error, truncated } = await fetchAllRows<ReportRow>((rangeFrom, rangeTo) =>
     supabase
       .rpc("daily_counsellor_report", {
+        p_from: from,
+        p_to: to,
+        p_counsellor_id: counsellorId ?? undefined,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any)
+      .range(rangeFrom, rangeTo) as never,
+  );
+
+  if (error) return { rows: [], error };
+  return { rows, error: null, truncated };
+}
+
+/**
+ * §5.8 stage-wise report. Same paging discipline as loadReport: days × people
+ * passes 1,000 rows inside a quarter for a team of a dozen, and the cap is
+ * silent.
+ */
+export async function loadStageReport(
+  from: string,
+  to: string,
+  counsellorId: string | null,
+): Promise<{ rows: StageRow[]; error: string | null; truncated?: boolean }> {
+  const supabase = await createClient();
+
+  const { rows, error, truncated } = await fetchAllRows<StageRow>((rangeFrom, rangeTo) =>
+    supabase
+      .rpc("daily_stage_report", {
         p_from: from,
         p_to: to,
         p_counsellor_id: counsellorId ?? undefined,

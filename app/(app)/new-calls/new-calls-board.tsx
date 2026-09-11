@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-import { Badge, Button, ErrorNote, Input, Select, cx } from "@/components/ui";
+import { FacetSelect } from "@/components/filter-fields";
+import { Badge, Button, ErrorNote, Input, cx } from "@/components/ui";
+import { countLabel, orderOptions, type FacetMap } from "@/lib/facet-shape";
 import { IMPORTANCE_LABELS, type Importance } from "@/lib/enquiry-labels";
 import { formatDate } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
@@ -28,6 +30,10 @@ export type PoolRow = {
 
 type Master = { id: string; name: string };
 
+const IMPORTANCE_OPTIONS: Master[] = Object.entries(IMPORTANCE_LABELS).map(
+  ([id, name]) => ({ id, name }),
+);
+
 export function NewCallsBoard({
   rows,
   total,
@@ -38,6 +44,8 @@ export function NewCallsBoard({
   sourceIds,
   masters,
   selected,
+  facets,
+  facetError,
 }: {
   rows: PoolRow[];
   total: number;
@@ -53,6 +61,9 @@ export function NewCallsBoard({
     sources: Master[];
   };
   selected: Record<string, string>;
+  /** Absent when the counts could not be trusted; see lib/facets.ts. */
+  facets?: FacetMap;
+  facetError?: string | null;
 }) {
   const router = useRouter();
   const [result, setResult] = useState<TakeResult | null>(null);
@@ -100,56 +111,62 @@ export function NewCallsBoard({
               defaultValue={sourceIds}
               className="rounded-md border border-line-2 bg-surface px-2 py-1 text-[13px]"
             >
-              {masters.sources.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
+              {orderOptions(masters.sources, facets?.byFacet.source).map((s) => (
+                <option
+                  key={s.id}
+                  value={s.id}
+                  className={
+                    facets && !(facets.byFacet.source?.[s.id]?.numbers ?? 0)
+                      ? "text-ink-3"
+                      : undefined
+                  }
+                >
+                  {facets
+                    ? countLabel(s.name, "source", facets.byFacet.source?.[s.id])
+                    : s.name}
                 </option>
               ))}
             </select>
           </label>
 
           <Labelled label="Course">
-            <Select name="course" defaultValue={selected.course}>
-              <option value="">Any</option>
-              {masters.courses.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
+            <FacetSelect
+              name="course"
+              facet="course"
+              options={masters.courses}
+              value={selected.course}
+              facets={facets}
+            />
           </Labelled>
 
           <Labelled label="Teacher">
-            <Select name="teacher" defaultValue={selected.teacher}>
-              <option value="">Any</option>
-              {masters.teachers.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </Select>
+            <FacetSelect
+              name="teacher"
+              facet="teacher"
+              options={masters.teachers}
+              value={selected.teacher}
+              facets={facets}
+            />
           </Labelled>
 
           <Labelled label="Importance">
-            <Select name="importance" defaultValue={selected.importance}>
-              <option value="">Any</option>
-              {Object.entries(IMPORTANCE_LABELS).map(([v, label]) => (
-                <option key={v} value={v}>
-                  {label}
-                </option>
-              ))}
-            </Select>
+            <FacetSelect
+              name="importance"
+              facet="importance"
+              options={IMPORTANCE_OPTIONS}
+              value={selected.importance}
+              facets={facets}
+            />
           </Labelled>
 
           <Labelled label="Term">
-            <Select name="term" defaultValue={selected.term}>
-              <option value="">Any</option>
-              {masters.terms.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </Select>
+            <FacetSelect
+              name="term"
+              facet="term"
+              options={masters.terms}
+              value={selected.term}
+              facets={facets}
+            />
           </Labelled>
 
           <Labelled label="Product text contains">
@@ -199,6 +216,11 @@ export function NewCallsBoard({
       </form>
 
       {error ? <ErrorNote>{error}</ErrorNote> : null}
+      {facetError ? (
+        <p className="text-[12px] text-warn" role="status">
+          {facetError}
+        </p>
+      ) : null}
       {result?.error ? <ErrorNote>{result.error}</ErrorNote> : null}
       {result && !result.error ? (
         <p className="text-[12.5px] text-ok" role="status">

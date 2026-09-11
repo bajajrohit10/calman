@@ -5,7 +5,17 @@ import Link from "next/link";
 import { ExportButton } from "@/components/export-button";
 import { Button, ErrorNote, Input, Select, cx } from "@/components/ui";
 import { formatDate } from "@/lib/format";
-import { REPORT_COLUMNS, type Grain, type ReportMetric, type ReportRow } from "@/lib/report-shape";
+import {
+  ALL_STAGE_METRICS,
+  REPORT_COLUMNS,
+  STAGE_COLUMNS,
+  STAGE_MEMO_COLUMNS,
+  type Grain,
+  type ReportMetric,
+  type ReportRow,
+  type StageMetric,
+  type StageRow,
+} from "@/lib/report-shape";
 
 /**
  * §5.8. The daily table and the team summary are the same numbers: the
@@ -16,6 +26,8 @@ export function ReportsView({
   rows,
   error,
   summary,
+  stageRows,
+  stageSummary,
   from,
   to,
   grain,
@@ -26,6 +38,8 @@ export function ReportsView({
   rows: ReportRow[];
   error: string | null;
   summary: { bucket: string; totals: Record<ReportMetric, number> }[];
+  stageRows: StageRow[];
+  stageSummary: { bucket: string; totals: Record<StageMetric, number> }[];
   from: string;
   to: string;
   grain: Grain;
@@ -38,6 +52,18 @@ export function ReportsView({
   const active = rows.filter((r) =>
     REPORT_COLUMNS.some((c) => Number(r[c.key] ?? 0) !== 0),
   );
+
+  const activeStage = stageRows.filter((r) => Number(r.total_calls ?? 0) !== 0);
+
+  // The footer totals the whole range, memo columns included — they are shown
+  // in the same row but stay visually separated, because adding them to the
+  // stage columns would double-count.
+  const stageTotals = Object.fromEntries(
+    ALL_STAGE_METRICS.map((k) => [
+      k,
+      stageRows.reduce((sum, r) => sum + Number(r[k] ?? 0), 0),
+    ]),
+  ) as Record<StageMetric, number>;
 
   const fmt = (key: ReportMetric, value: number) =>
     key === "purchased_amount"
@@ -211,6 +237,155 @@ export function ReportsView({
           and call backs both exclude it, so the three never double-count a call. PLI
           issued excludes bulk imports. Overdue carried forward is what was on the
           list that day and never called.
+        </p>
+      </section>
+
+      {/* -------------------------- stage-wise -------------------------- */}
+      <section>
+        <div className="mb-1.5 flex flex-wrap items-center gap-3">
+          <h2 className="text-[13px] font-semibold text-ink">Stage-wise, by counsellor</h2>
+          <div className="ml-auto">
+            <ExportButton
+              source="stage"
+              from={from}
+              to={to}
+              counsellorId={counsellorId}
+            />
+          </div>
+        </div>
+        <div className="overflow-x-auto rounded-lg border border-line bg-surface">
+          <table className="w-full min-w-[1040px] border-collapse text-[12.5px]">
+            <thead>
+              {/* Two header rows so the memo columns can never be read as part
+                  of the total. The stage columns are a partition; the memos cut
+                  the same calls a second way. */}
+              <tr className="border-b border-line bg-sunk/40 text-left text-[11px] uppercase tracking-wider text-ink-3">
+                <th className="px-2 py-1.5" colSpan={2} />
+                <th
+                  className="border-l border-line px-2 py-1.5 text-center"
+                  colSpan={STAGE_COLUMNS.length}
+                >
+                  By stage — these add up to Total calls
+                </th>
+                <th
+                  className="border-l border-line px-2 py-1.5 text-center"
+                  colSpan={STAGE_MEMO_COLUMNS.length}
+                >
+                  Of which — do not add these in
+                </th>
+              </tr>
+              <tr className="border-b border-line bg-sunk/40 text-left text-[11px] uppercase tracking-wider text-ink-3">
+                <th className="px-2 py-2">Day</th>
+                <th className="px-2 py-2">Counsellor</th>
+                {STAGE_COLUMNS.map((c, i) => (
+                  <th
+                    key={c.key}
+                    className={cx(
+                      "px-2 py-2 text-right",
+                      i === 0 && "border-l border-line",
+                      c.key === "total_calls" && "text-ink-2",
+                    )}
+                  >
+                    {c.label}
+                  </th>
+                ))}
+                {STAGE_MEMO_COLUMNS.map((c, i) => (
+                  <th
+                    key={c.key}
+                    className={cx("px-2 py-2 text-right", i === 0 && "border-l border-line")}
+                  >
+                    {c.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {activeStage.map((r) => (
+                <tr
+                  key={`${r.day}-${r.counsellor_id}`}
+                  className="border-b border-line last:border-b-0"
+                >
+                  <td className="px-2 py-1.5 whitespace-nowrap text-ink-3">
+                    {formatDate(r.day)}
+                  </td>
+                  <td className="px-2 py-1.5 text-ink">{r.counsellor_name}</td>
+                  {STAGE_COLUMNS.map((c, i) => (
+                    <td
+                      key={c.key}
+                      className={cx(
+                        "px-2 py-1.5 text-right tabular-nums",
+                        i === 0 && "border-l border-line",
+                        c.key === "total_calls" ? "font-medium text-ink" : "text-ink-2",
+                      )}
+                    >
+                      {Number(r[c.key] ?? 0) || "—"}
+                    </td>
+                  ))}
+                  {STAGE_MEMO_COLUMNS.map((c, i) => (
+                    <td
+                      key={c.key}
+                      className={cx(
+                        "px-2 py-1.5 text-right tabular-nums text-ink-3",
+                        i === 0 && "border-l border-line",
+                      )}
+                    >
+                      {Number(r[c.key] ?? 0) || "—"}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              {activeStage.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={STAGE_COLUMNS.length + STAGE_MEMO_COLUMNS.length + 2}
+                    className="px-3 py-8 text-center text-ink-3"
+                  >
+                    No calls in this range.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+            {stageSummary.length ? (
+              <tfoot>
+                <tr className="border-t-2 border-line bg-sunk/30 text-[12px]">
+                  <td className="px-2 py-1.5 font-medium text-ink" colSpan={2}>
+                    Total
+                  </td>
+                  {STAGE_COLUMNS.map((c, i) => (
+                    <td
+                      key={c.key}
+                      className={cx(
+                        "px-2 py-1.5 text-right font-medium tabular-nums text-ink",
+                        i === 0 && "border-l border-line",
+                      )}
+                    >
+                      {stageTotals[c.key] || "—"}
+                    </td>
+                  ))}
+                  {STAGE_MEMO_COLUMNS.map((c, i) => (
+                    <td
+                      key={c.key}
+                      className={cx(
+                        "px-2 py-1.5 text-right tabular-nums text-ink-3",
+                        i === 0 && "border-l border-line",
+                      )}
+                    >
+                      {stageTotals[c.key] || "—"}
+                    </td>
+                  ))}
+                </tr>
+              </tfoot>
+            ) : null}
+          </table>
+        </div>
+        <p className="mt-1.5 text-[11.5px] text-ink-3">
+          A call&apos;s stage is the enquiry&apos;s slot count on the day it was made — §4.3
+          counts a slot as a distinct day after the fresh call, so two calls on one
+          day share a stage. Fresh calls, 1st, 2nd, 3rd and After-sale together are
+          every call once, and add up to Total calls. Call backs, Purchased,
+          Competitor and Closed are the same calls cut by outcome: a fresh call that
+          ended in a sale is counted in Fresh calls and again in Purchased. 3rd
+          includes anything beyond the third slot.
         </p>
       </section>
     </div>

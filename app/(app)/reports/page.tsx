@@ -1,7 +1,13 @@
 import { PageHeader } from "@/components/ui";
 import { isAdmin, requireUser } from "@/lib/auth";
 import { istDatePlus, istToday } from "@/lib/format";
-import { groupByGrain, loadReport, type Grain } from "@/lib/reports";
+import {
+  groupByGrain,
+  groupStageByGrain,
+  loadReport,
+  loadStageReport,
+  type Grain,
+} from "@/lib/reports";
 import { createClient } from "@/lib/supabase/server";
 
 import { ReportsView } from "./reports-view";
@@ -29,8 +35,9 @@ export default async function Page({
   const counsellorId = admin ? one(sp.counsellor) : viewer.userId!;
 
   const supabase = await createClient();
-  const [report, staff] = await Promise.all([
+  const [report, stage, staff] = await Promise.all([
     loadReport(from, to, counsellorId),
+    loadStageReport(from, to, counsellorId),
     admin
       ? supabase
           .from("profiles")
@@ -48,8 +55,10 @@ export default async function Page({
       />
       <ReportsView
         rows={report.rows}
-        error={report.error}
+        error={report.error ?? stage.error}
         summary={groupByGrain(report.rows, grain)}
+        stageRows={stage.rows}
+        stageSummary={groupStageByGrain(stage.rows, grain)}
         from={from}
         to={to}
         grain={grain}

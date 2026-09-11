@@ -4,6 +4,12 @@ import { useMemo } from "react";
 
 import { Input, Select } from "@/components/ui";
 import { IMPORTANCE_LABELS } from "@/lib/enquiry-labels";
+import {
+  countLabel,
+  isEmptyOption,
+  orderOptions,
+  type FacetMap,
+} from "@/lib/facet-shape";
 
 export type FilterMaster = { id: string; name: string };
 export type FilterSubject = FilterMaster & { course_id: string };
@@ -16,6 +22,54 @@ export type FilterMasters = {
   terms: FilterMaster[];
   sources: FilterMaster[];
 };
+
+/**
+ * A filter select whose options carry their counts (§5.5).
+ *
+ * The counts are faceted: each option says how much is behind it with the
+ * *other* active filters applied, so a counsellor can see where the work is
+ * before committing to a click, and never picks a combination that turns out
+ * to be empty. Busiest first; empty options sink and grey out rather than
+ * vanish. With no facet map — the Enquiries table does not have one — this is
+ * an ordinary select in the master list's own order.
+ */
+export function FacetSelect({
+  name,
+  facet,
+  options,
+  value,
+  anyLabel = "Any",
+  facets,
+}: {
+  name: string;
+  /** The facet key in the map; often but not always the same as `name`. */
+  facet: string;
+  options: FilterMaster[];
+  value: string;
+  anyLabel?: string;
+  facets?: FacetMap;
+}) {
+  const counts = facets?.byFacet[facet];
+  const ordered = useMemo(() => orderOptions(options, counts), [options, counts]);
+
+  return (
+    <Select name={name} defaultValue={value}>
+      <option value="">{anyLabel}</option>
+      {ordered.map((o) => {
+        const empty = isEmptyOption(facet, o.id, facets);
+        return (
+          <option
+            key={o.id}
+            value={o.id}
+            className={empty ? "text-ink-3" : undefined}
+          >
+            {counts ? countLabel(o.name, facet, counts[o.id]) : o.name}
+          </option>
+        );
+      })}
+    </Select>
+  );
+}
 
 export function Labelled({
   label,
@@ -34,6 +88,10 @@ export function Labelled({
   );
 }
 
+const IMPORTANCE_OPTIONS: FilterMaster[] = Object.entries(IMPORTANCE_LABELS).map(
+  ([id, name]) => ({ id, name }),
+);
+
 /**
  * The filter fields the Assignment Desk (§5.5) and the Enquiries table (§5.6)
  * have in common, under the query-string names both screens parse in
@@ -47,10 +105,13 @@ export function CommonFilterFields({
   masters,
   selected,
   roster,
+  facets,
 }: {
   masters: FilterMasters;
   selected: Record<string, string>;
   roster?: { id: string; name: string }[];
+  /** Omit for a screen with no faceted counts. */
+  facets?: FacetMap;
 }) {
   const subjectsForCourse = useMemo(
     () =>
@@ -64,92 +125,85 @@ export function CommonFilterFields({
     <>
       {roster ? (
         <Labelled label="Counsellor">
-          <Select name="counsellor" defaultValue={selected.counsellor ?? ""}>
-            <option value="">Anyone</option>
-            {roster.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </Select>
+          <FacetSelect
+            name="counsellor"
+            facet="counsellor"
+            options={roster}
+            value={selected.counsellor ?? ""}
+            anyLabel="Anyone"
+            facets={facets}
+          />
         </Labelled>
       ) : null}
 
       <Labelled label="Teacher">
-        <Select name="teacher" defaultValue={selected.teacher ?? ""}>
-          <option value="">Any</option>
-          {masters.teachers.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </Select>
+        <FacetSelect
+          name="teacher"
+          facet="teacher"
+          options={masters.teachers}
+          value={selected.teacher ?? ""}
+          facets={facets}
+        />
       </Labelled>
 
       <Labelled label="Course">
-        <Select name="course" defaultValue={selected.course ?? ""}>
-          <option value="">Any</option>
-          {masters.courses.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </Select>
+        <FacetSelect
+          name="course"
+          facet="course"
+          options={masters.courses}
+          value={selected.course ?? ""}
+          facets={facets}
+        />
       </Labelled>
 
       <Labelled label="Subject">
-        <Select name="subject" defaultValue={selected.subject ?? ""}>
-          <option value="">Any</option>
-          {subjectsForCourse.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </Select>
+        <FacetSelect
+          name="subject"
+          facet="subject"
+          options={subjectsForCourse}
+          value={selected.subject ?? ""}
+          facets={facets}
+        />
       </Labelled>
 
       <Labelled label="Content">
-        <Select name="content" defaultValue={selected.content ?? ""}>
-          <option value="">Any</option>
-          {masters.contents.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </Select>
+        <FacetSelect
+          name="content"
+          facet="content"
+          options={masters.contents}
+          value={selected.content ?? ""}
+          facets={facets}
+        />
       </Labelled>
 
       <Labelled label="Term">
-        <Select name="term" defaultValue={selected.term ?? ""}>
-          <option value="">Any</option>
-          {masters.terms.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </Select>
+        <FacetSelect
+          name="term"
+          facet="term"
+          options={masters.terms}
+          value={selected.term ?? ""}
+          facets={facets}
+        />
       </Labelled>
 
       <Labelled label="Source">
-        <Select name="source" defaultValue={selected.source ?? ""}>
-          <option value="">Any</option>
-          {masters.sources.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </Select>
+        <FacetSelect
+          name="source"
+          facet="source"
+          options={masters.sources}
+          value={selected.source ?? ""}
+          facets={facets}
+        />
       </Labelled>
 
       <Labelled label="Importance">
-        <Select name="importance" defaultValue={selected.importance ?? ""}>
-          <option value="">Any</option>
-          {Object.entries(IMPORTANCE_LABELS).map(([v, label]) => (
-            <option key={v} value={v}>
-              {label}
-            </option>
-          ))}
-        </Select>
+        <FacetSelect
+          name="importance"
+          facet="importance"
+          options={IMPORTANCE_OPTIONS}
+          value={selected.importance ?? ""}
+          facets={facets}
+        />
       </Labelled>
 
       <Labelled label="Discussion contains">

@@ -7,11 +7,17 @@ import { useState, useTransition } from "react";
 import { ExportButton } from "@/components/export-button";
 import {
   CommonFilterFields,
+  FacetSelect,
   Labelled,
   type FilterMasters,
 } from "@/components/filter-fields";
 import { Badge, Button, ErrorNote, Input, Select, cx } from "@/components/ui";
-import { BUCKET_LABELS, type AssignmentBucket } from "@/lib/enquiry-labels";
+import type { FacetMap } from "@/lib/facet-shape";
+import {
+  BUCKET_LABELS,
+  ENQUIRY_STATUS_LABELS,
+  type AssignmentBucket,
+} from "@/lib/enquiry-labels";
 import { formatDate } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
 import type { RecommendedRow } from "@/lib/recommended";
@@ -27,6 +33,11 @@ export type DeskMasters = FilterMasters;
 
 export type RosterEntry = { id: string; name: string; role: string; count: number };
 
+const STATUS_OPTIONS = Object.entries(ENQUIRY_STATUS_LABELS).map(([id, name]) => ({
+  id,
+  name,
+}));
+
 /**
  * §5.5. Left: the recommended list for one date, with every input field
  * filterable. Right: who is calling, and how much they already have.
@@ -39,6 +50,8 @@ export function AssignDesk({
   rows,
   total,
   error,
+  facets,
+  facetError,
   date,
   page,
   pageSize,
@@ -51,6 +64,9 @@ export function AssignDesk({
   rows: RecommendedRow[];
   total: number;
   error: string | null;
+  /** Absent when the counts could not be trusted; see lib/facets.ts. */
+  facets?: FacetMap;
+  facetError?: string | null;
   date: string;
   page: number;
   pageSize: number;
@@ -125,7 +141,12 @@ export function AssignDesk({
             <Labelled label="Date">
               <Input type="date" name="date" defaultValue={date} />
             </Labelled>
-            <CommonFilterFields masters={masters} selected={selected} roster={roster} />
+            <CommonFilterFields
+              masters={masters}
+              selected={selected}
+              roster={roster}
+              facets={facets}
+            />
             <Labelled label="Type">
               <Select name="type" defaultValue={selected.type}>
                 <option value="">Purchase (default)</option>
@@ -134,13 +155,14 @@ export function AssignDesk({
               </Select>
             </Labelled>
             <Labelled label="Status">
-              <Select name="status" defaultValue={selected.status}>
-                <option value="">Open (default)</option>
-                <option value="open">Open</option>
-                <option value="won">Won</option>
-                <option value="lost">Lost</option>
-                <option value="closed">Closed</option>
-              </Select>
+              <FacetSelect
+                name="status"
+                facet="status"
+                options={STATUS_OPTIONS}
+                value={selected.status}
+                anyLabel="Open (default)"
+                facets={facets}
+              />
             </Labelled>
           </div>
 
@@ -164,6 +186,11 @@ export function AssignDesk({
         </form>
 
         {error ? <ErrorNote>{error}</ErrorNote> : null}
+        {facetError ? (
+          <p className="text-[12px] text-warn" role="status">
+            {facetError}
+          </p>
+        ) : null}
 
         {/* Cross-page selection. The header checkbox stays "this page only";
             this is the only way to act on rows the manager cannot see. */}
