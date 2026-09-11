@@ -6,6 +6,7 @@ import { useMemo, useRef, useState } from "react";
 
 import { Badge, Button, ErrorNote, Select, cx } from "@/components/ui";
 import type { Importance, LeadVerification } from "@/lib/enquiry-labels";
+import { formatDate, formatDateTime } from "@/lib/format";
 import { isValidMobile, normaliseMobile } from "@/lib/mobile";
 
 import {
@@ -296,12 +297,29 @@ export function Importer({ masters }: { masters: ImportMasters }) {
           continue;
         }
         row.status = statuses.get(row.mobile) ?? null;
-        row.decision =
-          row.status?.state === "open"
-            ? "update"
-            : row.status?.state === "wrong_number"
-              ? "ignore"
-              : "import";
+        // §10.1. The review table still lets the user override any of these.
+        switch (row.status?.state) {
+          // (b) open, never called: keep it, take the new source.
+          case "open_uncalled":
+          // (c) open, last called on an earlier day: same, and back to New
+          //     Calls. Which of the two happens is decided by returnToNewCalls
+          //     at commit time, from the state — not from the decision.
+          case "open_called_earlier":
+            row.decision = "re_enquire";
+            break;
+          // (d) already called today: default to leaving it alone.
+          case "open_called_today":
+            row.decision = "dismiss";
+            break;
+          // (a) a previous wrong number still imports, but tagged.
+          case "wrong_number":
+            row.decision = "import";
+            row.invalidReason = "Previously closed as a wrong number";
+            break;
+          // (a) nothing open, or nothing at all.
+          default:
+            row.decision = "import";
+        }
       }
 
       setReview(draft);
@@ -329,8 +347,9 @@ export function Importer({ masters }: { masters: ImportMasters }) {
 
       const totals: CommitCounts = {
         imported: 0,
-        duplicate_updated: 0,
+        re_enquired: 0,
         duplicate_new_enquiry: 0,
+        dismissed: 0,
         skipped: 0,
       };
 
@@ -340,6 +359,9 @@ export function Importer({ masters }: { masters: ImportMasters }) {
           raw: r.raw,
           mobile: r.mobile,
           decision: r.decision,
+          // Rule (c) only: a lead that was never called has no follow-up date
+          // to clear and is already in New Calls.
+          returnToNewCalls: r.status?.state === "open_called_earlier",
           skipReason: r.invalidReason,
           name: r.name,
           sourceId: r.sourceId,
@@ -375,14 +397,18 @@ export function Importer({ masters }: { masters: ImportMasters }) {
       invalid: [] as ReviewRow[],
       duplicate: [] as ReviewRow[],
       new: [] as ReviewRow[],
-      open: [] as ReviewRow[],
+      open_uncalled: [] as ReviewRow[],
+      open_called_earlier: [] as ReviewRow[],
+      open_called_today: [] as ReviewRow[],
       wrong_number: [] as ReviewRow[],
       resolved: [] as ReviewRow[],
     };
     for (const r of review) {
       if (!r.mobile) g.invalid.push(r);
       else if (r.duplicateOf !== null) g.duplicate.push(r);
-      else if (r.status?.state === "open") g.open.push(r);
+      else if (r.status?.state === "open_uncalled") g.open_uncalled.push(r);
+      else if (r.status?.state === "open_called_earlier") g.open_called_earlier.push(r);
+      else if (r.status?.state === "open_called_today") g.open_called_today.push(r);
       else if (r.status?.state === "wrong_number") g.wrong_number.push(r);
       else if (r.status?.state === "resolved") g.resolved.push(r);
       else g.new.push(r);
@@ -417,8 +443,9 @@ export function Importer({ masters }: { masters: ImportMasters }) {
         <h2 className="text-[14px] font-semibold text-ink">Import finished</h2>
         <ul className="mt-2 text-[13px] text-ink-2">
           <li>New enquiries: {counts?.imported ?? 0}</li>
-          <li>Existing enquiries updated: {counts?.duplicate_updated ?? 0}</li>
+          <li>Re-enquired (source updated, logged): {counts?.re_enquired ?? 0}</li>
           <li>Replaced (previous closed as superseded): {counts?.duplicate_new_enquiry ?? 0}</li>
+          <li>Dismissed (already called today): {counts?.dismissed ?? 0}</li>
           <li>Skipped: {counts?.skipped ?? 0}</li>
         </ul>
         <div className="mt-3 flex gap-2">
@@ -577,10 +604,29 @@ export function Importer({ masters }: { masters: ImportMasters }) {
             onSet={setDecisionFor}
           />
           <Group
-            title="Existing — open enquiry"
+            title="Existing — open, not called yet"
             tone="info"
-            rows={groups.open}
-            options={["update", "supersede", "ignore"]}
+            rows={groups.open_uncalled}
+            options={["re_enquire", "supersede", "ignore"]}
+            onBulk={setDecisionFor}
+            onSet={setDecisionFor}
+          />
+          <Group
+            title="Existing — open, last called earlier"
+            tone="info"
+            rows={groups.open_called_earlier}
+            options={["re_enquire", "supersede", "ignore"]}
+            onBulk={setDecisionFor}
+            onSet={setDecisionFor}
+          />
+          <Group
+            title="Existing — already called today"
+            tone="warn"
+            rows={groups.open_called_today}
+            options={["dismiss", "re_enquire", "ignore"]}
+            // Same decision, different words: here it means overriding a call
+            // a colleague has already made today.
+            labels={{ re_enquire: "Add to New Calls anyway" }}
             onBulk={setDecisionFor}
             onSet={setDecisionFor}
           />
@@ -623,9 +669,10 @@ export function Importer({ masters }: { masters: ImportMasters }) {
 }
 
 const DECISION_LABELS: Record<RowDecision, string> = {
-  import: "Import",
-  update: "Update existing",
+  import: "New enquiry",
+  re_enquire: "Re-enquire",
   supersede: "New enquiry (close old)",
+  dismiss: "Dismiss",
   ignore: "Ignore",
   skip: "Skip",
 };
@@ -635,6 +682,7 @@ function Group({
   tone,
   rows,
   options,
+  labels,
   onBulk,
   onSet,
 }: {
@@ -642,6 +690,8 @@ function Group({
   tone: "ok" | "info" | "danger" | "warn" | "neutral";
   rows: ReviewRow[];
   options: RowDecision[];
+  /** Per-group wording for a decision that reads differently here. */
+  labels?: Partial<Record<RowDecision, string>>;
   onBulk: (rowNumbers: Set<number>, d: RowDecision) => void;
   onSet: (rowNumbers: Set<number>, d: RowDecision) => void;
 }) {
@@ -663,7 +713,7 @@ function Group({
                 onClick={() => onBulk(all, o)}
                 className="rounded border border-line-2 bg-surface-2 px-1.5 py-0.5 text-ink-2 hover:text-ink"
               >
-                {DECISION_LABELS[o]}
+                {labels?.[o] ?? DECISION_LABELS[o]}
               </button>
             ))}
           </span>
@@ -689,6 +739,21 @@ function Group({
                         ? `${r.status.enquiryCount} enquir${r.status.enquiryCount === 1 ? "y" : "ies"} on file`
                         : "not seen before")}
                   </span>
+                  {/* §10.1 rule (d): the operator is being asked to decide
+                      whether to disturb a lead somebody has already called
+                      today, so they need to see who and when. */}
+                  {r.status?.state === "open_called_today" && r.status.lastCallAt ? (
+                    <span className="mt-0.5 block text-[11.5px] text-warn">
+                      called today, {formatDateTime(r.status.lastCallAt)}
+                      {r.status.lastCallBy ? ` by ${r.status.lastCallBy}` : ""}
+                    </span>
+                  ) : null}
+                  {r.status?.state === "open_called_earlier" && r.status.lastCallDate ? (
+                    <span className="mt-0.5 block text-[11.5px] text-ink-3">
+                      last called {formatDate(r.status.lastCallDate)}
+                      {r.status.lastCallBy ? ` by ${r.status.lastCallBy}` : ""}
+                    </span>
+                  ) : null}
                   {r.unmatched.length ? (
                     <span className="mt-0.5 block text-[11.5px] text-warn">
                       not recognised:{" "}
@@ -719,7 +784,7 @@ function Group({
                     >
                       {options.map((o) => (
                         <option key={o} value={o}>
-                          {DECISION_LABELS[o]}
+                          {labels?.[o] ?? DECISION_LABELS[o]}
                         </option>
                       ))}
                     </Select>

@@ -65,7 +65,18 @@ export async function saveMapping(
 /* Status lookup                                                               */
 /* -------------------------------------------------------------------------- */
 
-export type NumberState = "new" | "open" | "wrong_number" | "resolved";
+/**
+ * §10.1. Six states, because the re-upload rules turn on more than "is there
+ * something open": rule (c) needs to know the enquiry was called on an earlier
+ * day, and rule (d) needs today's call with its time and counsellor.
+ */
+export type NumberState =
+  | "new"
+  | "open_uncalled"
+  | "open_called_earlier"
+  | "open_called_today"
+  | "wrong_number"
+  | "resolved";
 
 export type NumberStatus = {
   mobile: string;
@@ -73,6 +84,9 @@ export type NumberStatus = {
   studentName: string | null;
   state: NumberState;
   openEnquiryId: number | null;
+  lastCallAt: string | null;
+  lastCallDate: string | null;
+  lastCallBy: string | null;
   enquiryCount: number;
 };
 
@@ -81,6 +95,9 @@ export type NumberStatus = {
  *
  * Called in chunks from the browser — only the numbers travel, never the file,
  * which is what keeps a 3,000-row import inside the request limits.
+ *
+ * An RPC rather than an embed: the rules need the latest call per enquiry, and
+ * PostgREST cannot express "embed only the most recent child".
  */
 export async function lookupNumbers(mobiles: string[]): Promise<{
   error: string | null;
@@ -94,43 +111,37 @@ export async function lookupNumbers(mobiles: string[]): Promise<{
   if (mobiles.length > 500) return { error: "Too many numbers in one lookup." };
 
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("students")
-    .select("id, mobile, name, enquiries ( id, type, status, close_reason, archived_at )")
-    .in("mobile", mobiles);
+  const { data, error } = await supabase.rpc("import_lookup", {
+    p_mobiles: mobiles,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any);
 
   if (error) return { error: error.message };
 
-  const byMobile = new Map<string, NumberStatus>();
-  for (const s of data ?? []) {
-    const enquiries = (s.enquiries ?? []) as {
-      id: number;
-      type: string;
-      status: string;
-      close_reason: string | null;
-      archived_at: string | null;
-    }[];
-    // §9: duplicate detection still *sees* archived enquiries — the number is
-    // known and the count reflects them — but an archived one is not something
-    // to update or supersede. Treating it as open would let an import write
-    // into a batch that has already been exported, and un-archive it by the
-    // back door.
-    const open = enquiries.find(
-      (e) => e.status === "open" && e.type === "purchase" && !e.archived_at,
-    );
-    const wrong = enquiries.find(
-      (e) => e.close_reason === "wrong_number" && !e.archived_at,
-    );
+  type Row = {
+    mobile: string;
+    student_id: string | null;
+    student_name: string | null;
+    state: NumberState;
+    open_enquiry_id: number | null;
+    last_call_at: string | null;
+    last_call_date: string | null;
+    last_call_by: string | null;
+    enquiry_count: number;
+  };
 
-    byMobile.set(s.mobile, {
-      mobile: s.mobile,
-      studentId: s.id,
-      studentName: s.name,
-      // An open enquiry outranks a historical wrong-number flag: the number is
-      // demonstrably live again.
-      state: open ? "open" : wrong ? "wrong_number" : "resolved",
-      openEnquiryId: open?.id ?? null,
-      enquiryCount: enquiries.length,
+  const byMobile = new Map<string, NumberStatus>();
+  for (const r of (data ?? []) as unknown as Row[]) {
+    byMobile.set(r.mobile, {
+      mobile: r.mobile,
+      studentId: r.student_id,
+      studentName: r.student_name,
+      state: r.state,
+      openEnquiryId: r.open_enquiry_id,
+      lastCallAt: r.last_call_at,
+      lastCallDate: r.last_call_date,
+      lastCallBy: r.last_call_by,
+      enquiryCount: r.enquiry_count,
     });
   }
 
@@ -144,6 +155,9 @@ export async function lookupNumbers(mobiles: string[]): Promise<{
           studentName: null,
           state: "new" as const,
           openEnquiryId: null,
+          lastCallAt: null,
+          lastCallDate: null,
+          lastCallBy: null,
           enquiryCount: 0,
         },
     ),
@@ -154,7 +168,19 @@ export async function lookupNumbers(mobiles: string[]): Promise<{
 /* Commit                                                                      */
 /* -------------------------------------------------------------------------- */
 
-export type RowDecision = "import" | "update" | "supersede" | "ignore" | "skip";
+/**
+ * §10.1. "update" is gone: an import that touches an open enquiry now always
+ * goes through re-enquiry, which overrides the source and logs the arrival.
+ * "dismiss" is rule (d)'s default — the number came in again on a day somebody
+ * has already spoken to them, so there is nothing to do.
+ */
+export type RowDecision =
+  | "import"
+  | "re_enquire"
+  | "supersede"
+  | "dismiss"
+  | "ignore"
+  | "skip";
 
 export type CommitRow = {
   rowNumber: number;
@@ -170,6 +196,11 @@ export type CommitRow = {
   leadVerification: LeadVerification | null;
   existingStudentId: string | null;
   existingEnquiryId: number | null;
+  /**
+   * Rule (c) vs rule (b): clear the follow-up date and put the lead back in
+   * New Calls, or leave the queue alone because it was never called.
+   */
+  returnToNewCalls?: boolean;
 };
 
 export async function createBatch(
@@ -190,8 +221,9 @@ export async function createBatch(
 
 export type CommitCounts = {
   imported: number;
-  duplicate_updated: number;
+  re_enquired: number;
   duplicate_new_enquiry: number;
+  dismissed: number;
   skipped: number;
 };
 
@@ -215,8 +247,9 @@ export async function commitChunk(
   const supabase = await createClient();
   const counts: CommitCounts = {
     imported: 0,
-    duplicate_updated: 0,
+    re_enquired: 0,
     duplicate_new_enquiry: 0,
+    dismissed: 0,
     skipped: 0,
   };
 
@@ -265,7 +298,18 @@ export async function commitChunk(
   const updating: CommitRow[] = [];
 
   for (const row of todo) {
-    if (row.decision === "skip" || row.decision === "ignore" || !row.mobile) {
+    if (row.decision === "dismiss") {
+      // Rule (d): somebody has already spoken to this number today. The row is
+      // recorded so the batch report reconciles, and nothing is written.
+      importRows.push({
+        ...base(row),
+        outcome: "dismissed",
+        skip_reason: row.skipReason ?? "Already called today",
+        student_id: row.existingStudentId,
+        enquiry_id: row.existingEnquiryId,
+      });
+      counts.dismissed += 1;
+    } else if (row.decision === "skip" || row.decision === "ignore" || !row.mobile) {
       importRows.push({
         ...base(row),
         outcome: "skipped",
@@ -275,32 +319,35 @@ export async function commitChunk(
         student_id: row.existingStudentId,
       });
       counts.skipped += 1;
-    } else if (row.decision === "update" && row.existingEnquiryId) {
+    } else if (row.decision === "re_enquire" && row.existingEnquiryId) {
       updating.push(row);
     } else {
       creating.push(row);
     }
   }
 
-  // ---- 2. updates and supersedes: one RPC each, but both are rare ----------
+  // ---- 2. re-enquiries and supersedes: one RPC each ------------------------
   for (const row of updating) {
-    const { error } = await supabase.rpc("import_update_enquiry", {
+    const { error } = await supabase.rpc("import_re_enquire", {
       p_enquiry_id: row.existingEnquiryId!,
       p_source_id: row.sourceId ?? undefined,
       p_product_text: row.productText ?? undefined,
       p_term_id: row.termId ?? undefined,
       p_importance: row.importance ?? undefined,
       p_lead_verification: row.leadVerification ?? undefined,
-    });
+      p_import_batch_id: batchId,
+      p_clear_follow_up: row.returnToNewCalls ?? false,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
     importRows.push({
       ...base(row),
-      outcome: error ? "skipped" : "duplicate_updated",
+      outcome: error ? "skipped" : "re_enquired",
       skip_reason: error ? error.message : null,
       student_id: row.existingStudentId,
       enquiry_id: error ? null : row.existingEnquiryId,
     });
     if (error) counts.skipped += 1;
-    else counts.duplicate_updated += 1;
+    else counts.re_enquired += 1;
   }
 
   const superseding = creating.filter((r) => r.decision === "supersede" && r.existingEnquiryId);
@@ -379,6 +426,26 @@ export async function commitChunk(
 
     const enquiryByStudent = new Map<string, number>();
     for (const e of data) enquiryByStudent.set(e.student_id as string, e.id as number);
+
+    // §10.1: a new enquiry is an arrival too. Without this the source log would
+    // hold only re-uploads, and an enquiry's first arrival — the one that
+    // explains where it came from — would be the one entry missing.
+    const sourceRows = withStudent
+      .map(({ row, studentId }) => ({
+        enquiry_id: enquiryByStudent.get(studentId!),
+        source_id: row.sourceId,
+        import_batch_id: batchId,
+        note: row.decision === "supersede" ? "Re-uploaded; replaced the previous enquiry." : "Arrived in an import.",
+      }))
+      .filter((r) => r.enquiry_id);
+    if (sourceRows.length) {
+      const { error } = await supabase.from("enquiry_sources").insert(sourceRows as never);
+      // Not fatal: the enquiries are already in, and losing a log row must not
+      // fail a 3,000-row import. It is reported on the row instead.
+      if (error) {
+        console.error("enquiry_sources insert failed", error.message);
+      }
+    }
 
     for (const { row, studentId } of withStudent) {
       const enquiryId = enquiryByStudent.get(studentId!);

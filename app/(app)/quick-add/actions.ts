@@ -140,6 +140,18 @@ export async function createEnquiry(
 
   if (enquiryError) return { error: `Could not create the enquiry: ${enquiryError.message}` };
 
+  // §10.1: the source log records every arrival, and a number typed into Quick
+  // Add is an arrival. Nothing about the Quick Add flow changes — the
+  // counsellor still chooses what happens — this only stops the log having a
+  // hole where the hand-entered leads should be.
+  const { error: sourceLogError } = await supabase.from("enquiry_sources").insert({
+    enquiry_id: enquiry.id,
+    source_id: input.sourceId || null,
+    note: "Added in Quick Add.",
+  });
+  // Not fatal: the enquiry exists, and the counsellor has a call to log.
+  if (sourceLogError) console.error("enquiry_sources insert failed", sourceLogError.message);
+
   revalidatePath(`/students/${mobile}`);
   revalidatePath("/quick-add");
 

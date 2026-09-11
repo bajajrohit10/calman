@@ -69,6 +69,14 @@ export type HistoryEnquiry = {
   status: EnquiryStatus;
   /** §9: set means the enquiry has left every working list but is still here. */
   archived_at: string | null;
+  re_enquired_at: string | null;
+  /** §10.1: every source this number arrived through, newest first. */
+  enquiry_sources: {
+    id: string;
+    occurred_at: string;
+    note: string | null;
+    source: { name: string } | null;
+  }[];
   product_text: string | null;
   importance: Importance | null;
   lead_verification: LeadVerification | null;
@@ -102,9 +110,13 @@ const SELECT = `
   enquiries (
     id, type, status, product_text, importance, lead_verification,
     lost_reason, close_reason, next_follow_up_date, term_id, source_id, fresh_call_date,
-    follow_up_slots_used, created_at, closed_at, archived_at,
+    follow_up_slots_used, created_at, closed_at, archived_at, re_enquired_at,
     source:sources ( name ),
     term:terms ( name ),
+    enquiry_sources (
+      id, occurred_at, note,
+      source:sources ( name )
+    ),
     calls!calls_enquiry_id_fkey (
       id, called_at, call_date, outcome, discussion, next_follow_up_date,
       whatsapp_sent, issue_category, order_id,

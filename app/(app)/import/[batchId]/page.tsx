@@ -47,9 +47,12 @@ export default async function Page({
   // is right even if the listing above ever hits its ceiling.
   const OUTCOMES = [
     "imported",
-    "duplicate_updated",
+    "re_enquired",
     "duplicate_new_enquiry",
+    "dismissed",
     "skipped",
+    // Nothing writes this any more (§10.1), but historical batches carry it.
+    "duplicate_updated",
   ] as const;
   const counted = await Promise.all(
     OUTCOMES.map(async (outcome) => {

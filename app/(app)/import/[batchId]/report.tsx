@@ -22,13 +22,17 @@ export type ReportRow = {
 
 const OUTCOME_LABELS: Record<string, string> = {
   imported: "Imported",
-  duplicate_updated: "Updated existing",
+  re_enquired: "Re-enquired",
+  dismissed: "Dismissed — called today",
+  duplicate_updated: "Updated existing (before §10.1)",
   duplicate_new_enquiry: "New enquiry, previous superseded",
   skipped: "Skipped",
 };
 
 const TONES: Record<string, "ok" | "info" | "accent" | "warn"> = {
   imported: "ok",
+  re_enquired: "info",
+  dismissed: "warn",
   duplicate_updated: "info",
   duplicate_new_enquiry: "accent",
   skipped: "warn",

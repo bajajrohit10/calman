@@ -358,6 +358,7 @@ export type Database = {
           lost_reason: Database["public"]["Enums"]["lost_reason"] | null
           next_follow_up_date: string | null
           product_text: string | null
+          re_enquired_at: string | null
           source_id: string | null
           status: Database["public"]["Enums"]["enquiry_status"]
           student_id: string
@@ -384,6 +385,7 @@ export type Database = {
           lost_reason?: Database["public"]["Enums"]["lost_reason"] | null
           next_follow_up_date?: string | null
           product_text?: string | null
+          re_enquired_at?: string | null
           source_id?: string | null
           status?: Database["public"]["Enums"]["enquiry_status"]
           student_id: string
@@ -410,6 +412,7 @@ export type Database = {
           lost_reason?: Database["public"]["Enums"]["lost_reason"] | null
           next_follow_up_date?: string | null
           product_text?: string | null
+          re_enquired_at?: string | null
           source_id?: string | null
           status?: Database["public"]["Enums"]["enquiry_status"]
           student_id?: string
@@ -553,6 +556,62 @@ export type Database = {
             columns: ["teacher_id"]
             isOneToOne: false
             referencedRelation: "teachers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      enquiry_sources: {
+        Row: {
+          enquiry_id: number
+          id: string
+          import_batch_id: string | null
+          note: string | null
+          occurred_at: string
+          source_id: string | null
+        }
+        Insert: {
+          enquiry_id: number
+          id?: string
+          import_batch_id?: string | null
+          note?: string | null
+          occurred_at?: string
+          source_id?: string | null
+        }
+        Update: {
+          enquiry_id?: number
+          id?: string
+          import_batch_id?: string | null
+          note?: string | null
+          occurred_at?: string
+          source_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "enquiry_sources_enquiry_id_fkey"
+            columns: ["enquiry_id"]
+            isOneToOne: false
+            referencedRelation: "enquiries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enquiry_sources_enquiry_id_fkey"
+            columns: ["enquiry_id"]
+            isOneToOne: false
+            referencedRelation: "live_enquiries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enquiry_sources_import_batch_id_fkey"
+            columns: ["import_batch_id"]
+            isOneToOne: false
+            referencedRelation: "import_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enquiry_sources_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "sources"
             referencedColumns: ["id"]
           },
         ]
@@ -1501,9 +1560,25 @@ export type Database = {
           type: Database["public"]["Enums"]["enquiry_type"]
         }[]
       }
-      import_update_enquiry: {
+      import_lookup: {
+        Args: { p_mobiles: string[] }
+        Returns: {
+          enquiry_count: number
+          last_call_at: string
+          last_call_by: string
+          last_call_date: string
+          mobile: string
+          open_enquiry_id: number
+          state: string
+          student_id: string
+          student_name: string
+        }[]
+      }
+      import_re_enquire: {
         Args: {
+          p_clear_follow_up?: boolean
           p_enquiry_id: number
+          p_import_batch_id?: string
           p_importance?: Database["public"]["Enums"]["importance"]
           p_lead_verification?: Database["public"]["Enums"]["lead_verification"]
           p_product_text?: string
@@ -1710,6 +1785,8 @@ export type Database = {
         | "duplicate_updated"
         | "duplicate_new_enquiry"
         | "skipped"
+        | "re_enquired"
+        | "dismissed"
       importance: "a" | "b" | "c" | "d"
       issue_category:
         | "video_access"
@@ -1883,6 +1960,8 @@ export const Constants = {
         "duplicate_updated",
         "duplicate_new_enquiry",
         "skipped",
+        "re_enquired",
+        "dismissed",
       ],
       importance: ["a", "b", "c", "d"],
       issue_category: [
