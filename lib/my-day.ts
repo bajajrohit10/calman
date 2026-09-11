@@ -56,6 +56,9 @@ export type MyDayRow = {
   assignment_label: string | null;
   /** Brief 18: which offers put this on the list, for the Offer Calls tab. */
   offer_names: string[] | null;
+  offer_ids: string[] | null;
+  /** Brief 23: an offer lead may be lost; the Offer tab filters on which. */
+  lost_reason: string | null;
 };
 
 /** A ticket, plus the one thing the Tickets screen does not need to know. */

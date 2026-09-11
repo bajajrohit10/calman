@@ -52,6 +52,9 @@ export type RecommendedRow = {
   called_since: boolean;
   /** Brief 18: every offer whose reminder window covers the viewed day. */
   offer_names: string[] | null;
+  offer_ids: string[] | null;
+  /** Brief 23: an offer lead may be lost, and which kind decides the filter. */
+  lost_reason: string | null;
   total_count: number;
 };
 
@@ -86,6 +89,11 @@ export type RecommendedFilters = {
   /** Brief 18: one §6 bucket, and leads matching particular offers. */
   bucket?: string | null;
   offerIds?: string[] | null;
+  /**
+   * Brief 23: which of open / lost-exhausted / lost-competitor the offer
+   * bucket shows. Empty means all three, which is the default.
+   */
+  offerStatuses?: string[] | null;
   limit?: number;
   offset?: number;
 };
@@ -126,6 +134,7 @@ function args(f: RecommendedFilters): Args {
     p_no_detail: list(f.noDetail),
     p_bucket: clean(f.bucket),
     p_offer_ids: list(f.offerIds),
+    p_offer_statuses: list(f.offerStatuses),
     p_limit: f.limit ?? 50,
     p_offset: f.offset ?? 0,
   } as Args;

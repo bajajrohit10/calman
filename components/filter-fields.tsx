@@ -8,6 +8,7 @@ import {
   IMPORTANCE_LABELS,
   LAST_OUTCOME_FILTER,
   NO_DETAIL,
+  OFFER_STATUS_FILTER,
   OUTCOME_LABELS,
   STAGE_FILTER_LABELS,
 } from "@/lib/enquiry-labels";
@@ -374,6 +375,34 @@ export function LastOutcomeField({
         options={LAST_OUTCOME_OPTIONS}
         values={values}
         facets={facets}
+      />
+    </Labelled>
+  );
+}
+
+/**
+ * Open / Lost – exhausted / Lost – competitor (§23.4).
+ *
+ * Only the offer view has these three to choose between — everywhere else the
+ * desk is open-only — so the desk renders it beside the Offer filter rather
+ * than in the common bar.
+ */
+export function OfferStatusField({
+  values,
+  facets,
+}: {
+  values: string[];
+  facets?: FacetMap;
+}) {
+  return (
+    <Labelled label="Offer lead status">
+      <MultiSelect
+        name="offerStatus"
+        facet="offer_status"
+        options={OFFER_STATUS_FILTER.map((o) => ({ id: o.id, name: o.name }))}
+        values={values}
+        facets={facets}
+        anyLabel="All three"
       />
     </Labelled>
   );

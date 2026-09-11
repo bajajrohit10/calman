@@ -18,7 +18,12 @@ import {
   Select,
   cx,
 } from "@/components/ui";
-import { ENQUIRY_STATUS_LABELS, OUTCOME_SHORT } from "@/lib/enquiry-labels";
+import {
+  ENQUIRY_STATUS_LABELS,
+  OFFER_STATUS_FILTER,
+  OUTCOME_SHORT,
+  offerStatusOf,
+} from "@/lib/enquiry-labels";
 import { formatDate, formatTime } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
 import type { MyDayData, MyDayRow, MyDayTicket } from "@/lib/my-day";
@@ -80,6 +85,12 @@ export function MyDay({
   const [tab, setTab] = useState<TabKey>("new");
   const [view, setView] = useState<"pending" | "done">("pending");
   const [open, setOpen] = useState<PanelPayload | null>(null);
+  const [saveNote, setSaveNote] = useState<string | null>(null);
+  // §23.4. All three to begin with: an offer is aimed at people who have not
+  // bought, and most of those were given up on long ago.
+  const [offerStatuses, setOfferStatuses] = useState<string[]>(
+    OFFER_STATUS_FILTER.map((o) => o.id),
+  );
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -104,7 +115,12 @@ export function MyDay({
         continue;
       }
       // my_day() already returns §6 order, so filtering preserves it.
-      const rows = data.rows.filter((r) => t.buckets.includes(r.bucket));
+      const rows = data.rows.filter(
+        (r) =>
+          t.buckets.includes(r.bucket) &&
+          (t.key !== "offer" ||
+            offerStatuses.includes(offerStatusOf(r.status, r.lost_reason) ?? "open")),
+      );
       out[t.key] = {
         pending: rows.filter((r) => !r.called_today).length,
         total: rows.length,
@@ -113,7 +129,7 @@ export function MyDay({
       };
     }
     return out;
-  }, [data]);
+  }, [data, offerStatuses]);
 
   const current = groups[tab];
 
@@ -165,8 +181,9 @@ export function MyDay({
     });
   }
 
-  function afterSave() {
+  function afterSave(note?: string) {
     const next = openIndex.current;
+    setSaveNote(note ?? null);
     setOpen(null);
     start(async () => {
       const fresh = await refreshMyDay({ date, counsellorId });
@@ -227,6 +244,13 @@ export function MyDay({
                       a click (Brief 18). */}
                   {r.offer_names?.length ? (
                     <Badge tone="info">{r.offer_names.join(" · ")}</Badge>
+                  ) : null}
+                  {r.status === "lost" ? (
+                    <Badge tone="warn">
+                      {r.lost_reason === "competitor"
+                        ? "Lost – competitor"
+                        : "Lost – exhausted"}
+                    </Badge>
                   ) : null}
                   <span className="text-[12px] text-ink-3">
                     {r.teacher_names?.join(", ") || "no interests yet"}
@@ -307,6 +331,21 @@ export function MyDay({
 
       {data.error ? <ErrorNote>{data.error}</ErrorNote> : null}
       {loadError ? <ErrorNote>{loadError}</ErrorNote> : null}
+      {saveNote ? (
+        <p
+          className="rounded-md border border-accent/40 bg-accent-soft px-3 py-1.5 text-[12.5px] text-accent"
+          role="status"
+        >
+          {saveNote}{" "}
+          <button
+            type="button"
+            className="underline underline-offset-2"
+            onClick={() => setSaveNote(null)}
+          >
+            Dismiss
+          </button>
+        </p>
+      ) : null}
 
       {/* ---- the five boxes ---- */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
@@ -383,6 +422,30 @@ export function MyDay({
             : "Called today, most recent first."}
         </span>
         {pending ? <span className="text-[11.5px] text-ink-3">working…</span> : null}
+        {/* Only on the Offer tab: every other tab is open leads by
+            construction, and three checkboxes that do nothing are worse than
+            no checkboxes. */}
+        {tab === "offer" ? (
+          <span className="flex flex-wrap items-center gap-2 text-[11.5px]">
+            {OFFER_STATUS_FILTER.map((o) => {
+              const on = offerStatuses.includes(o.id);
+              return (
+                <label key={o.id} className="flex cursor-pointer items-center gap-1 text-ink-2">
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    onChange={() =>
+                      setOfferStatuses((s) =>
+                        on ? s.filter((v) => v !== o.id) : [...s, o.id],
+                      )
+                    }
+                  />
+                  {o.name}
+                </label>
+              );
+            })}
+          </span>
+        ) : null}
         {/* Beside the toggle, not up in the date bar: it exports this tab and
             this half of it, and the control should sit where that is legible. */}
         <span className="ml-auto">

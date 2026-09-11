@@ -12,6 +12,7 @@ import {
   Labelled,
   LastCalledByField,
   LastOutcomeField,
+  OfferStatusField,
   type FilterMasters,
 } from "@/components/filter-fields";
 import { Badge, Button, ErrorNote, ImportanceMark, Input, Select, cx } from "@/components/ui";
@@ -130,6 +131,7 @@ const CHIP_LABELS: Record<string, string> = {
   lastOutcome: "Last outcome",
   q: "Discussion",
   offer: "Offer",
+  offerStatus: "Offer lead status",
   bucket: "Bucket",
   type: "Type",
   status: "Status",
@@ -389,6 +391,13 @@ export function AssignDesk({
                 />
               </Labelled>
             ) : null}
+            {/* §23.4: an offer reaches lost leads as well as open ones, and
+                this is how a manager takes them back out. Shown only in the
+                offer view — every other bucket is open-only, so the field
+                would be three options that do nothing. */}
+            {bucket === "offer" ? (
+              <OfferStatusField values={multi?.offerStatus ?? []} facets={facets} />
+            ) : null}
             <Labelled label="Type">
               <Select name="type" defaultValue={selected.type}>
                 <option value="">Purchase (default)</option>
@@ -539,6 +548,13 @@ export function AssignDesk({
                         >
                           {r.offer_names.join(" · ")}
                         </span>
+                      ) : null}
+                      {r.status === "lost" ? (
+                        <Badge tone="warn">
+                          {r.lost_reason === "competitor"
+                            ? "Lost – competitor"
+                            : "Lost – exhausted"}
+                        </Badge>
                       ) : null}
                       {r.is_overdue ? <Badge tone="danger">Overdue</Badge> : null}
                     </span>

@@ -202,6 +202,7 @@ export type Database = {
           enquiry_id: number
           enquiry_type: Database["public"]["Enums"]["enquiry_type"]
           id: number
+          is_offer_call: boolean
           issue_category: Database["public"]["Enums"]["issue_category"] | null
           next_follow_up_date: string | null
           order_id: string | null
@@ -216,6 +217,7 @@ export type Database = {
           enquiry_id: number
           enquiry_type: Database["public"]["Enums"]["enquiry_type"]
           id?: never
+          is_offer_call?: boolean
           issue_category?: Database["public"]["Enums"]["issue_category"] | null
           next_follow_up_date?: string | null
           order_id?: string | null
@@ -230,6 +232,7 @@ export type Database = {
           enquiry_id?: number
           enquiry_type?: Database["public"]["Enums"]["enquiry_type"]
           id?: never
+          is_offer_call?: boolean
           issue_category?: Database["public"]["Enums"]["issue_category"] | null
           next_follow_up_date?: string | null
           order_id?: string | null
@@ -1438,6 +1441,7 @@ export type Database = {
           end_date: string | null
           enquiry_id: number | null
           item_id: string | null
+          item_status: Database["public"]["Enums"]["item_status"] | null
           offer_id: string | null
           offer_name: string | null
           start_date: string | null
@@ -1699,8 +1703,10 @@ export type Database = {
           item_count: number
           last_call_at: string
           last_outcome: Database["public"]["Enums"]["call_outcome"]
+          lost_reason: Database["public"]["Enums"]["lost_reason"]
           mobile: string
           next_follow_up_date: string
+          offer_ids: string[]
           offer_names: string[]
           product_text: string
           re_enquired_today: boolean
@@ -1830,6 +1836,7 @@ export type Database = {
           p_limit?: number
           p_no_detail?: string[]
           p_offer_ids?: string[]
+          p_offer_statuses?: string[]
           p_offset?: number
           p_source_id?: string
           p_stages?: string[]
@@ -1857,8 +1864,10 @@ export type Database = {
           last_called_by: string
           last_called_by_name: string
           last_outcome: Database["public"]["Enums"]["call_outcome"]
+          lost_reason: Database["public"]["Enums"]["lost_reason"]
           mobile: string
           next_follow_up_date: string
+          offer_ids: string[]
           offer_names: string[]
           product_text: string
           source_id: string
@@ -1897,6 +1906,7 @@ export type Database = {
           p_last_outcomes?: string[]
           p_no_detail?: string[]
           p_offer_ids?: string[]
+          p_offer_statuses?: string[]
           p_source_id?: string
           p_stages?: string[]
           p_status?: Database["public"]["Enums"]["enquiry_status"]
@@ -1911,6 +1921,10 @@ export type Database = {
           numbers: number
           value_id: string
         }[]
+      }
+      reopen_via_offer: {
+        Args: { p_enquiry_id: number; p_offer_id: string }
+        Returns: number
       }
       supersede_enquiry: { Args: { p_enquiry_id: number }; Returns: undefined }
       tickets_list: {

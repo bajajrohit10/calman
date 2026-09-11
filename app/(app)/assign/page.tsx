@@ -140,6 +140,7 @@ export default async function Page({
           lastOutcome: filters.lastOutcomes ?? [],
           importance: filters.importance ?? [],
           offer: filters.offerIds ?? [],
+          offerStatus: filters.offerStatuses ?? [],
         }}
         selected={{
           counsellor: one(sp.counsellor) ?? "",

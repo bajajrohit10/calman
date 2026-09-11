@@ -53,7 +53,16 @@ export type LogCallInput = {
   newItems: NewItem[];
 };
 
-export type LogCallResult = { error: string | null; ok?: string };
+export type LogCallResult = {
+  error: string | null;
+  ok?: string;
+  /**
+   * Set when §23.5 moved the call onto a new enquiry: an offer call to a lost
+   * lead with a live outcome opens one for the student. The screen needs to
+   * know so it can say so rather than silently showing a different row.
+   */
+  reopenedAs?: number;
+};
 
 export type PanelCall = {
   id: number;
@@ -335,6 +344,122 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
 
   const orderId = input.orderId?.trim() || null;
 
+  // ---- 0. Is this an offer call, and what does that change? ----------------
+  //
+  // Derived here rather than taken from the client: whether a call is exempt
+  // from the three-slot rule is not something a form post gets to assert. The
+  // question is the same one app.calls_before_write() asks — is there an offer
+  // assignment for this lead today — and it is asked here as well because the
+  // answer decides, before anything is written, which enquiry the call lands
+  // on at all.
+  const today = istToday();
+  const { data: todaysAssignment } = await supabase
+    .from("assignments")
+    .select("bucket")
+    .eq("enquiry_id", input.enquiryId)
+    .eq("date", today)
+    .maybeSingle();
+
+  const isOfferCall = todaysAssignment?.bucket === "offer";
+
+  // §23.5. A lost enquiry is a finished story and §4.9 keeps it that way, so a
+  // live outcome cannot be written onto it — it would quietly reopen the row
+  // and lose the record that the lead was ever lost. The student gets a new
+  // enquiry instead (§4.8), and the call goes there. closed and competitor are
+  // not live outcomes: they confirm the loss, so they stay on the old row.
+  let targetEnquiryId = input.enquiryId;
+  let reopenedAs: number | undefined;
+
+  if (
+    isOfferCall &&
+    enquiry.status === "lost" &&
+    outcome !== "closed" &&
+    outcome !== "competitor"
+  ) {
+    // Which offer to credit it to: the one closing soonest, which is the one
+    // the counsellor was ringing about.
+    const { data: match } = await supabase
+      .from("offer_matches")
+      .select("offer_id, end_date")
+      .eq("enquiry_id", input.enquiryId)
+      // The same two line states the offer bucket matches on (migration
+      // 0065): a lead that went to a competitor has no open lines left, and
+      // those are exactly the leads §23.5 is about.
+      .in("item_status", ["open", "competitor"])
+      .lte("window_from", today)
+      .gte("end_date", today)
+      .order("end_date")
+      .limit(1)
+      .maybeSingle();
+
+    if (!match?.offer_id) {
+      return {
+        error:
+          "This lead is lost and no offer covers it today, so there is nothing to reopen it under. Refresh the day and try again.",
+      };
+    }
+
+    const { data: newId, error: reopenError } = await supabase.rpc("reopen_via_offer", {
+      p_enquiry_id: input.enquiryId,
+      p_offer_id: match.offer_id,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+
+    if (reopenError) {
+      return { error: `Could not reopen the lead: ${reopenError.message}` };
+    }
+    targetEnquiryId = Number(newId);
+    reopenedAs = targetEnquiryId;
+
+    // The panel showed the dead enquiry's interest lines, so every decision in
+    // front of the counsellor points at an id that now belongs to the wrong
+    // enquiry. reopen_via_offer copied the lines the offer targets, so each
+    // decision is re-pointed at its copy by what the line *is* — the same
+    // teacher, course, subject and content. A decision whose line the offer
+    // does not target has no copy and is dropped: it was never part of what
+    // this call was about.
+    const shape = (i: {
+      teacher_id: string;
+      course_id: string;
+      subject_id: string | null;
+      content_id: string | null;
+    }) => [i.teacher_id, i.course_id, i.subject_id ?? "", i.content_id ?? ""].join("|");
+
+    const [{ data: oldItems }, { data: newItems }] = await Promise.all([
+      supabase
+        .from("enquiry_items")
+        .select("id, teacher_id, course_id, subject_id, content_id")
+        .eq("enquiry_id", input.enquiryId),
+      supabase
+        .from("enquiry_items")
+        .select("id, teacher_id, course_id, subject_id, content_id")
+        .eq("enquiry_id", targetEnquiryId),
+    ]);
+
+    const copyOf = new Map<string, string>();
+    const byShape = new Map((newItems ?? []).map((i) => [shape(i), i.id]));
+    for (const old of oldItems ?? []) {
+      const copy = byShape.get(shape(old));
+      if (copy) copyOf.set(old.id, copy);
+    }
+
+    input = {
+      ...input,
+      existingItems: input.existingItems.flatMap((d) => {
+        const copy = copyOf.get(d.id);
+        return copy ? [{ ...d, id: copy }] : [];
+      }),
+    };
+
+    if (outcome === "purchased" && !input.existingItems.some((d) => d.won)
+        && !input.newItems.some((i) => i.won)) {
+      return {
+        error:
+          "None of the ticked lines are part of this offer, so there is nothing to record the purchase against. Add the line that was bought under Edit interests.",
+      };
+    }
+  }
+
   // ---- 1. New interest lines from "Edit interests" -------------------------
   if (input.newItems.length) {
     const rows = [];
@@ -346,7 +471,7 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
       if (amount === "invalid") return { error: "An amount must be a number." };
 
       rows.push({
-        enquiry_id: input.enquiryId,
+        enquiry_id: targetEnquiryId,
         teacher_id: item.teacherId,
         course_id: item.courseId,
         subject_id: item.subjectId || null,
@@ -432,7 +557,7 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
     const { error } = await supabase
       .from("enquiries")
       .update({ importance: nextImportance, lead_verification: nextLead })
-      .eq("id", input.enquiryId);
+      .eq("id", targetEnquiryId);
     // Not fatal: the call is the record of what happened and must still be
     // written. A refused grading is a permissions problem worth a server log.
     if (error) console.error("Could not save the grading:", error.message);
@@ -442,7 +567,7 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
   // call_date and enquiry_type are set by app.calls_before_write();
   // next_follow_up_date is snapped to a working day by the same trigger.
   const { data: savedCall, error: callError } = await supabase.from("calls").insert({
-    enquiry_id: input.enquiryId,
+    enquiry_id: targetEnquiryId,
     // Denormalised from the parent and re-asserted by the before-write trigger;
     // the composite FK (enquiry_id, enquiry_type) means a wrong value here is
     // rejected outright rather than silently stored.
@@ -455,6 +580,10 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
     // outside the calls table so the slot rule never counts one.
     issue_category: type === "after_sale" ? (input.issueCategory as IssueCategory) : null,
     order_id: orderId,
+    // §23.2. Asserted rather than left to app.calls_before_write() to derive,
+    // because a reopened lead's new enquiry has no assignment yet — the claim
+    // below is what creates it, a moment after this insert.
+    is_offer_call: isOfferCall,
   })
     // called_at is a column default, so the only way to know the instant the
     // database recorded is to read it back. The claim below is stamped with it.
@@ -486,14 +615,16 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
   // as still to do.
   if (type === "purchase") {
     const { error: claimError } = await supabase.from("assignments").insert({
-      enquiry_id: input.enquiryId,
+      enquiry_id: targetEnquiryId,
       date: istToday(),
       counsellor_id: viewer.userId!,
       assigned_at: savedCall?.called_at ?? new Date().toISOString(),
       // The same bucket taking a lead from the New Calls pool uses: this is
       // the counsellor picking up work for themselves, not a manager handing
-      // it out, and My Day's tabs read the bucket to tell those apart.
-      bucket: "fresh",
+      // it out, and My Day's tabs read the bucket to tell those apart. An
+      // offer call keeps its own bucket, so the reopened lead lands in Offer
+      // Calls beside the one it came from and §5.8 counts it under Offers.
+      bucket: isOfferCall ? "offer" : "fresh",
       assigned_by: viewer.userId!,
     });
     // 23505 is the expected outcome whenever the enquiry was already on
@@ -510,7 +641,13 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
   revalidatePath("/my-day");
   revalidatePath("/new-calls");
 
-  return { error: null, ok: "Call logged." };
+  return {
+    error: null,
+    ok: reopenedAs
+      ? `Call logged. This lead was lost, so the call opened enquiry #${reopenedAs} for the student — the old one stays lost in their history.`
+      : "Call logged.",
+    reopenedAs,
+  };
 }
 
 

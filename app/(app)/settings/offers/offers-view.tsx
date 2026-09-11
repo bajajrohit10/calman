@@ -44,7 +44,10 @@ const blankTargets = (): OfferTargets => ({
   contents: [],
 });
 
-const DEFAULT_REMINDER = 5;
+// §23.1. Five days of reminders meant five days of the same leads at the top
+// of the desk; the last day is the default now and a run-up is something you
+// ask for. The database default matches (migration 0064).
+const DEFAULT_REMINDER = 0;
 
 /**
  * §3 Offers, and §7's offer performance beside them.

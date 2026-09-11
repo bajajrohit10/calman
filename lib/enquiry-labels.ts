@@ -186,3 +186,33 @@ export const LAST_OUTCOME_FILTER = [
 export const NO_DETAIL = "__none__";
 
 export type StageFilter = keyof typeof STAGE_FILTER_LABELS;
+
+/**
+ * The three states an offer lead can be in (§23.4).
+ *
+ * An offer is aimed at people who have not bought, and most of those have
+ * already been given up on — so the offer views show all three by default and
+ * these are how a manager takes the dead ones back out. Kept here rather than
+ * in either screen because the Assignment Desk and My Day both filter on them
+ * and a second copy of the mapping is how two screens start meaning different
+ * things by "lost".
+ */
+export const OFFER_STATUS_FILTER = [
+  { id: "open", name: "Open" },
+  { id: "lost_exhausted", name: "Lost – exhausted" },
+  { id: "lost_competitor", name: "Lost – competitor" },
+] as const;
+
+export type OfferStatusKey = (typeof OFFER_STATUS_FILTER)[number]["id"];
+
+/** The key for one row, from the status and reason the database returns. */
+export function offerStatusOf(
+  status: string,
+  lostReason: string | null,
+): OfferStatusKey | null {
+  if (status === "open") return "open";
+  if (status !== "lost") return null;
+  if (lostReason === "max_followups") return "lost_exhausted";
+  if (lostReason === "competitor") return "lost_competitor";
+  return null;
+}

@@ -105,6 +105,7 @@ export function parseDeskParams(get: ParamReader): {
       // separate questions and the preset composes with the rest of the bar.
       bucket: str(get, "bucket"),
       offerIds: many(get, "offer"),
+      offerStatuses: many(get, "offerStatus"),
       lastCalledBy: many(get, "lastCalledBy"),
       lastOutcomes: many(get, "lastOutcome"),
       counsellorId: str(get, "counsellor"),

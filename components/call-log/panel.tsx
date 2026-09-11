@@ -201,7 +201,12 @@ export function CallLogPanel({
   masters: PanelMasters;
   /** Fills {counsellor} in a WhatsApp template. */
   counsellorName?: string | null;
-  onSaved?: () => void;
+  /**
+   * The note carries the one thing the counsellor has to be told after the
+   * panel closes: §23.5 can move a call onto a new enquiry, and a row
+   * silently becoming a different row is worse than no message at all.
+   */
+  onSaved?: (note?: string) => void;
   onCancel?: () => void;
 }) {
   const isPurchase = enquiry.type === "purchase";
@@ -337,7 +342,7 @@ export function CallLogPanel({
           })),
       });
       setResult(res);
-      if (!res.error) onSaved?.();
+      if (!res.error) onSaved?.(res.reopenedAs ? (res.ok ?? undefined) : undefined);
     });
   }
 
