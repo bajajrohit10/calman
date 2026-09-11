@@ -1467,7 +1467,7 @@ export type Database = {
       enquiries_table: {
         Args: {
           p_close_reason?: Database["public"]["Enums"]["close_reason"]
-          p_content_id?: string
+          p_content_ids?: string[]
           p_counsellor_id?: string
           p_course_id?: string
           p_created_from?: string
@@ -1486,7 +1486,7 @@ export type Database = {
           p_source_id?: string
           p_status?: Database["public"]["Enums"]["enquiry_status"]
           p_subject_id?: string
-          p_teacher_id?: string
+          p_teacher_ids?: string[]
           p_term_id?: string
           p_type?: Database["public"]["Enums"]["enquiry_type"]
         }

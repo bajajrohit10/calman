@@ -140,7 +140,7 @@ export function AssignDesk({
       {/* ------------------------------- left ------------------------------- */}
       <div className="min-w-0 flex-1 flex flex-col gap-3">
         <form method="GET" className="rounded-lg border border-line bg-surface p-3">
-          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="flex flex-wrap gap-2">
             <Labelled label="Date">
               <Input type="date" name="date" defaultValue={date} />
             </Labelled>

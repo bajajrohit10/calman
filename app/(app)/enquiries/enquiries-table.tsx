@@ -57,6 +57,7 @@ export function EnquiriesTable({
   counsellorName,
   roster,
   masters,
+  multi,
   panelMasters,
   selected,
 }: {
@@ -72,6 +73,8 @@ export function EnquiriesTable({
   counsellorName: string | null;
   roster: { id: string; name: string }[];
   masters: FilterMasters;
+  /** Teacher and Content are multi-select (§12.1). */
+  multi?: Record<string, string[]>;
   panelMasters: PanelMasters;
   selected: Record<string, string>;
 }) {
@@ -107,12 +110,17 @@ export function EnquiriesTable({
   return (
     <div className="flex flex-col gap-3">
       <form method="GET" className="rounded-lg border border-line bg-surface p-3">
-        <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4">
-          <Labelled label="Mobile">
+        <div className="flex flex-wrap gap-2">
+          <Labelled label="Mobile" wide>
             <Input name="mobile" defaultValue={selected.mobile} placeholder="any part" />
           </Labelled>
 
-          <CommonFilterFields masters={masters} selected={selected} roster={roster} />
+          <CommonFilterFields
+            masters={masters}
+            selected={selected}
+            multi={multi}
+            roster={roster}
+          />
 
           <Labelled label="Type">
             <Select name="type" defaultValue={selected.type}>

@@ -44,7 +44,7 @@ export default async function Page({
   ).toString();
 
   const supabase = await createClient();
-  const [list, institutes, teachers, courses, subjects, contents, terms, sources, staff] =
+  const [list, teachers, institutes, courses, subjects, contents, terms, sources, staff] =
     await Promise.all([
       loadEnquiries(filters),
       supabase.from("teachers").select("id, name").eq("is_active", true).order("name"),
@@ -82,6 +82,10 @@ export default async function Page({
           id: p.id,
           name: p.full_name ?? "(no name)",
         }))}
+        multi={{
+          teacher: filters.teacherIds ?? [],
+          content: filters.contentIds ?? [],
+        }}
         masters={{
           teachers: teachers.data ?? [],
           institutes: institutes.data ?? [],

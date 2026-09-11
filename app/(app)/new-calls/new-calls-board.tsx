@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-import { FacetMultiSelect, FacetSelect } from "@/components/filter-fields";
+import { FacetSelect, Labelled } from "@/components/filter-fields";
+import { MultiSelect } from "@/components/multi-select";
 import { Badge, Button, ErrorNote, Input, cx } from "@/components/ui";
 import type { FacetMap } from "@/lib/facet-shape";
 import { IMPORTANCE_LABELS, type Importance } from "@/lib/enquiry-labels";
@@ -106,9 +107,9 @@ export function NewCallsBoard({
   return (
     <div className="flex flex-col gap-3">
       <form method="GET" className="rounded-lg border border-line bg-surface p-3">
-        <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4">
-          <Labelled label="Source (several)">
-            <FacetMultiSelect
+        <div className="flex flex-wrap gap-2">
+          <Labelled label="Source">
+            <MultiSelect
               name="source"
               facet="source"
               options={masters.sources}
@@ -117,22 +118,12 @@ export function NewCallsBoard({
             />
           </Labelled>
 
-          <Labelled label="Teacher (several)">
-            <FacetMultiSelect
+          <Labelled label="Teacher">
+            <MultiSelect
               name="teacher"
               facet="teacher"
               options={masters.teachers}
               values={teacherIds}
-              facets={facets}
-            />
-          </Labelled>
-
-          <Labelled label="Content (several)">
-            <FacetMultiSelect
-              name="content"
-              facet="content"
-              options={masters.contents}
-              values={contentIds}
               facets={facets}
             />
           </Labelled>
@@ -147,17 +138,15 @@ export function NewCallsBoard({
             />
           </Labelled>
 
-          <Labelled label="Institute">
-            <FacetSelect
-              name="institute"
-              facet="institute"
-              options={masters.institutes}
-              value={selected.institute}
+          <Labelled label="Content">
+            <MultiSelect
+              name="content"
+              facet="content"
+              options={masters.contents}
+              values={contentIds}
               facets={facets}
             />
           </Labelled>
-
-
 
           <Labelled label="Importance">
             <FacetSelect
@@ -179,16 +168,26 @@ export function NewCallsBoard({
             />
           </Labelled>
 
-          <Labelled label="Product text contains">
+          <Labelled label="Institute">
+            <FacetSelect
+              name="institute"
+              facet="institute"
+              options={masters.institutes}
+              value={selected.institute}
+              facets={facets}
+            />
+          </Labelled>
+
+          <Labelled label="Product text contains" wide>
             <Input name="product" defaultValue={selected.product} placeholder="e.g. DT Full" />
           </Labelled>
 
-          <Labelled label="Enquired from">
-            <Input type="date" name="createdFrom" defaultValue={selected.createdFrom} />
-          </Labelled>
-
-          <Labelled label="Enquired to">
-            <Input type="date" name="createdTo" defaultValue={selected.createdTo} />
+          <Labelled label="Enquired between" wide>
+            <div className="flex items-center gap-1.5">
+              <Input type="date" name="createdFrom" defaultValue={selected.createdFrom} />
+              <span className="text-[12px] text-ink-3">→</span>
+              <Input type="date" name="createdTo" defaultValue={selected.createdTo} />
+            </div>
           </Labelled>
         </div>
 
@@ -342,13 +341,3 @@ export function NewCallsBoard({
   );
 }
 
-function Labelled({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-[10.5px] font-medium uppercase tracking-wide text-ink-3">
-        {label}
-      </span>
-      {children}
-    </label>
-  );
-}

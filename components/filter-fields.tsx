@@ -2,7 +2,8 @@
 
 import { useMemo } from "react";
 
-import { Input, Select } from "@/components/ui";
+import { MultiSelect } from "@/components/multi-select";
+import { Input, Select, cx } from "@/components/ui";
 import { IMPORTANCE_LABELS } from "@/lib/enquiry-labels";
 import {
   countLabel,
@@ -73,61 +74,31 @@ export function FacetSelect({
 }
 
 /**
- * A faceted multi-select. Same counts and same ordering as FacetSelect; the
- * difference is that it picks several and means their union.
+ * One filter cell.
  *
- * Rendered as a sized native listbox rather than a pop-up: on the desk a
- * manager is usually picking two or three teachers out of seventy-odd and
- * wants to see the counts side by side while doing it. The value travels
- * comma-joined in one query-string key, which is what the parsers expect.
+ * `flex-1` with a fixed basis is what keeps the bar tidy: the cells wrap and
+ * then stretch to fill their row, so the last row is as full as the ones above
+ * it however many filters a screen has. The grid this replaced left whatever
+ * was left over sitting alone in a quarter-width cell — the Institute row on
+ * New Calls — and needed re-counting every time a filter was added.
  */
-export function FacetMultiSelect({
-  name,
-  facet,
-  options,
-  values,
-  facets,
-  size = 5,
-}: {
-  name: string;
-  facet: string;
-  options: FilterMaster[];
-  values: string[];
-  facets?: FacetMap;
-  size?: number;
-}) {
-  const counts = facets?.byFacet[facet];
-  const ordered = useMemo(() => orderOptions(options, counts), [options, counts]);
-
-  return (
-    <select
-      name={name}
-      multiple
-      size={size}
-      defaultValue={values}
-      className="rounded-md border border-line-2 bg-surface px-2 py-1 text-[13px]"
-    >
-      {ordered.map((o) => {
-        const empty = isEmptyOption(facet, o.id, facets);
-        return (
-          <option key={o.id} value={o.id} className={empty ? "text-ink-3" : undefined}>
-            {facets ? countLabel(o.name, facet, counts?.[o.id]) : o.name}
-          </option>
-        );
-      })}
-    </select>
-  );
-}
-
 export function Labelled({
   label,
   children,
+  wide,
 }: {
   label: string;
   children: React.ReactNode;
+  /** Text search boxes earn twice the room. */
+  wide?: boolean;
 }) {
   return (
-    <label className="flex flex-col gap-1">
+    <label
+      className={cx(
+        "flex min-w-[11rem] flex-col gap-1",
+        wide ? "flex-[2_1_16rem]" : "flex-[1_1_11rem]",
+      )}
+    >
       <span className="text-[10.5px] font-medium uppercase tracking-wide text-ink-3">
         {label}
       </span>
@@ -174,31 +145,18 @@ export function CommonFilterFields({
 
   return (
     <>
-      {roster ? (
-        <Labelled label="Counsellor">
-          <FacetSelect
-            name="counsellor"
-            facet="counsellor"
-            options={roster}
-            value={selected.counsellor ?? ""}
-            anyLabel="Anyone"
-            facets={facets}
-          />
-        </Labelled>
-      ) : null}
-
-      <Labelled label="Institute">
+      <Labelled label="Source">
         <FacetSelect
-          name="institute"
-          facet="institute"
-          options={masters.institutes}
-          value={selected.institute ?? ""}
+          name="source"
+          facet="source"
+          options={masters.sources}
+          value={selected.source ?? ""}
           facets={facets}
         />
       </Labelled>
 
-      <Labelled label="Teacher (several)">
-        <FacetMultiSelect
+      <Labelled label="Teacher">
+        <MultiSelect
           name="teacher"
           facet="teacher"
           options={masters.teachers}
@@ -227,32 +185,12 @@ export function CommonFilterFields({
         />
       </Labelled>
 
-      <Labelled label="Content (several)">
-        <FacetMultiSelect
+      <Labelled label="Content">
+        <MultiSelect
           name="content"
           facet="content"
           options={masters.contents}
           values={multi?.content ?? []}
-          facets={facets}
-        />
-      </Labelled>
-
-      <Labelled label="Term">
-        <FacetSelect
-          name="term"
-          facet="term"
-          options={masters.terms}
-          value={selected.term ?? ""}
-          facets={facets}
-        />
-      </Labelled>
-
-      <Labelled label="Source">
-        <FacetSelect
-          name="source"
-          facet="source"
-          options={masters.sources}
-          value={selected.source ?? ""}
           facets={facets}
         />
       </Labelled>
@@ -267,24 +205,57 @@ export function CommonFilterFields({
         />
       </Labelled>
 
-      <Labelled label="Discussion contains">
+      <Labelled label="Term">
+        <FacetSelect
+          name="term"
+          facet="term"
+          options={masters.terms}
+          value={selected.term ?? ""}
+          facets={facets}
+        />
+      </Labelled>
+
+      <Labelled label="Institute">
+        <FacetSelect
+          name="institute"
+          facet="institute"
+          options={masters.institutes}
+          value={selected.institute ?? ""}
+          facets={facets}
+        />
+      </Labelled>
+
+      {roster ? (
+        <Labelled label="Counsellor">
+          <FacetSelect
+            name="counsellor"
+            facet="counsellor"
+            options={roster}
+            value={selected.counsellor ?? ""}
+            anyLabel="Anyone"
+            facets={facets}
+          />
+        </Labelled>
+      ) : null}
+
+      <Labelled label="Discussion contains" wide>
         <Input name="q" defaultValue={selected.q ?? ""} placeholder="text in any call note" />
       </Labelled>
 
-      <Labelled label="Enquired from">
-        <Input type="date" name="createdFrom" defaultValue={selected.createdFrom ?? ""} />
+      <Labelled label="Enquired between" wide>
+        <div className="flex items-center gap-1.5">
+          <Input type="date" name="createdFrom" defaultValue={selected.createdFrom ?? ""} />
+          <span className="text-[12px] text-ink-3">→</span>
+          <Input type="date" name="createdTo" defaultValue={selected.createdTo ?? ""} />
+        </div>
       </Labelled>
 
-      <Labelled label="Enquired to">
-        <Input type="date" name="createdTo" defaultValue={selected.createdTo ?? ""} />
-      </Labelled>
-
-      <Labelled label="Follow-up from">
-        <Input type="date" name="followUpFrom" defaultValue={selected.followUpFrom ?? ""} />
-      </Labelled>
-
-      <Labelled label="Follow-up to">
-        <Input type="date" name="followUpTo" defaultValue={selected.followUpTo ?? ""} />
+      <Labelled label="Follow-up between" wide>
+        <div className="flex items-center gap-1.5">
+          <Input type="date" name="followUpFrom" defaultValue={selected.followUpFrom ?? ""} />
+          <span className="text-[12px] text-ink-3">→</span>
+          <Input type="date" name="followUpTo" defaultValue={selected.followUpTo ?? ""} />
+        </div>
       </Labelled>
     </>
   );

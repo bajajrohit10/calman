@@ -47,10 +47,10 @@ export type EnquiryFilters = {
   lostReason?: LostReason | null;
   closeReason?: CloseReason | null;
   counsellorId?: string | null;
-  teacherId?: string | null;
+  teacherIds?: string[] | null;
   courseId?: string | null;
   subjectId?: string | null;
-  contentId?: string | null;
+  contentIds?: string[] | null;
   termId?: string | null;
   sourceId?: string | null;
   importance?: Importance | null;
@@ -79,10 +79,10 @@ export async function loadEnquiries(
     p_lost_reason: clean(f.lostReason),
     p_close_reason: clean(f.closeReason),
     p_counsellor_id: clean(f.counsellorId),
-    p_teacher_id: clean(f.teacherId),
+    p_teacher_ids: f.teacherIds?.length ? f.teacherIds : undefined,
     p_course_id: clean(f.courseId),
     p_subject_id: clean(f.subjectId),
-    p_content_id: clean(f.contentId),
+    p_content_ids: f.contentIds?.length ? f.contentIds : undefined,
     p_term_id: clean(f.termId),
     p_source_id: clean(f.sourceId),
     p_importance: clean(f.importance),
