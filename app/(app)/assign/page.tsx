@@ -34,11 +34,12 @@ export default async function Page({
   // The facet counts are a second query over the same scope, issued alongside
   // the list rather than after it, so the page waits for the slower of the two
   // and not for their sum.
-  const [list, facetResult, teachers, courses, subjects, contents, terms, sources, staff] =
+  const [list, facetResult, teachers, institutes, courses, subjects, contents, terms, sources, staff] =
     await Promise.all([
       loadRecommended(filters),
       loadDeskFacets(filters),
       supabase.from("teachers").select("id, name").eq("is_active", true).order("name"),
+      supabase.from("institutes").select("id, name").eq("is_active", true).order("name"),
       supabase.from("courses").select("id, name").eq("is_active", true).order("name"),
       supabase.from("subjects").select("id, name, course_id").eq("is_active", true).order("name"),
       supabase.from("contents").select("id, name").eq("is_active", true).order("priority"),
@@ -96,6 +97,7 @@ export default async function Page({
         roster={roster}
         masters={{
           teachers: teachers.data ?? [],
+          institutes: institutes.data ?? [],
           courses: courses.data ?? [],
           subjects: subjects.data ?? [],
           contents: contents.data ?? [],
@@ -105,6 +107,7 @@ export default async function Page({
         selected={{
           counsellor: one(sp.counsellor) ?? "",
           teacher: one(sp.teacher) ?? "",
+          institute: one(sp.institute) ?? "",
           course: one(sp.course) ?? "",
           subject: one(sp.subject) ?? "",
           content: one(sp.content) ?? "",

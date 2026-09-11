@@ -720,6 +720,38 @@ export type Database = {
           },
         ]
       }
+      institutes: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "institutes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       offer_contents: {
         Row: {
           content_id: string
@@ -1020,22 +1052,33 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          institute_id: string | null
           is_active: boolean
           name: string
         }
         Insert: {
           created_at?: string
           id?: string
+          institute_id?: string | null
           is_active?: boolean
           name: string
         }
         Update: {
           created_at?: string
           id?: string
+          institute_id?: string | null
           is_active?: boolean
           name?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "teachers_institute_id_fkey"
+            columns: ["institute_id"]
+            isOneToOne: false
+            referencedRelation: "institutes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       terms: {
         Row: {
@@ -1475,6 +1518,7 @@ export type Database = {
           p_created_from?: string
           p_created_to?: string
           p_importance?: Database["public"]["Enums"]["importance"]
+          p_institute_id?: string
           p_product_text?: string
           p_source_ids?: string[]
           p_teacher_id?: string
@@ -1493,6 +1537,7 @@ export type Database = {
           p_created_from?: string
           p_created_to?: string
           p_importance?: Database["public"]["Enums"]["importance"]
+          p_institute_id?: string
           p_limit?: number
           p_offset?: number
           p_product_text?: string
@@ -1539,6 +1584,7 @@ export type Database = {
           p_follow_up_to?: string
           p_importance?: Database["public"]["Enums"]["importance"]
           p_include_not_due?: boolean
+          p_institute_id?: string
           p_limit?: number
           p_offset?: number
           p_source_id?: string
@@ -1589,6 +1635,7 @@ export type Database = {
           p_follow_up_to?: string
           p_importance?: Database["public"]["Enums"]["importance"]
           p_include_not_due?: boolean
+          p_institute_id?: string
           p_source_id?: string
           p_status?: Database["public"]["Enums"]["enquiry_status"]
           p_subject_id?: string

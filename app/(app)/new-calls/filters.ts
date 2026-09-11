@@ -22,6 +22,7 @@ export type NewCallsArgs = {
   p_source_ids: string[] | undefined;
   p_course_id: string | undefined;
   p_teacher_id: string | undefined;
+  p_institute_id: string | undefined;
   p_importance: Importance | undefined;
   p_term_id: string | undefined;
   p_created_from: string | undefined;
@@ -51,6 +52,7 @@ export function parseNewCallsParams(get: ParamReader): {
       p_source_ids: sourceIds.length ? sourceIds : undefined,
       p_course_id: opt(str(get, "course")),
       p_teacher_id: opt(str(get, "teacher")),
+      p_institute_id: opt(str(get, "institute")),
       p_importance: opt(str(get, "importance")) as Importance | undefined,
       p_term_id: opt(str(get, "term")),
       p_created_from: opt(str(get, "createdFrom")),

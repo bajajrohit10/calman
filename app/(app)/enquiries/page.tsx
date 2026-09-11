@@ -32,10 +32,11 @@ export default async function Page({
   ).toString();
 
   const supabase = await createClient();
-  const [list, teachers, courses, subjects, contents, terms, sources, staff] =
+  const [list, institutes, teachers, courses, subjects, contents, terms, sources, staff] =
     await Promise.all([
       loadEnquiries(filters),
       supabase.from("teachers").select("id, name").eq("is_active", true).order("name"),
+      supabase.from("institutes").select("id, name").eq("is_active", true).order("name"),
       supabase.from("courses").select("id, name").eq("is_active", true).order("name"),
       supabase.from("subjects").select("id, name, course_id").eq("is_active", true).order("name"),
       supabase.from("contents").select("id, name").eq("is_active", true).order("priority"),
@@ -71,6 +72,7 @@ export default async function Page({
         }))}
         masters={{
           teachers: teachers.data ?? [],
+          institutes: institutes.data ?? [],
           courses: courses.data ?? [],
           subjects: subjects.data ?? [],
           contents: contents.data ?? [],

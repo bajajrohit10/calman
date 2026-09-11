@@ -37,11 +37,13 @@ function FieldInput({
   field,
   defaultValue,
   courses,
+  institutes,
   autoFocus,
 }: {
   field: FieldSpec;
   defaultValue?: unknown;
   courses: Course[];
+  institutes: Course[];
   autoFocus?: boolean;
 }) {
   const value = defaultValue == null ? "" : String(defaultValue);
@@ -52,6 +54,21 @@ function FieldInput({
         {Object.entries(STAGE_LABELS).map(([v, label]) => (
           <option key={v} value={v}>
             {label}
+          </option>
+        ))}
+      </Select>
+    );
+  }
+
+  if (field.kind === "institute") {
+    return (
+      <Select name={field.name} defaultValue={value} required={field.required}>
+        {/* Optional: a teacher with no institute yet is the normal state until
+            the teacher→institute sheet is loaded. */}
+        <option value="">No institute</option>
+        {institutes.map((i) => (
+          <option key={i.id} value={i.id}>
+            {i.name}
           </option>
         ))}
       </Select>
@@ -96,7 +113,7 @@ function FieldInput({
   );
 }
 
-function AddForm({ spec, courses }: { spec: ListSpec; courses: Course[] }) {
+function AddForm({ spec, courses, institutes }: { spec: ListSpec; courses: Course[]; institutes: Course[] }) {
   const [state, action] = useActionState(createItem, EMPTY);
   const [open, setOpen] = useState(false);
 
@@ -122,7 +139,7 @@ function AddForm({ spec, courses }: { spec: ListSpec; courses: Course[] }) {
         {spec.fields.map((field, i) => (
           <div key={field.name} className={cx(field.width ?? "min-w-[220px] flex-1")}>
             <Field label={field.label} hint={field.hint}>
-              <FieldInput field={field} courses={courses} autoFocus={i === 0} />
+              <FieldInput field={field} courses={courses} institutes={institutes} autoFocus={i === 0} />
             </Field>
           </div>
         ))}
@@ -147,10 +164,12 @@ function EditableRow({
   spec,
   row,
   courses,
+  institutes,
 }: {
   spec: ListSpec;
   row: Row;
   courses: Course[];
+  institutes: Course[];
 }) {
   const [saveState, saveAction] = useActionState(updateItem, EMPTY);
   const [activeState, activeAction] = useActionState(setItemActive, EMPTY);
@@ -193,7 +212,7 @@ function EditableRow({
                     <FieldInput
                       field={field}
                       defaultValue={row[field.name]}
-                      courses={courses}
+                      courses={courses} institutes={institutes}
                       autoFocus={i === 0}
                     />
                   </Field>
@@ -237,6 +256,8 @@ function EditableRow({
           display = STAGE_LABELS[(raw as Stage) ?? "any"] ?? String(raw ?? "—");
         } else if (field.kind === "course") {
           display = courses.find((c) => c.id === raw)?.name ?? "—";
+        } else if (field.kind === "institute") {
+          display = institutes.find((i) => i.id === raw)?.name ?? "—";
         } else if (raw == null || raw === "") {
           display = "—";
         } else {
@@ -299,10 +320,12 @@ export function ListEditor({
   spec,
   rows,
   courses,
+  institutes,
 }: {
   spec: ListSpec;
   rows: Row[];
   courses: Course[];
+  institutes: Course[];
 }) {
   const [showInactive, setShowInactive] = useState(false);
 
@@ -350,7 +373,7 @@ export function ListEditor({
             <TemplateHelp rows={visible} />
           ) : null}
         </div>
-        <AddForm spec={spec} courses={courses} />
+        <AddForm spec={spec} courses={courses} institutes={institutes} />
       </div>
 
       <div className="flex items-center justify-between">
@@ -413,7 +436,7 @@ export function ListEditor({
                     key={String(row[spec.pk])}
                     spec={spec}
                     row={row}
-                    courses={courses}
+                    courses={courses} institutes={institutes}
                   />
                 ))}
               </Fragment>

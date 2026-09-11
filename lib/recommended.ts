@@ -51,6 +51,7 @@ export type RecommendedFilters = {
   courseId?: string | null;
   subjectId?: string | null;
   contentId?: string | null;
+  instituteId?: string | null;
   termId?: string | null;
   sourceId?: string | null;
   importance?: Importance | null;
@@ -78,6 +79,7 @@ function args(f: RecommendedFilters): Args {
     p_course_id: clean(f.courseId),
     p_subject_id: clean(f.subjectId),
     p_content_id: clean(f.contentId),
+    p_institute_id: clean(f.instituteId),
     p_term_id: clean(f.termId),
     p_source_id: clean(f.sourceId),
     p_importance: clean(f.importance),

@@ -46,6 +46,7 @@ export function parseDeskParams(get: ParamReader): {
       courseId: str(get, "course"),
       subjectId: str(get, "subject"),
       contentId: str(get, "content"),
+      instituteId: str(get, "institute"),
       termId: str(get, "term"),
       sourceId: str(get, "source"),
       importance: str(get, "importance") as Importance | null,

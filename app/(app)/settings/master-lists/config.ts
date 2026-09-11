@@ -1,5 +1,5 @@
 /**
- * The eight master lists, described once.
+ * The nine master lists, described once.
  *
  * They differ only in their extra columns, so the screen is one engine driven
  * by this config rather than eight near-identical pages. TABLES doubles as the
@@ -7,9 +7,10 @@
  * here, so a forged form cannot aim a write at `profiles`.
  */
 
-/** The eight tables this screen is allowed to touch. */
+/** The nine tables this screen is allowed to touch. */
 export type MasterTable =
   | "sources"
+  | "institutes"
   | "teachers"
   | "courses"
   | "subjects"
@@ -24,6 +25,7 @@ export type FieldKind =
   | "number"
   | "date"
   | "course"
+  | "institute"
   | "stage";
 
 export type FieldSpec = {
@@ -67,13 +69,32 @@ export const LISTS: ListSpec[] = [
     orderBy: [{ column: "name", ascending: true }],
   },
   {
+    key: "institutes",
+    label: "Institutes",
+    table: "institutes",
+    pk: "id",
+    blurb:
+      "The bodies teachers teach under. Teachers link to one optionally; offers will target them in Phase 2.",
+    fields: [NAME],
+    orderBy: [{ column: "name", ascending: true }],
+  },
+  {
     key: "teachers",
     label: "Teachers",
     table: "teachers",
     pk: "id",
     blurb:
       "Faculty names. Teacher-wise won/lost analytics run on enquiry items, so spelling matters — merge duplicates rather than adding variants.",
-    fields: [NAME],
+    fields: [
+      NAME,
+      {
+        name: "institute_id",
+        label: "Institute",
+        kind: "institute",
+        width: "w-48",
+        hint: "Optional. Offers will target institutes in Phase 2.",
+      },
+    ],
     orderBy: [{ column: "name", ascending: true }],
   },
   {

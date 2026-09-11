@@ -47,6 +47,12 @@ export default async function MasterListsPage({
     );
   });
 
+  // Teachers carry an optional institute, so the editor needs that list too.
+  const needsInstitutes = spec.fields.some((f) => f.kind === "institute");
+  const { data: institutes } = needsInstitutes
+    ? await supabase.from("institutes").select("id, name").eq("is_active", true).order("name")
+    : { data: null };
+
   // Subjects are grouped under their course, so the editor needs the courses.
   const needsCourses = spec.fields.some((f) => f.kind === "course");
   const { data: courses } = needsCourses
@@ -66,6 +72,7 @@ export default async function MasterListsPage({
           spec={spec}
           rows={(data ?? []) as Row[]}
           courses={(courses ?? []) as { id: string; name: string }[]}
+          institutes={(institutes ?? []) as { id: string; name: string }[]}
         />
       )}
     </div>

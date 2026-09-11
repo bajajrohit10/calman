@@ -16,6 +16,7 @@ export type FilterSubject = FilterMaster & { course_id: string };
 
 export type FilterMasters = {
   teachers: FilterMaster[];
+  institutes: FilterMaster[];
   courses: FilterMaster[];
   subjects: FilterSubject[];
   contents: FilterMaster[];
@@ -135,6 +136,16 @@ export function CommonFilterFields({
           />
         </Labelled>
       ) : null}
+
+      <Labelled label="Institute">
+        <FacetSelect
+          name="institute"
+          facet="institute"
+          options={masters.institutes}
+          value={selected.institute ?? ""}
+          facets={facets}
+        />
+      </Labelled>
 
       <Labelled label="Teacher">
         <FacetSelect

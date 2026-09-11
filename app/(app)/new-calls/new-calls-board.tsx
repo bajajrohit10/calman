@@ -56,6 +56,7 @@ export function NewCallsBoard({
   sourceIds: string[];
   masters: {
     teachers: Master[];
+    institutes: Master[];
     courses: Master[];
     terms: Master[];
     sources: Master[];
@@ -135,6 +136,16 @@ export function NewCallsBoard({
               facet="course"
               options={masters.courses}
               value={selected.course}
+              facets={facets}
+            />
+          </Labelled>
+
+          <Labelled label="Institute">
+            <FacetSelect
+              name="institute"
+              facet="institute"
+              options={masters.institutes}
+              value={selected.institute}
               facets={facets}
             />
           </Labelled>

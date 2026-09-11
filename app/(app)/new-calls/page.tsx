@@ -22,7 +22,7 @@ export default async function Page({
   const { page, sourceIds, filters } = parseNewCallsParams((k) => one(sp[k]));
 
   const supabase = await createClient();
-  const [list, facetResult, teachers, courses, terms, sources] = await Promise.all([
+  const [list, facetResult, teachers, institutes, courses, terms, sources] = await Promise.all([
     supabase.rpc("new_calls_pool", {
       ...filters,
       p_limit: PAGE_SIZE,
@@ -31,6 +31,7 @@ export default async function Page({
     } as any),
     loadNewCallsFacets(filters),
     supabase.from("teachers").select("id, name").eq("is_active", true).order("name"),
+      supabase.from("institutes").select("id, name").eq("is_active", true).order("name"),
     supabase.from("courses").select("id, name").eq("is_active", true).order("name"),
     supabase.from("terms").select("id, name").eq("is_active", true).order("sort_order"),
     supabase.from("sources").select("id, name").eq("is_active", true).order("name"),
@@ -69,6 +70,7 @@ export default async function Page({
         sourceIds={sourceIds}
         masters={{
           teachers: teachers.data ?? [],
+          institutes: institutes.data ?? [],
           courses: courses.data ?? [],
           terms: terms.data ?? [],
           sources: sources.data ?? [],
@@ -76,6 +78,7 @@ export default async function Page({
         selected={{
           course: one(sp.course) ?? "",
           teacher: one(sp.teacher) ?? "",
+          institute: one(sp.institute) ?? "",
           importance: one(sp.importance) ?? "",
           term: one(sp.term) ?? "",
           createdFrom: one(sp.createdFrom) ?? "",

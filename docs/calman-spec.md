@@ -233,6 +233,29 @@ Login + 4 roles · student/enquiry/item/call model with duplicate detection · q
 **Phase 2**
 Offers + expiry bucket · teacher-wise analytics · other analytics dashboards · audit trail viewer · holiday calendar · daily summary email to admin.
 
+**Offer targeting, design note (Brief 10).** `institutes` exists as a master
+list from Brief 10, and `teachers.institute_id` links a teacher to one
+(optional; null until the teacher→institute sheet is loaded by
+`scripts/seed-institutes.mjs`). An offer already targets teachers, courses,
+subjects and contents through four sibling join tables — `offer_teachers`,
+`offer_courses`, `offer_subjects`, `offer_contents` — and institutes join that
+set unchanged:
+
+```sql
+create table public.offer_institutes (
+  offer_id     uuid not null references public.offers (id) on delete cascade,
+  institute_id uuid not null references public.institutes (id),
+  primary key (offer_id, institute_id)
+);
+```
+
+An enquiry matches an institute-targeted offer the same way the §5.5 institute
+filter resolves it: through its **open** interest lines to the line's teacher
+to that teacher's institute. A teacher with no institute matches no
+institute-targeted offer, which is the right default — an offer aimed at a
+body should not leak to faculty nobody has placed yet. No offer code exists
+today; this note only fixes the shape so it is not re-litigated.
+
 ---
 
 ## 10. Decisions log

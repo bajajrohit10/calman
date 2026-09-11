@@ -22,11 +22,20 @@ export type FacetMap = {
 };
 
 /**
- * The four facets that hang off enquiry_items, and so carry two numbers.
- * Counted over OPEN lines only — a won or lost interest is not somebody who
- * still needs calling.
+ * The facets that hang off enquiry_items, and so carry two numbers. Counted
+ * over OPEN lines only — a won or lost interest is not somebody who still
+ * needs calling.
+ *
+ * Institute is one of these: it is reached through the line's teacher, so
+ * "3 numbers · 4 items" means the same thing there as it does for a teacher.
  */
-const ITEM_FACETS = new Set(["teacher", "course", "subject", "content"]);
+const ITEM_FACETS = new Set([
+  "teacher",
+  "course",
+  "subject",
+  "content",
+  "institute",
+]);
 
 export function buildFacetMap(rows: FacetRow[]): FacetMap {
   const byFacet: Record<string, Record<string, FacetCounts>> = {};
