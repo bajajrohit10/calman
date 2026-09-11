@@ -36,6 +36,52 @@ Two further traps worth naming:
 - **`.in()` has a practical ceiling** well below a thousand values, because the
   filter travels in the URL. Chunk it at a few hundred and check the error.
 
+## Measuring a query the way the app actually runs it
+
+Timing a query as `postgres` — which is what `supabase db query` gives you —
+measures the wrong thing, and measures it optimistically. `postgres` bypasses
+RLS. Every table in this schema is behind a policy, and the policies are where
+the cost is.
+
+Brief 8 measured the Assignment Desk at **62 ms** against a 5,000-enquiry set
+as `postgres`. The same page as `authenticated` died at Supabase's 8-second
+statement timeout. The gap was `app.is_staff()` in 88 policy expressions, each
+re-entered per row, each a lookup against `profiles`.
+
+Two habits, both now baked into the migrations:
+
+1. **Measure under the role and the RLS the app uses.** Prefix the `explain`:
+
+   ```sql
+   set local role authenticated;
+   set local request.jwt.claims = '{"sub":"<a real profile id>","role":"authenticated"}';
+   explain (analyze, costs off) select * from public.recommended_calls(...);
+   ```
+
+2. **Wrap parameterless policy helpers in a scalar subquery.** `app.is_staff()`
+   in a policy body is a per-row call; `(select app.is_staff())` is an InitPlan
+   evaluated once per statement. `STABLE` does not buy the hoist on its own.
+   Migration `20260910000027` did this for every existing policy — any new
+   policy has to follow the same form.
+
+A related trap sits one level down. A SQL function carrying `SET search_path`
+cannot be inlined, so it is planned **generically**, with its parameters opaque
+to the planner. Row estimates collapse to defaults, and anything the planner
+has no statistics for — a `MATERIALIZED` CTE, a join whose key comes from
+another CTE — turns into a nested loop. Three separate instances of this cost
+the desk query 1.7s, 6.4s and 1.8M wasted comparisons before they were found.
+When a function is slow and its parts are not, reproduce the generic plan:
+
+```sql
+set plan_cache_mode = force_generic_plan;
+prepare p(<types>) as <the function body, $1..$n for the parameters>;
+explain (analyze, costs off) execute p(<nulls>);
+```
+
+The `Function Scan` line an `explain` gives you for an RPC hides all of this.
+
+---
+
 ## Import: a Commit click that did not register
 
 **Status: unreproduced. Watch for it during the pilot.**
