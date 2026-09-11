@@ -3,6 +3,7 @@ import { requireAdminProfile } from "@/lib/auth";
 import { facetsAgreeWithList, loadDeskFacets } from "@/lib/facets";
 import { loadRecommended } from "@/lib/recommended";
 import { loadMasters } from "@/lib/masters";
+import { loadOfferOptions } from "@/lib/offers";
 import { logServerTiming } from "@/lib/server-timing";
 import { createClient } from "@/lib/supabase/server";
 
@@ -52,7 +53,7 @@ export default async function Page({
   // The facet counts are a second query over the same scope, issued alongside
   // the list rather than after it, so the page waits for the slower of the two
   // and not for their sum.
-  const [list, facetResult, staff] =
+  const [list, facetResult, staff, offers] =
     await Promise.all([
       loadRecommended(filters),
       loadDeskFacets(filters),
@@ -62,6 +63,7 @@ export default async function Page({
         .eq("is_active", true)
         .neq("role", "ticket_team")
         .order("full_name"),
+      loadOfferOptions(),
     ]);
 
   // Counted per counsellor by the database. Fetching the day's assignment rows
@@ -114,6 +116,8 @@ export default async function Page({
         assignment={assignment}
         showMore={showMore}
         preset={one(sp.preset) ?? ""}
+        offers={offers}
+        bucket={one(sp.bucket) ?? ""}
         page={page}
         pageSize={PAGE_SIZE}
         includeNotDue={includeNotDue}
@@ -135,6 +139,7 @@ export default async function Page({
           lastCalledBy: filters.lastCalledBy ?? [],
           lastOutcome: filters.lastOutcomes ?? [],
           importance: filters.importance ?? [],
+          offer: filters.offerIds ?? [],
         }}
         selected={{
           counsellor: one(sp.counsellor) ?? "",

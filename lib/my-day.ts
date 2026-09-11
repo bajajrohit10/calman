@@ -54,6 +54,8 @@ export type MyDayRow = {
   re_enquired_today: boolean;
   /** What a campaign assignment was handed out as (§19.2). */
   assignment_label: string | null;
+  /** Brief 18: which offers put this on the list, for the Offer Calls tab. */
+  offer_names: string[] | null;
 };
 
 /** A ticket, plus the one thing the Tickets screen does not need to know. */

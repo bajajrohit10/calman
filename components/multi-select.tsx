@@ -33,6 +33,7 @@ export function MultiSelect({
   values,
   facets,
   anyLabel = "Any",
+  onChange,
 }: {
   name: string;
   /** Facet key for the counts; omit where the screen has no facets. */
@@ -41,6 +42,12 @@ export function MultiSelect({
   values: string[];
   facets?: FacetMap;
   anyLabel?: string;
+  /**
+   * For the screens that are not a GET form. The hidden inputs below are how
+   * every filter bar uses this; the offer editor saves through a server action
+   * instead and needs the selection as it changes.
+   */
+  onChange?: (values: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -90,8 +97,13 @@ export function MultiSelect({
         ? (byId.get(selected[0]) ?? "1 selected")
         : `${byId.get(selected[0]) ?? "1"}, +${selected.length - 1}`;
 
+  function update(next: string[]) {
+    setSelected(next);
+    onChange?.(next);
+  }
+
   function toggle(id: string) {
-    setSelected((s) => (s.includes(id) ? s.filter((v) => v !== id) : [...s, id]));
+    update(selected.includes(id) ? selected.filter((v) => v !== id) : [...selected, id]);
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
@@ -192,9 +204,7 @@ export function MultiSelect({
               type="button"
               className="text-ink-2 underline-offset-2 hover:underline"
               onClick={() =>
-                setSelected((s) => [
-                  ...new Set([...s, ...visible.map((o) => o.id)]),
-                ])
+                update([...new Set([...selected, ...visible.map((o) => o.id)])])
               }
             >
               Select all in view
@@ -202,7 +212,7 @@ export function MultiSelect({
             <button
               type="button"
               className="text-ink-2 underline-offset-2 hover:underline"
-              onClick={() => setSelected([])}
+              onClick={() => update([])}
             >
               Clear
             </button>

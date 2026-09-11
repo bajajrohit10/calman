@@ -100,6 +100,11 @@ export function parseDeskParams(get: ParamReader): {
       date,
       includeNotDue,
       assignment: assignment === "any" ? null : assignment,
+      // Brief 18. The Offers preset asks for one bucket; the multi-select asks
+      // for leads matching particular offers. Separate keys because they are
+      // separate questions and the preset composes with the rest of the bar.
+      bucket: str(get, "bucket"),
+      offerIds: many(get, "offer"),
       lastCalledBy: many(get, "lastCalledBy"),
       lastOutcomes: many(get, "lastOutcome"),
       counsellorId: str(get, "counsellor"),

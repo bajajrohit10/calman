@@ -9,6 +9,7 @@ import { ROLE_LABELS, type Role } from "@/lib/roles";
 const TABS = [
   { href: "/settings/users", label: "Users" },
   { href: "/settings/master-lists", label: "Master lists" },
+  { href: "/settings/offers", label: "Offers" },
   { href: "/settings/data", label: "Data management" },
 ];
 

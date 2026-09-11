@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { ExportButton } from "@/components/export-button";
+import { MultiSelect } from "@/components/multi-select";
 import {
   CommonFilterFields,
   FacetSelect,
@@ -77,6 +78,22 @@ export const PRESETS: { id: string; label: string; query: (date: string) => stri
       }).toString(),
   },
   {
+    // Everything §6 has put in the Offer bucket today: an open lead matching a
+    // live offer inside its reminder window. No notDue here — an offer lead is
+    // due on every day of its window by construction, so the due-date rule is
+    // already letting it through and campaign mode would only drag in leads
+    // the offer has nothing to do with.
+    id: "offers",
+    label: "Offers closing",
+    query: (date) =>
+      new URLSearchParams({
+        date,
+        assignment: "needs",
+        preset: "offers",
+        bucket: "offer",
+      }).toString(),
+  },
+  {
     // Importance A, re-graded today: §5.8 counts exactly that as a price list
     // issued, and "who did I promise a price list to today" is the follow-up.
     id: "pli",
@@ -112,6 +129,8 @@ const CHIP_LABELS: Record<string, string> = {
   lastCalledBy: "Last called by",
   lastOutcome: "Last outcome",
   q: "Discussion",
+  offer: "Offer",
+  bucket: "Bucket",
   type: "Type",
   status: "Status",
   lastCalledFrom: "Last called from",
@@ -148,6 +167,8 @@ export function AssignDesk({
   assignment,
   showMore,
   preset,
+  offers,
+  bucket,
 }: {
   rows: RecommendedRow[];
   total: number;
@@ -171,6 +192,10 @@ export function AssignDesk({
   showMore: boolean;
   /** Which preset built this view, if any — it names the campaign (§19.2). */
   preset: string;
+  /** The active offers, for the Offer filter (Brief 18). */
+  offers: { id: string; name: string }[];
+  /** The §6 bucket the view is pinned to, if any. */
+  bucket: string;
 }) {
   const router = useRouter();
   const [picked, setPicked] = useState<Map<number, AssignmentBucket>>(new Map());
@@ -353,6 +378,17 @@ export function AssignDesk({
               facets={facets}
             />
             <LastOutcomeField values={multi?.lastOutcome ?? []} facets={facets} />
+            {offers.length ? (
+              <Labelled label="Offer">
+                <MultiSelect
+                  name="offer"
+                  facet="offer"
+                  options={offers}
+                  values={multi?.offer ?? []}
+                  facets={facets}
+                />
+              </Labelled>
+            ) : null}
             <Labelled label="Type">
               <Select name="type" defaultValue={selected.type}>
                 <option value="">Purchase (default)</option>
@@ -377,6 +413,10 @@ export function AssignDesk({
               Apply filters
             </Button>
             {showMore ? <input type="hidden" name="more" value="1" /> : null}
+            {/* The preset's bucket is not a visible field, so it needs
+                carrying by hand or Apply would silently widen the list back
+                to every bucket. */}
+            {bucket ? <input type="hidden" name="bucket" value={bucket} /> : null}
             <label className="flex cursor-pointer items-center gap-1.5 text-[12.5px] text-ink-2">
               <input type="checkbox" name="notDue" value="1" defaultChecked={includeNotDue} />
               Campaign mode — ignore the due date
@@ -490,6 +530,16 @@ export function AssignDesk({
                       <Badge dot tone={r.bucket === "call_back" ? "warn" : "info"}>
                         {BUCKET_LABELS[r.bucket]}
                       </Badge>
+                      {/* Which offer put it here. Two offers, two names, one
+                          row — the lead is called once. */}
+                      {r.offer_names?.length ? (
+                        <span
+                          className="truncate text-[11.5px] text-ink-2"
+                          title={r.offer_names.join(" · ")}
+                        >
+                          {r.offer_names.join(" · ")}
+                        </span>
+                      ) : null}
                       {r.is_overdue ? <Badge tone="danger">Overdue</Badge> : null}
                     </span>
                   </td>

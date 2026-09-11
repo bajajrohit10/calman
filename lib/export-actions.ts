@@ -13,6 +13,12 @@ import {
 } from "@/lib/my-day-tabs";
 import { loadAllMatching } from "@/lib/recommended";
 import { CALL_REPORT_COLUMNS, loadCallReport } from "@/lib/reports";
+import { loadOffers, loadOfferTargetNames } from "@/lib/offers";
+import {
+  describeTargets,
+  offerWindowFrom,
+  OFFER_EXPORT_COLUMNS,
+} from "@/lib/offer-shape";
 
 export type ExportSheet = {
   name: string;
@@ -53,7 +59,8 @@ export async function exportCurrentView(
         tab: MyDayTabKey;
         view: MyDayView;
       }
-    | { source: "report"; from: string; to: string; counsellorId: string | null },
+    | { source: "report"; from: string; to: string; counsellorId: string | null }
+    | { source: "offers" },
 ): Promise<ExportResult> {
   const viewer = await requireUser();
   if (!viewer.profile) return { error: "Your account is not active." };
@@ -106,6 +113,48 @@ export async function exportCurrentView(
         },
       ],
       filename: `calman-report-${input.from}-to-${input.to}`,
+    };
+  }
+
+  // The offers table with its performance numbers, exactly as Settings shows
+  // it (§7). Admin-only, like the screen; the RLS on offers says so too.
+  if (input.source === "offers") {
+    if (!isAdmin(viewer.profile.role)) {
+      return { error: "Only an admin or manager can export offers." };
+    }
+    const { offers, performance, error } = await loadOffers();
+    if (error) return { error };
+    if (!offers.length) return { error: "There are no offers to export." };
+
+    const names = await loadOfferTargetNames();
+    return {
+      error: null,
+      rows: offers.map((o) => {
+        const p = performance[o.id];
+        return {
+          name: o.name,
+          start_date: o.start_date,
+          end_date: o.end_date,
+          reminder_days: o.reminder_days,
+          window_from:
+            p?.window_from ??
+            offerWindowFrom(o.start_date, o.end_date, o.reminder_days),
+          is_active: o.is_active ? "Yes" : "No",
+          targets: describeTargets(o.targets, names),
+          matches_now: p?.matches_now ?? 0,
+          reached: p?.reached ?? 0,
+          called: p?.called ?? 0,
+          won: p?.won ?? 0,
+          won_amount: p?.won_amount ?? 0,
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      }) as any,
+      columns: OFFER_EXPORT_COLUMNS.map((c) => ({
+        key: c.key as string,
+        label: c.label,
+      })),
+      sheetName: "Offers",
+      filename: `calman-offers-${new Date().toISOString().slice(0, 10)}`,
     };
   }
 

@@ -823,6 +823,13 @@ export type Database = {
             foreignKeyName: "offer_contents_offer_id_fkey"
             columns: ["offer_id"]
             isOneToOne: false
+            referencedRelation: "offer_matches"
+            referencedColumns: ["offer_id"]
+          },
+          {
+            foreignKeyName: "offer_contents_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
             referencedRelation: "offers"
             referencedColumns: ["id"]
           },
@@ -853,6 +860,50 @@ export type Database = {
             foreignKeyName: "offer_courses_offer_id_fkey"
             columns: ["offer_id"]
             isOneToOne: false
+            referencedRelation: "offer_matches"
+            referencedColumns: ["offer_id"]
+          },
+          {
+            foreignKeyName: "offer_courses_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "offers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      offer_institutes: {
+        Row: {
+          institute_id: string
+          offer_id: string
+        }
+        Insert: {
+          institute_id: string
+          offer_id: string
+        }
+        Update: {
+          institute_id?: string
+          offer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "offer_institutes_institute_id_fkey"
+            columns: ["institute_id"]
+            isOneToOne: false
+            referencedRelation: "institutes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "offer_institutes_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "offer_matches"
+            referencedColumns: ["offer_id"]
+          },
+          {
+            foreignKeyName: "offer_institutes_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
             referencedRelation: "offers"
             referencedColumns: ["id"]
           },
@@ -872,6 +923,13 @@ export type Database = {
           subject_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "offer_subjects_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "offer_matches"
+            referencedColumns: ["offer_id"]
+          },
           {
             foreignKeyName: "offer_subjects_offer_id_fkey"
             columns: ["offer_id"]
@@ -902,6 +960,13 @@ export type Database = {
           teacher_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "offer_teachers_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "offer_matches"
+            referencedColumns: ["offer_id"]
+          },
           {
             foreignKeyName: "offer_teachers_offer_id_fkey"
             columns: ["offer_id"]
@@ -1368,6 +1433,33 @@ export type Database = {
           },
         ]
       }
+      offer_matches: {
+        Row: {
+          end_date: string | null
+          enquiry_id: number | null
+          item_id: string | null
+          offer_id: string | null
+          offer_name: string | null
+          start_date: string | null
+          window_from: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "enquiry_items_enquiry_id_fkey"
+            columns: ["enquiry_id"]
+            isOneToOne: false
+            referencedRelation: "enquiries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enquiry_items_enquiry_id_fkey"
+            columns: ["enquiry_id"]
+            isOneToOne: false
+            referencedRelation: "live_enquiries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       archive_enquiries: {
@@ -1609,6 +1701,7 @@ export type Database = {
           last_outcome: Database["public"]["Enums"]["call_outcome"]
           mobile: string
           next_follow_up_date: string
+          offer_names: string[]
           product_text: string
           re_enquired_today: boolean
           status: Database["public"]["Enums"]["enquiry_status"]
@@ -1676,6 +1769,33 @@ export type Database = {
         }[]
       }
       next_working_day: { Args: { p_from?: string }; Returns: string }
+      offer_match_count: {
+        Args: {
+          p_contents?: string[]
+          p_courses?: string[]
+          p_institutes?: string[]
+          p_subjects?: string[]
+          p_teachers?: string[]
+        }
+        Returns: number
+      }
+      offer_performance: {
+        Args: { p_ids?: string[] }
+        Returns: {
+          called: number
+          end_date: string
+          is_active: boolean
+          matches_now: number
+          name: string
+          offer_id: string
+          reached: number
+          reminder_days: number
+          start_date: string
+          window_from: string
+          won: number
+          won_amount: number
+        }[]
+      }
       purge_archived: {
         Args: { p_expected_count: number; p_ids: number[] }
         Returns: {
@@ -1690,6 +1810,7 @@ export type Database = {
       recommended_calls: {
         Args: {
           p_assignment?: string
+          p_bucket?: string
           p_content_ids?: string[]
           p_counsellor_id?: string
           p_course_id?: string
@@ -1708,6 +1829,7 @@ export type Database = {
           p_last_outcomes?: string[]
           p_limit?: number
           p_no_detail?: string[]
+          p_offer_ids?: string[]
           p_offset?: number
           p_source_id?: string
           p_stages?: string[]
@@ -1737,6 +1859,7 @@ export type Database = {
           last_outcome: Database["public"]["Enums"]["call_outcome"]
           mobile: string
           next_follow_up_date: string
+          offer_names: string[]
           product_text: string
           source_id: string
           source_name: string
@@ -1755,6 +1878,7 @@ export type Database = {
       recommended_facets: {
         Args: {
           p_assignment?: string
+          p_bucket?: string
           p_content_ids?: string[]
           p_counsellor_id?: string
           p_course_id?: string
@@ -1772,6 +1896,7 @@ export type Database = {
           p_last_called_to?: string
           p_last_outcomes?: string[]
           p_no_detail?: string[]
+          p_offer_ids?: string[]
           p_source_id?: string
           p_stages?: string[]
           p_status?: Database["public"]["Enums"]["enquiry_status"]

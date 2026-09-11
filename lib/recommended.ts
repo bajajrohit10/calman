@@ -50,6 +50,8 @@ export type RecommendedRow = {
   /** Brief 19: what a campaign assignment was handed out as, and whether it is done. */
   assignment_label: string | null;
   called_since: boolean;
+  /** Brief 18: every offer whose reminder window covers the viewed day. */
+  offer_names: string[] | null;
   total_count: number;
 };
 
@@ -81,6 +83,9 @@ export type RecommendedFilters = {
   lastOutcomes?: string[] | null;
   /** Facet names whose "No detail" option is selected. */
   noDetail?: string[] | null;
+  /** Brief 18: one §6 bucket, and leads matching particular offers. */
+  bucket?: string | null;
+  offerIds?: string[] | null;
   limit?: number;
   offset?: number;
 };
@@ -119,6 +124,8 @@ function args(f: RecommendedFilters): Args {
     p_last_called_by: list(f.lastCalledBy),
     p_last_outcomes: list(f.lastOutcomes),
     p_no_detail: list(f.noDetail),
+    p_bucket: clean(f.bucket),
+    p_offer_ids: list(f.offerIds),
     p_limit: f.limit ?? 50,
     p_offset: f.offset ?? 0,
   } as Args;

@@ -222,6 +222,12 @@ export function MyDay({
                       {ENQUIRY_STATUS_LABELS[r.status]}
                     </Badge>
                   ) : null}
+                  {/* Which offer this is about. The counsellor is about to say
+                      it out loud, so it belongs on the row rather than behind
+                      a click (Brief 18). */}
+                  {r.offer_names?.length ? (
+                    <Badge tone="info">{r.offer_names.join(" · ")}</Badge>
+                  ) : null}
                   <span className="text-[12px] text-ink-3">
                     {r.teacher_names?.join(", ") || "no interests yet"}
                   </span>
