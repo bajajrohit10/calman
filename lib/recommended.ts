@@ -52,6 +52,9 @@ export type RecommendedFilters = {
   subjectId?: string | null;
   contentIds?: string[] | null;
   instituteId?: string | null;
+  stages?: string[] | null;
+  lastCalledFrom?: string | null;
+  lastCalledTo?: string | null;
   termId?: string | null;
   sourceId?: string | null;
   importance?: Importance | null;
@@ -83,6 +86,9 @@ function args(f: RecommendedFilters): Args {
     p_subject_id: clean(f.subjectId),
     p_content_ids: list(f.contentIds),
     p_institute_id: clean(f.instituteId),
+    p_stages: f.stages?.length ? f.stages : undefined,
+    p_last_called_from: clean(f.lastCalledFrom),
+    p_last_called_to: clean(f.lastCalledTo),
     p_term_id: clean(f.termId),
     p_source_id: clean(f.sourceId),
     p_importance: clean(f.importance),

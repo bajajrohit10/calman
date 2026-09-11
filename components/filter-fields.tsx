@@ -4,7 +4,7 @@ import { useMemo } from "react";
 
 import { MultiSelect } from "@/components/multi-select";
 import { Input, Select, cx } from "@/components/ui";
-import { IMPORTANCE_LABELS } from "@/lib/enquiry-labels";
+import { IMPORTANCE_LABELS, STAGE_FILTER_LABELS } from "@/lib/enquiry-labels";
 import {
   countLabel,
   isEmptyOption,
@@ -108,6 +108,10 @@ export function Labelled({
 }
 
 const IMPORTANCE_OPTIONS: FilterMaster[] = Object.entries(IMPORTANCE_LABELS).map(
+  ([id, name]) => ({ id, name }),
+);
+
+const STAGE_OPTIONS: FilterMaster[] = Object.entries(STAGE_FILTER_LABELS).map(
   ([id, name]) => ({ id, name }),
 );
 
@@ -237,6 +241,30 @@ export function CommonFilterFields({
           />
         </Labelled>
       ) : null}
+
+      <Labelled label="Stage">
+        <MultiSelect
+          name="stage"
+          facet="stage"
+          options={STAGE_OPTIONS}
+          values={multi?.stage ?? []}
+          facets={facets}
+        />
+      </Labelled>
+
+      {/* Paired with Stage on purpose: "fresh call yesterday and nothing
+          since" is one stage plus one date. */}
+      <Labelled label="Last called between" wide>
+        <div className="flex items-center gap-1.5">
+          <Input
+            type="date"
+            name="lastCalledFrom"
+            defaultValue={selected.lastCalledFrom ?? ""}
+          />
+          <span className="text-[12px] text-ink-3">→</span>
+          <Input type="date" name="lastCalledTo" defaultValue={selected.lastCalledTo ?? ""} />
+        </div>
+      </Labelled>
 
       <Labelled label="Discussion contains" wide>
         <Input name="q" defaultValue={selected.q ?? ""} placeholder="text in any call note" />

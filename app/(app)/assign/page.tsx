@@ -119,6 +119,7 @@ export default async function Page({
         multi={{
           teacher: filters.teacherIds ?? [],
           content: filters.contentIds ?? [],
+          stage: filters.stages ?? [],
         }}
         selected={{
           counsellor: one(sp.counsellor) ?? "",
@@ -137,6 +138,8 @@ export default async function Page({
           followUpFrom: one(sp.followUpFrom) ?? "",
           followUpTo: one(sp.followUpTo) ?? "",
           q: one(sp.q) ?? "",
+          lastCalledFrom: one(sp.lastCalledFrom) ?? "",
+          lastCalledTo: one(sp.lastCalledTo) ?? "",
         }}
       />
     </div>

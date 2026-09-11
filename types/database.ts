@@ -1478,12 +1478,15 @@ export type Database = {
           p_follow_up_to?: string
           p_importance?: Database["public"]["Enums"]["importance"]
           p_include_archived?: boolean
+          p_last_called_from?: string
+          p_last_called_to?: string
           p_limit?: number
           p_lost_reason?: Database["public"]["Enums"]["lost_reason"]
           p_mobile?: string
           p_offset?: number
           p_sort?: string
           p_source_id?: string
+          p_stages?: string[]
           p_status?: Database["public"]["Enums"]["enquiry_status"]
           p_subject_id?: string
           p_teacher_ids?: string[]
@@ -1684,9 +1687,12 @@ export type Database = {
           p_importance?: Database["public"]["Enums"]["importance"]
           p_include_not_due?: boolean
           p_institute_id?: string
+          p_last_called_from?: string
+          p_last_called_to?: string
           p_limit?: number
           p_offset?: number
           p_source_id?: string
+          p_stages?: string[]
           p_status?: Database["public"]["Enums"]["enquiry_status"]
           p_subject_id?: string
           p_teacher_ids?: string[]
@@ -1735,7 +1741,10 @@ export type Database = {
           p_importance?: Database["public"]["Enums"]["importance"]
           p_include_not_due?: boolean
           p_institute_id?: string
+          p_last_called_from?: string
+          p_last_called_to?: string
           p_source_id?: string
+          p_stages?: string[]
           p_status?: Database["public"]["Enums"]["enquiry_status"]
           p_subject_id?: string
           p_teacher_ids?: string[]

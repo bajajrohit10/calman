@@ -60,6 +60,9 @@ export type EnquiryFilters = {
   followUpTo?: string | null;
   discussion?: string | null;
   mobile?: string | null;
+  stages?: string[] | null;
+  lastCalledFrom?: string | null;
+  lastCalledTo?: string | null;
   includeArchived?: boolean;
   sort?: string;
   dir?: "asc" | "desc";
@@ -92,6 +95,9 @@ export async function loadEnquiries(
     p_follow_up_to: clean(f.followUpTo),
     p_discussion: clean(f.discussion),
     p_mobile: clean(f.mobile),
+    p_stages: f.stages?.length ? f.stages : undefined,
+    p_last_called_from: clean(f.lastCalledFrom),
+    p_last_called_to: clean(f.lastCalledTo),
     p_include_archived: f.includeArchived ?? false,
     p_sort: f.sort ?? "created_at",
     p_dir: f.dir ?? "desc",

@@ -135,3 +135,18 @@ export function statusTone(status: EnquiryStatus): "ok" | "danger" | "neutral" |
   if (status === "closed") return "neutral";
   return "info";
 }
+
+/**
+ * §13.1: where an enquiry has got to, derived from the two columns
+ * app.recompute_enquiry() maintains. Ordered as a lead progresses, not by
+ * count — the facet re-sorts by count anyway and this is the fallback order.
+ */
+export const STAGE_FILTER_LABELS = {
+  uncalled: "Not yet called",
+  fresh_only: "Fresh done, no follow-up",
+  fu1: "1 follow-up done",
+  fu2: "2 done",
+  fu3: "3 done",
+} as const;
+
+export type StageFilter = keyof typeof STAGE_FILTER_LABELS;

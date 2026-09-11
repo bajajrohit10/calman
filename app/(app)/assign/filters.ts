@@ -57,6 +57,9 @@ export function parseDeskParams(get: ParamReader): {
       subjectId: str(get, "subject"),
       contentIds: many(get, "content"),
       instituteId: str(get, "institute"),
+      stages: many(get, "stage"),
+      lastCalledFrom: str(get, "lastCalledFrom"),
+      lastCalledTo: str(get, "lastCalledTo"),
       termId: str(get, "term"),
       sourceId: str(get, "source"),
       importance: str(get, "importance") as Importance | null,
@@ -111,6 +114,9 @@ export function parseEnquiriesParams(get: ParamReader): {
       followUpFrom: str(get, "followUpFrom"),
       followUpTo: str(get, "followUpTo"),
       discussion: str(get, "q"),
+      stages: many(get, "stage"),
+      lastCalledFrom: str(get, "lastCalledFrom"),
+      lastCalledTo: str(get, "lastCalledTo"),
       mobile: str(get, "mobile"),
       // §9: the Enquiries table is the investigative screen, so it is the one
       // list that can be asked to include archived rows.
