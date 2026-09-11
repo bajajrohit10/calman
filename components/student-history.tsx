@@ -4,21 +4,21 @@ import { EnquiryDetailsEditor, type DetailMasters } from "@/components/enquiry-d
 import { EnquiryInterests } from "@/components/enquiry-interests";
 import { UnarchiveButton } from "@/components/unarchive-button";
 import type { ItemMasters } from "@/components/interest-lines";
+import {
+  Collapsed,
+  EnquiryGlanceLine,
+  InterestChips,
+} from "@/components/enquiry-glance";
 import { Badge, cx } from "@/components/ui";
 import { WhatsAppButton } from "@/components/whatsapp/button";
 import { stageOf } from "@/lib/whatsapp-text";
 import {
   BUCKET_LABELS,
   CLOSE_REASON_LABELS,
-  ENQUIRY_STATUS_LABELS,
-  ENQUIRY_TYPE_LABELS,
-  IMPORTANCE_LABELS,
   ISSUE_CATEGORY_LABELS,
-  LEAD_VERIFICATION_LABELS,
   LOST_REASON_LABELS,
   OUTCOME_SHORT,
   outcomeTone,
-  statusTone,
 } from "@/lib/enquiry-labels";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
@@ -31,13 +31,17 @@ import type { HistoryEnquiry, StudentHistory } from "@/lib/students";
  * client bundle for Quick Add.
  */
 
-function Meta({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex gap-1.5">
-      <span className="text-ink-3">{label}</span>
-      <span className="text-ink-2">{value}</span>
-    </div>
-  );
+
+/** The history row shape, flattened for the shared chips. */
+function toGlanceItem(item: HistoryEnquiry["enquiry_items"][number]) {
+  return {
+    id: item.id,
+    status: item.status,
+    teacher: item.teacher?.name ?? null,
+    course: item.course?.name ?? null,
+    subject: item.subject?.name ?? null,
+    content: item.content?.name ?? null,
+  };
 }
 
 /** The history row shape, flattened for the shared Interests block. */
@@ -288,53 +292,35 @@ export function EnquiryCard({
         archived ? "border-dashed border-line-2 opacity-70" : "border-line",
       )}
     >
-      <header className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5">
-        <span className="text-[13px] font-semibold text-ink">#{enquiry.id}</span>
-        <Badge tone="neutral">{ENQUIRY_TYPE_LABELS[enquiry.type]}</Badge>
-        <Badge dot tone={statusTone(enquiry.status)}>
-          {ENQUIRY_STATUS_LABELS[enquiry.status]}
-        </Badge>
-        {resolution ? (
-          <span className="text-[11.5px] text-ink-3">({resolution})</span>
+      {/* Line 1 and line 2: every fact about the enquiry, then what it is
+          for. Everything editable is below the timeline now (§21.1) — a
+          history is read far more often than it is corrected. */}
+      <div className="flex flex-col gap-2 border-b border-line px-4 py-2.5">
+        <EnquiryGlanceLine
+          glance={{
+            id: enquiry.id,
+            type: enquiry.type,
+            status: enquiry.status,
+            termName: enquiry.term?.name ?? null,
+            sourceNames,
+            importance: enquiry.importance,
+            leadVerification: enquiry.lead_verification,
+            slotsUsed: enquiry.follow_up_slots_used,
+            nextFollowUpDate: enquiry.next_follow_up_date,
+            reEnquiredAt: enquiry.re_enquired_at,
+            createdAt: enquiry.created_at,
+            archived,
+            resolution,
+          }}
+        />
+        <InterestChips items={enquiry.enquiry_items.map(toGlanceItem)} />
+        {enquiry.product_text ? (
+          <p className="text-[12px] text-ink-3">
+            <span className="text-ink-3">Product: </span>
+            <span className="text-ink-2">{enquiry.product_text}</span>
+          </p>
         ) : null}
-        {archived ? <Badge tone="neutral">Archived</Badge> : null}
-
-        <span className="text-[12px] text-ink-2">
-          <span className="text-ink-3">Term </span>
-          {enquiry.term?.name ?? "—"}
-        </span>
-        <span className="text-[12px] text-ink-2">
-          <span className="text-ink-3">Source </span>
-          {sourceNames.length ? sourceNames.join(", ") : "—"}
-        </span>
-
-        {/* The teachers and courses behind the enquiry, as chips: the one
-            thing somebody opening a history wants before reading a word of it.
-            The editable list is still below — this is the glance. */}
-        {enquiry.enquiry_items.length ? (
-          <span className="flex flex-wrap items-center gap-1">
-            {enquiry.enquiry_items.map((i) => (
-              <span
-                key={i.id}
-                className={cx(
-                  "inline-flex h-[19px] items-center rounded-full border px-2 text-[11px]",
-                  i.status === "won"
-                    ? "border-ok/40 bg-ok-soft text-ok"
-                    : i.status === "open"
-                      ? "border-line-2 bg-surface-2 text-ink-2"
-                      : "border-line-2 bg-surface text-ink-3 line-through",
-                )}
-              >
-                {toInterestItem(i).label}
-              </span>
-            ))}
-          </span>
-        ) : null}
-
-        <span className="ml-auto whitespace-nowrap text-[11.5px] text-ink-3">
-          opened {formatDateTime(enquiry.created_at)}
-        </span>
-      </header>
+      </div>
 
       {archived ? (
         <div className="flex flex-wrap items-center gap-2 border-b border-line bg-sunk/40 px-4 py-2">
@@ -350,23 +336,8 @@ export function EnquiryCard({
         </div>
       ) : null}
 
-      {masters ? (
-        <div className="border-b border-line px-4 py-2">
-          <EnquiryDetailsEditor
-            enquiryId={enquiry.id}
-            masters={masters}
-            initial={{
-              studentName: studentName ?? null,
-              importance: enquiry.importance,
-              termId: enquiry.term_id,
-              sourceId: enquiry.source_id,
-              leadVerification: enquiry.lead_verification,
-            }}
-            onSaved={onEdited}
-          />
-        </div>
-      ) : null}
-
+      {/* Stays above the fold: messaging somebody is a thing you do *during*
+          the glance, not after reading the history. */}
       {enquiry.status === "open" && mobile ? (
         <div className="border-b border-line px-4 py-2">
           <WhatsAppButton
@@ -387,56 +358,47 @@ export function EnquiryCard({
         </div>
       ) : null}
 
-      <div className="grid gap-x-6 gap-y-1 px-4 py-2.5 text-[12px] sm:grid-cols-2 lg:grid-cols-3">
-        <Meta
-          label="Importance"
-          value={enquiry.importance ? IMPORTANCE_LABELS[enquiry.importance] : "—"}
-        />
-        <Meta
-          label="Lead verification"
-          value={
-            enquiry.lead_verification
-              ? LEAD_VERIFICATION_LABELS[enquiry.lead_verification]
-              : "—"
-          }
-        />
-        <Meta label="Next follow-up" value={formatDate(enquiry.next_follow_up_date)} />
-        <Meta
-          label="Slots used"
-          value={`${enquiry.follow_up_slots_used} of 3`}
-        />
-        {enquiry.re_enquired_at ? (
-          <Meta label="Re-enquired" value={formatDate(enquiry.re_enquired_at)} />
-        ) : null}
-        {enquiry.closed_at ? (
-          <Meta label="Closed" value={formatDateTime(enquiry.closed_at)} />
-        ) : null}
-      </div>
+      <section className="border-t border-line">
+        <h4 className="px-4 pb-1 pt-2.5 text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+          Timeline ({enquiry.calls.length} call{enquiry.calls.length === 1 ? "" : "s"})
+        </h4>
+        <Timeline enquiry={enquiry} />
+      </section>
 
-      {enquiry.product_text ? (
-        <p className="border-t border-line px-4 py-2 text-[12.5px] text-ink-2">
-          <span className="text-ink-3">Product: </span>
-          {enquiry.product_text}
-        </p>
+      {/* Below the fold: the three things somebody opens a history to change
+          rather than to read. */}
+      {masters && enquiry.type === "purchase" ? (
+        <Collapsed summary="Edit interests">
+          <EnquiryInterests
+            enquiryId={enquiry.id}
+            items={enquiry.enquiry_items.map(toInterestItem)}
+            masters={masters}
+            onSaved={onEdited}
+            bare
+          />
+        </Collapsed>
       ) : null}
 
-      {/* Open by default, with a line ready to type into, whenever the card is
-          editable — an enquiry with no teacher against it is invisible to §7,
-          and the fix has to be one keystroke away. An after-sale enquiry is
-          about an order that already exists, so it stays read-only. */}
-      <EnquiryInterests
-        enquiryId={enquiry.id}
-        items={enquiry.enquiry_items.map(toInterestItem)}
-        masters={masters && enquiry.type === "purchase" ? masters : undefined}
-        onSaved={onEdited}
-      />
+      {masters ? (
+        <Collapsed summary="Edit enquiry details">
+          <EnquiryDetailsEditor
+            enquiryId={enquiry.id}
+            masters={masters}
+            initial={{
+              studentName: studentName ?? null,
+              importance: enquiry.importance,
+              termId: enquiry.term_id,
+              sourceId: enquiry.source_id,
+              leadVerification: enquiry.lead_verification,
+            }}
+            onSaved={onEdited}
+          />
+        </Collapsed>
+      ) : null}
 
       {enquiry.assignments.length ? (
-        <section className="border-t border-line px-4 py-2.5">
-          <h4 className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-            Assignments
-          </h4>
-          <ul className="mt-1 text-[12.5px] text-ink-2">
+        <Collapsed summary={`Assignments (${enquiry.assignments.length})`}>
+          <ul className="text-[12.5px] text-ink-2">
             {enquiry.assignments.map((a) => (
               <li key={a.id} className="py-0.5">
                 {formatDate(a.date)} · {BUCKET_LABELS[a.bucket]} ·{" "}
@@ -444,15 +406,8 @@ export function EnquiryCard({
               </li>
             ))}
           </ul>
-        </section>
+        </Collapsed>
       ) : null}
-
-      <section className="border-t border-line">
-        <h4 className="px-4 pb-1 pt-2.5 text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-          Timeline ({enquiry.calls.length} call{enquiry.calls.length === 1 ? "" : "s"})
-        </h4>
-        <Timeline enquiry={enquiry} />
-      </section>
 
     </article>
   );

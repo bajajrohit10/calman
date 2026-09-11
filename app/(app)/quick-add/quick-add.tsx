@@ -297,6 +297,35 @@ export function QuickAdd({
                         importance: openEnquiryRow.importance,
                         leadVerification: openEnquiryRow.lead_verification,
                         defaultFollowUpDate,
+                        status: openEnquiryRow.status,
+                        sourceNames: [
+                          ...new Set(
+                            [...(openEnquiryRow.enquiry_sources ?? [])]
+                              .sort((a, b) =>
+                                b.occurred_at.localeCompare(a.occurred_at),
+                              )
+                              .map((e) => e.source?.name)
+                              .filter((n): n is string => Boolean(n)),
+                          ),
+                        ],
+                        nextFollowUpDate: openEnquiryRow.next_follow_up_date,
+                        reEnquiredAt: openEnquiryRow.re_enquired_at,
+                        createdAt: openEnquiryRow.created_at,
+                        // Built from the history already loaded rather than
+                        // re-fetched: this path has the whole student in hand.
+                        timeline: stage.student.enquiries.flatMap((e) =>
+                          e.calls.map((c) => ({
+                            id: c.id,
+                            enquiryId: e.id,
+                            sameEnquiry: e.id === openEnquiryRow.id,
+                            calledAt: c.called_at,
+                            callDate: c.call_date,
+                            outcome: c.outcome,
+                            discussion: c.discussion,
+                            nextFollowUpDate: c.next_follow_up_date,
+                            callerName: c.caller?.full_name ?? null,
+                          })),
+                        ),
                         items: openEnquiryRow.enquiry_items.map((i) => ({
                           id: i.id,
                           status: i.status,

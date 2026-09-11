@@ -17,21 +17,25 @@ import {
   IMPORTANCE_LABELS,
   LEAD_VERIFICATION_LABELS,
   OUTCOME_LABELS,
+  OUTCOME_SHORT,
+  outcomeTone,
   outcomeTakesDate,
   outcomesFor,
   type CallOutcome,
+  type EnquiryStatus,
   type EnquiryType,
   type Importance,
   type IssueCategory,
   type LeadVerification,
 } from "@/lib/enquiry-labels";
 import { EnquiryDetailsEditor } from "@/components/enquiry-details";
-import { istDatePlus, istNextMonday } from "@/lib/format";
+import { EnquiryGlanceLine, InterestChips } from "@/components/enquiry-glance";
+import { formatDate, formatDateTime, istDatePlus, istNextMonday } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
 import { WhatsAppButton } from "@/components/whatsapp/button";
 import { stageOf } from "@/lib/whatsapp-text";
 
-import { logCall, type LogCallResult } from "./actions";
+import { logCall, type LogCallResult, type PanelCall } from "./actions";
 
 export type Master = ItemMaster;
 export type { SubjectMaster };
@@ -68,6 +72,13 @@ export type PanelEnquiry = {
   leadVerification: LeadVerification | null;
   /** What the follow-up field opens on; decided by the database (§20.2). */
   defaultFollowUpDate: string | null;
+  /** The at-a-glance block and the timeline (§21.2). */
+  status: EnquiryStatus;
+  sourceNames: string[];
+  nextFollowUpDate: string | null;
+  reEnquiredAt: string | null;
+  createdAt: string;
+  timeline: PanelCall[];
   items: PanelItem[];
 };
 
@@ -83,6 +94,101 @@ function itemLabel(item: PanelItem) {
 }
 
 /* -------------------------------------------------------------------------- */
+
+/**
+ * A drawer inside the panel. `details` rather than state: it holds nothing the
+ * form cares about, and a native disclosure survives re-renders that a piece
+ * of component state would not.
+ */
+function PanelDrawer({
+  summary,
+  children,
+}: {
+  summary: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <details className="group border-t border-line">
+      <summary className="cursor-pointer list-none px-4 py-2 text-[12px] text-ink-2 hover:text-ink">
+        <span className="inline-block w-3 text-ink-3 group-open:rotate-90">›</span>
+        {summary}
+      </summary>
+      <div className="px-4 pb-3">{children}</div>
+    </details>
+  );
+}
+
+const TIMELINE_PREVIEW = 10;
+
+/**
+ * What has already been said to this student, newest first.
+ *
+ * Ten is about what fits without pushing the save button off the screen, and
+ * is more than anybody reads before dialling; the rest is one click away for
+ * the cases where somebody is genuinely reconstructing a story.
+ */
+function PanelTimeline({ calls }: { calls: PanelCall[] }) {
+  const [showAll, setShowAll] = useState(false);
+
+  if (!calls.length) {
+    return (
+      <div className="border-t border-line px-4 py-2.5 text-[12px] italic text-ink-3">
+        No calls on this number yet.
+      </div>
+    );
+  }
+
+  const shown = showAll ? calls : calls.slice(0, TIMELINE_PREVIEW);
+
+  return (
+    <section className="border-t border-line px-4 py-2.5">
+      <h4 className="mb-1 flex items-baseline gap-2 text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+        Previous calls
+        <span className="tabular-nums text-ink-2">{calls.length}</span>
+      </h4>
+      <ul className="flex flex-col">
+        {shown.map((c) => (
+          <li
+            key={c.id}
+            className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 border-b border-line py-1 last:border-b-0"
+          >
+            <span className="whitespace-nowrap text-[11.5px] font-semibold tabular-nums text-ink">
+              {formatDateTime(c.calledAt)}
+            </span>
+            <Badge dot tone={outcomeTone(c.outcome)}>
+              {OUTCOME_SHORT[c.outcome]}
+            </Badge>
+            <span className="text-[11.5px] text-ink-3">
+              {c.callerName ?? "unknown"}
+            </span>
+            {/* Which enquiry a call belongs to only matters when it is not
+                this one — on a re-enquired number that is most of them. */}
+            {c.sameEnquiry ? null : (
+              <Badge tone="neutral">#{c.enquiryId}</Badge>
+            )}
+            {c.nextFollowUpDate ? (
+              <span className="text-[11.5px] tabular-nums text-ink-3">
+                next {formatDate(c.nextFollowUpDate)}
+              </span>
+            ) : null}
+            <span className="w-full whitespace-pre-wrap text-[12.5px] leading-relaxed text-ink-2">
+              {c.discussion || <span className="italic text-ink-3">No note</span>}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {calls.length > TIMELINE_PREVIEW ? (
+        <button
+          type="button"
+          onClick={() => setShowAll((v) => !v)}
+          className="mt-1 text-[11.5px] text-accent underline-offset-2 hover:underline"
+        >
+          {showAll ? "Show fewer" : `Show all ${calls.length}`}
+        </button>
+      ) : null}
+    </section>
+  );
+}
 
 export function CallLogPanel({
   enquiry,
@@ -285,6 +391,28 @@ export function CallLogPanel({
           {isPurchase ? "Purchase" : "After Sale"}
         </Badge>
       </header>
+
+      {/* The at-a-glance block (§21.2), read-only and identical to the one on
+          the history card. A counsellor about to speak has three seconds to
+          take in who this is; the form below is for afterwards. */}
+      <div className="flex flex-col gap-2 border-b border-line px-4 py-2.5">
+        <EnquiryGlanceLine
+          glance={{
+            id: enquiry.id,
+            type: enquiry.type,
+            status: enquiry.status,
+            termName: enquiry.term,
+            sourceNames: enquiry.sourceNames,
+            importance: enquiry.importance,
+            leadVerification: enquiry.leadVerification,
+            slotsUsed: enquiry.slotsUsed,
+            nextFollowUpDate: enquiry.nextFollowUpDate,
+            reEnquiredAt: enquiry.reEnquiredAt,
+            createdAt: enquiry.createdAt,
+          }}
+        />
+        <InterestChips items={enquiry.items} />
+      </div>
 
       <div className="flex flex-col gap-3 px-4 py-3">
         <label className="flex flex-col gap-1">
@@ -509,18 +637,43 @@ export function CallLogPanel({
           </section>
         ) : null}
 
-        <EnquiryDetailsEditor
-          enquiryId={enquiry.id}
-          masters={{ terms: masters.terms, sources: masters.sources }}
-          initial={{
-            studentName: enquiry.studentName,
-            importance: enquiry.importance,
-            termId: enquiry.termId,
-            sourceId: enquiry.sourceId,
-            leadVerification: enquiry.leadVerification,
-          }}
-        />
+        {result?.error ? <ErrorNote>{result.error}</ErrorNote> : null}
+        {result && !result.error ? (
+          <p className="text-[12.5px] text-ok" role="status">
+            {result.ok}
+          </p>
+        ) : null}
 
+        <div className="flex items-center gap-2 border-t border-line pt-3">
+          <Button type="submit" variant="primary" disabled={pending}>
+            {pending ? "Saving…" : "Save call"}
+          </Button>
+          <span className="text-[11.5px] text-ink-3">
+            Enter saves · Shift+Enter for a new line
+          </span>
+          {purchased ? (
+            <span className="ml-auto text-[11.5px] text-ink-3">
+              {tickedCount} item{tickedCount === 1 ? "" : "s"} ticked
+            </span>
+          ) : null}
+          {onCancel ? (
+            <Button type="button" variant="ghost" onClick={onCancel}>
+              Cancel
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      {/* What was said to this person before — on this enquiry and on any
+          other they have had. A re-enquired number carries its history on the
+          rows that came before it, so keying this to the enquiry would show an
+          empty list on exactly the leads with the most to read. */}
+      <PanelTimeline calls={enquiry.timeline} />
+
+      {/* Below the fold: correcting the record is a different job from making
+          the call, and it was taking up the middle of the panel. */}
+      <PanelDrawer summary={`Edit interests (${enquiry.items.length})`}>
+        <div className="pt-1">
         {/* Interests are a purchase concept: an after-sale enquiry is about an
             order that already exists, so there is nothing to record here.
 
@@ -585,34 +738,22 @@ export function CallLogPanel({
             ) : null}
           </section>
         ) : null}
-
-
-        {result?.error ? <ErrorNote>{result.error}</ErrorNote> : null}
-        {result && !result.error ? (
-          <p className="text-[12.5px] text-ok" role="status">
-            {result.ok}
-          </p>
-        ) : null}
-
-        <div className="flex items-center gap-2 border-t border-line pt-3">
-          <Button type="submit" variant="primary" disabled={pending}>
-            {pending ? "Saving…" : "Save call"}
-          </Button>
-          <span className="text-[11.5px] text-ink-3">
-            Enter saves · Shift+Enter for a new line
-          </span>
-          {purchased ? (
-            <span className="ml-auto text-[11.5px] text-ink-3">
-              {tickedCount} item{tickedCount === 1 ? "" : "s"} ticked
-            </span>
-          ) : null}
-          {onCancel ? (
-            <Button type="button" variant="ghost" onClick={onCancel}>
-              Cancel
-            </Button>
-          ) : null}
         </div>
-      </div>
+      </PanelDrawer>
+
+      <PanelDrawer summary="Edit enquiry details">
+        <EnquiryDetailsEditor
+          enquiryId={enquiry.id}
+          masters={{ terms: masters.terms, sources: masters.sources }}
+          initial={{
+            studentName: enquiry.studentName,
+            importance: enquiry.importance,
+            termId: enquiry.termId,
+            sourceId: enquiry.sourceId,
+            leadVerification: enquiry.leadVerification,
+          }}
+        />
+      </PanelDrawer>
     </form>
   );
 }

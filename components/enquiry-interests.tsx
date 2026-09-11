@@ -37,12 +37,18 @@ export function EnquiryInterests({
   items,
   masters,
   onSaved,
+  bare = false,
 }: {
   enquiryId: number;
   items: InterestItem[];
   /** Omit to render read-only. */
   masters?: ItemMasters;
   onSaved?: () => void;
+  /**
+   * Drop the section heading and border. Set when this sits inside a collapsed
+   * drawer that already has both, and whose summary has already named it.
+   */
+  bare?: boolean;
 }) {
   const [lines, setLines] = useState<NewLine[]>(() => [blankLine()]);
   const [result, setResult] = useState<{ error: string | null; ok?: string } | null>(null);
@@ -71,10 +77,12 @@ export function EnquiryInterests({
   }
 
   return (
-    <section className="border-t border-line px-4 py-2.5">
-      <h4 className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-        Interests ({items.length})
-      </h4>
+    <section className={bare ? "" : "border-t border-line px-4 py-2.5"}>
+      {bare ? null : (
+        <h4 className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+          Interests ({items.length})
+        </h4>
+      )}
 
       {items.length ? (
         <ul className="mt-1 text-[12.5px]">

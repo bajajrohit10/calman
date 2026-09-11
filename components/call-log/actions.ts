@@ -7,6 +7,7 @@ import { istToday } from "@/lib/format";
 import {
   outcomesFor,
   type CallOutcome,
+  type EnquiryStatus,
   type EnquiryType,
   type Importance,
   type IssueCategory,
@@ -54,6 +55,19 @@ export type LogCallInput = {
 
 export type LogCallResult = { error: string | null; ok?: string };
 
+export type PanelCall = {
+  id: number;
+  enquiryId: number;
+  /** False for a call on one of the student's other enquiries. */
+  sameEnquiry: boolean;
+  calledAt: string;
+  callDate: string;
+  outcome: CallOutcome;
+  discussion: string | null;
+  nextFollowUpDate: string | null;
+  callerName: string | null;
+};
+
 export type PanelPayload = {
   id: number;
   type: EnquiryType;
@@ -73,6 +87,18 @@ export type PanelPayload = {
    * snap the saved value — Sundays and the holidays table, one implementation.
    */
   defaultFollowUpDate: string | null;
+  /** The at-a-glance block (§21.2) needs the same facts the history shows. */
+  status: EnquiryStatus;
+  sourceNames: string[];
+  nextFollowUpDate: string | null;
+  reEnquiredAt: string | null;
+  createdAt: string;
+  /**
+   * Every call on this student, this enquiry and their others (§21.2). A
+   * re-enquired lead is a new enquiry on an old number, so the calls that
+   * matter to the counsellor are mostly not on the row in front of them.
+   */
+  timeline: PanelCall[];
   items: {
     id: string;
     status: string;
@@ -98,7 +124,9 @@ export async function loadPanelEnquiry(
     .from("enquiries")
     .select(
       `id, type, product_text, term_id, source_id, importance, lead_verification,
-       follow_up_slots_used,
+       follow_up_slots_used, status, next_follow_up_date, re_enquired_at, created_at,
+       student_id,
+       enquiry_sources ( occurred_at, source:sources ( name ) ),
        term:terms ( name ),
        students ( name, mobile ),
        enquiry_items (
@@ -121,6 +149,56 @@ export async function loadPanelEnquiry(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
 
+  // Every call this student has ever had, across all of their enquiries. The
+  // filter is on the embedded enquiry, so the database returns this student's
+  // calls and nothing else — taking the most recent N globally and filtering
+  // here would quietly lose their history on a busy day.
+  //
+  // One query through the student, not through this enquiry: a re-enquired
+  // number carries its history on the rows that came before, and a counsellor
+  // about to speak to somebody needs to know what was last said to *them*, not
+  // what was last said about this particular enquiry id.
+  const { data: callRows } = await supabase
+    .from("calls")
+    .select(
+      `id, enquiry_id, called_at, call_date, outcome, discussion, next_follow_up_date,
+       caller:profiles!calls_called_by_fkey ( full_name ),
+       enquiry:enquiries!calls_enquiry_id_fkey!inner ( student_id )`,
+    )
+    .eq("enquiry.student_id", data.student_id)
+    .order("called_at", { ascending: false })
+    .limit(200);
+
+  const timeline: PanelCall[] = ((callRows ?? []) as unknown as {
+    id: number;
+    enquiry_id: number;
+    called_at: string;
+    call_date: string;
+    outcome: CallOutcome;
+    discussion: string | null;
+    next_follow_up_date: string | null;
+    caller: { full_name: string | null } | null;
+  }[]).map((c) => ({
+    id: c.id,
+    enquiryId: c.enquiry_id,
+    sameEnquiry: c.enquiry_id === data.id,
+    calledAt: c.called_at,
+    callDate: c.call_date,
+    outcome: c.outcome,
+    discussion: c.discussion,
+    nextFollowUpDate: c.next_follow_up_date,
+    callerName: c.caller?.full_name ?? null,
+  }));
+
+  const sourceNames = [
+    ...new Set(
+      [...((data.enquiry_sources ?? []) as { occurred_at: string; source: { name: string } | null }[])]
+        .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
+        .map((e) => e.source?.name)
+        .filter((n): n is string => Boolean(n)),
+    ),
+  ];
+
   return {
     error: null,
     enquiry: {
@@ -136,6 +214,12 @@ export async function loadPanelEnquiry(
       importance: data.importance as Importance | null,
       leadVerification: data.lead_verification as LeadVerification | null,
       defaultFollowUpDate: (nextDay as string | null) ?? null,
+      status: data.status as EnquiryStatus,
+      sourceNames,
+      nextFollowUpDate: data.next_follow_up_date,
+      reEnquiredAt: data.re_enquired_at,
+      createdAt: data.created_at,
+      timeline,
       items: (data.enquiry_items ?? []).map((i) => ({
         id: i.id,
         status: i.status,

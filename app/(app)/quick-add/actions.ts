@@ -3,7 +3,12 @@
 import { revalidatePath } from "next/cache";
 
 import { requireUser } from "@/lib/auth";
-import type { EnquiryType, Importance, LeadVerification } from "@/lib/enquiry-labels";
+import type {
+  EnquiryStatus,
+  EnquiryType,
+  Importance,
+  LeadVerification,
+} from "@/lib/enquiry-labels";
 import { isValidMobile, normaliseMobile } from "@/lib/mobile";
 import { loadStudentByMobile, type StudentHistory } from "@/lib/students";
 import { createClient } from "@/lib/supabase/server";
@@ -62,6 +67,12 @@ export type NewEnquiryResult = {
     importance: Importance | null;
     leadVerification: LeadVerification | null;
     defaultFollowUpDate: string | null;
+    status: EnquiryStatus;
+    sourceNames: string[];
+    nextFollowUpDate: string | null;
+    reEnquiredAt: string | null;
+    createdAt: string;
+    timeline: never[];
     items: never[];
   };
 };
@@ -176,6 +187,15 @@ export async function createEnquiry(
       importance: (input.importance || null) as Importance | null,
       leadVerification: (input.leadVerification || null) as LeadVerification | null,
       defaultFollowUpDate: (nextDay as string | null) ?? null,
+      // A brand-new enquiry: open, no calls, and the only source is the one
+      // just chosen. The panel's timeline still shows the student's other
+      // enquiries when there are any — Quick Add fills that in below.
+      status: "open" as EnquiryStatus,
+      sourceNames: [],
+      nextFollowUpDate: null,
+      reEnquiredAt: null,
+      createdAt: new Date().toISOString(),
+      timeline: [],
       items: [],
     },
   };
