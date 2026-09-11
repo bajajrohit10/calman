@@ -14,6 +14,18 @@ type Params = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) =>
   (Array.isArray(v) ? v[0] : v) || null;
 
+/**
+ * A native multi-select submits its values as repeated keys; a hand-built or
+ * pasted link may comma-join them. Both shapes reach the parsers as one
+ * comma-joined string, which is what the array filters expect — the old reader
+ * took the first value and silently dropped the rest.
+ */
+const read = (sp: Params) => (k: string): string | null => {
+  const v = sp[k];
+  if (Array.isArray(v)) return v.length ? v.join(",") : null;
+  return v ?? null;
+};
+
 export default async function Page({
   searchParams,
 }: {
@@ -22,7 +34,7 @@ export default async function Page({
   await requireAdminProfile();
   const sp = await searchParams;
 
-  const { date, page, includeNotDue, filters } = parseDeskParams((k) => one(sp[k]));
+  const { date, page, includeNotDue, filters } = parseDeskParams(read(sp));
 
   const search = new URLSearchParams(
     Object.entries(sp).flatMap(([k, v]) =>
@@ -40,8 +52,8 @@ export default async function Page({
       loadDeskFacets(filters),
       supabase.from("teachers").select("id, name").eq("is_active", true).order("name"),
       supabase.from("institutes").select("id, name").eq("is_active", true).order("name"),
-      supabase.from("courses").select("id, name").eq("is_active", true).order("name"),
-      supabase.from("subjects").select("id, name, course_id").eq("is_active", true).order("name"),
+      supabase.from("courses").select("id, name").eq("is_active", true).order("sort_order").order("name"),
+      supabase.from("subjects").select("id, name, course_id").eq("is_active", true).order("sort_order").order("name"),
       supabase.from("contents").select("id, name").eq("is_active", true).order("priority"),
       supabase.from("terms").select("id, name").eq("is_active", true).order("sort_order"),
       supabase.from("sources").select("id, name").eq("is_active", true).order("name"),
@@ -103,6 +115,10 @@ export default async function Page({
           contents: contents.data ?? [],
           terms: terms.data ?? [],
           sources: sources.data ?? [],
+        }}
+        multi={{
+          teacher: filters.teacherIds ?? [],
+          content: filters.contentIds ?? [],
         }}
         selected={{
           counsellor: one(sp.counsellor) ?? "",

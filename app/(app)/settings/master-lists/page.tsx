@@ -56,7 +56,7 @@ export default async function MasterListsPage({
   // Subjects are grouped under their course, so the editor needs the courses.
   const needsCourses = spec.fields.some((f) => f.kind === "course");
   const { data: courses } = needsCourses
-    ? await supabase.from("courses").select("id, name").order("name")
+    ? await supabase.from("courses").select("id, name").order("sort_order").order("name")
     : { data: null };
 
   return (

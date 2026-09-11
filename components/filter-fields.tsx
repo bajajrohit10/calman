@@ -64,11 +64,58 @@ export function FacetSelect({
             value={o.id}
             className={empty ? "text-ink-3" : undefined}
           >
-            {counts ? countLabel(o.name, facet, counts[o.id]) : o.name}
+            {facets ? countLabel(o.name, facet, counts?.[o.id]) : o.name}
           </option>
         );
       })}
     </Select>
+  );
+}
+
+/**
+ * A faceted multi-select. Same counts and same ordering as FacetSelect; the
+ * difference is that it picks several and means their union.
+ *
+ * Rendered as a sized native listbox rather than a pop-up: on the desk a
+ * manager is usually picking two or three teachers out of seventy-odd and
+ * wants to see the counts side by side while doing it. The value travels
+ * comma-joined in one query-string key, which is what the parsers expect.
+ */
+export function FacetMultiSelect({
+  name,
+  facet,
+  options,
+  values,
+  facets,
+  size = 5,
+}: {
+  name: string;
+  facet: string;
+  options: FilterMaster[];
+  values: string[];
+  facets?: FacetMap;
+  size?: number;
+}) {
+  const counts = facets?.byFacet[facet];
+  const ordered = useMemo(() => orderOptions(options, counts), [options, counts]);
+
+  return (
+    <select
+      name={name}
+      multiple
+      size={size}
+      defaultValue={values}
+      className="rounded-md border border-line-2 bg-surface px-2 py-1 text-[13px]"
+    >
+      {ordered.map((o) => {
+        const empty = isEmptyOption(facet, o.id, facets);
+        return (
+          <option key={o.id} value={o.id} className={empty ? "text-ink-3" : undefined}>
+            {facets ? countLabel(o.name, facet, counts?.[o.id]) : o.name}
+          </option>
+        );
+      })}
+    </select>
   );
 }
 
@@ -107,9 +154,12 @@ export function CommonFilterFields({
   selected,
   roster,
   facets,
+  multi,
 }: {
   masters: FilterMasters;
   selected: Record<string, string>;
+  /** Multi-select selections, by query-string key. */
+  multi?: Record<string, string[]>;
   roster?: { id: string; name: string }[];
   /** Omit for a screen with no faceted counts. */
   facets?: FacetMap;
@@ -147,12 +197,12 @@ export function CommonFilterFields({
         />
       </Labelled>
 
-      <Labelled label="Teacher">
-        <FacetSelect
+      <Labelled label="Teacher (several)">
+        <FacetMultiSelect
           name="teacher"
           facet="teacher"
           options={masters.teachers}
-          value={selected.teacher ?? ""}
+          values={multi?.teacher ?? []}
           facets={facets}
         />
       </Labelled>
@@ -177,12 +227,12 @@ export function CommonFilterFields({
         />
       </Labelled>
 
-      <Labelled label="Content">
-        <FacetSelect
+      <Labelled label="Content (several)">
+        <FacetMultiSelect
           name="content"
           facet="content"
           options={masters.contents}
-          value={selected.content ?? ""}
+          values={multi?.content ?? []}
           facets={facets}
         />
       </Labelled>

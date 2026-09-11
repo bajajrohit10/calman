@@ -22,6 +22,7 @@ import {
 
 import {
   createItem,
+  moveItem,
   setItemActive,
   updateItem,
   type ListActionResult,
@@ -173,6 +174,7 @@ function EditableRow({
 }) {
   const [saveState, saveAction] = useActionState(updateItem, EMPTY);
   const [activeState, activeAction] = useActionState(setItemActive, EMPTY);
+  const [moveState, moveAction] = useActionState(moveItem, EMPTY);
 
   // Opening the editor records the action state it opened against.
   // useActionState hands back a fresh object per submit, so "a result arrived
@@ -294,6 +296,36 @@ function EditableRow({
               Saved
             </span>
           ) : null}
+          {/* §11.1: courses and subjects carry sort_order and the order they
+              are in here is the order every filter, facet and picker uses. */}
+          {spec.reorderable ? (
+            <form action={moveAction} className="flex gap-0.5">
+              <input type="hidden" name="table" value={spec.table} />
+              <input type="hidden" name="id" value={id} />
+              <Button
+                type="submit"
+                name="direction"
+                value="up"
+                size="sm"
+                variant="ghost"
+                aria-label="Move up"
+                title="Move up"
+              >
+                ↑
+              </Button>
+              <Button
+                type="submit"
+                name="direction"
+                value="down"
+                size="sm"
+                variant="ghost"
+                aria-label="Move down"
+                title="Move down"
+              >
+                ↓
+              </Button>
+            </form>
+          ) : null}
           <Button size="sm" variant="ghost" onClick={openEditor}>
             Edit
           </Button>
@@ -306,9 +338,9 @@ function EditableRow({
             </Button>
           </form>
         </div>
-        {activeState.error ? (
+        {activeState.error || moveState.error ? (
           <span className="block text-right text-[11px] text-danger" role="alert">
-            {activeState.error}
+            {activeState.error ?? moveState.error}
           </span>
         ) : null}
       </td>

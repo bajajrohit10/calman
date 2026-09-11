@@ -16,11 +16,12 @@ async function loadMasters(): Promise<QuickAddMasters> {
 
   const [teachers, courses, subjects, contents, sources, terms] = await Promise.all([
     supabase.from("teachers").select("id, name").eq("is_active", true).order("name"),
-    supabase.from("courses").select("id, name").eq("is_active", true).order("name"),
+    supabase.from("courses").select("id, name").eq("is_active", true).order("sort_order").order("name"),
     supabase
       .from("subjects")
       .select("id, name, course_id")
       .eq("is_active", true)
+      .order("sort_order")
       .order("name"),
     supabase.from("contents").select("id, name").eq("is_active", true).order("priority"),
     supabase.from("sources").select("id, name").eq("is_active", true).order("name"),

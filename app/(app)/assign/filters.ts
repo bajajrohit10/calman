@@ -24,6 +24,16 @@ const str = (get: ParamReader, key: string) => {
   return value === null || value === "" ? null : value;
 };
 
+/**
+ * A multi-select filter travels comma-joined, the shape the New Calls source
+ * select has used since Brief 7. An empty list means "any".
+ */
+const many = (get: ParamReader, key: string): string[] =>
+  (str(get, key) ?? "")
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+
 export function parseDeskParams(get: ParamReader): {
   date: string;
   page: number;
@@ -42,10 +52,10 @@ export function parseDeskParams(get: ParamReader): {
       date,
       includeNotDue,
       counsellorId: str(get, "counsellor"),
-      teacherId: str(get, "teacher"),
+      teacherIds: many(get, "teacher"),
       courseId: str(get, "course"),
       subjectId: str(get, "subject"),
-      contentId: str(get, "content"),
+      contentIds: many(get, "content"),
       instituteId: str(get, "institute"),
       termId: str(get, "term"),
       sourceId: str(get, "source"),
@@ -89,10 +99,10 @@ export function parseEnquiriesParams(get: ParamReader): {
       lostReason: str(get, "lostReason") as LostReason | null,
       closeReason: str(get, "closeReason") as CloseReason | null,
       counsellorId: str(get, "counsellor"),
-      teacherId: str(get, "teacher"),
+      teacherId: many(get, "teacher")[0] ?? null,
       courseId: str(get, "course"),
       subjectId: str(get, "subject"),
-      contentId: str(get, "content"),
+      contentId: many(get, "content")[0] ?? null,
       termId: str(get, "term"),
       sourceId: str(get, "source"),
       importance: str(get, "importance") as Importance | null,

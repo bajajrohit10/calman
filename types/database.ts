@@ -323,18 +323,21 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          sort_order: number
         }
         Insert: {
           created_at?: string
           id?: string
           is_active?: boolean
           name: string
+          sort_order?: number
         }
         Update: {
           created_at?: string
           id?: string
           is_active?: boolean
           name?: string
+          sort_order?: number
         }
         Relationships: []
       }
@@ -1085,6 +1088,7 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          sort_order: number
         }
         Insert: {
           course_id: string
@@ -1092,6 +1096,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name: string
+          sort_order?: number
         }
         Update: {
           course_id?: string
@@ -1099,6 +1104,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          sort_order?: number
         }
         Relationships: [
           {
@@ -1604,6 +1610,7 @@ export type Database = {
       }
       new_calls_facets: {
         Args: {
+          p_content_ids?: string[]
           p_course_id?: string
           p_created_from?: string
           p_created_to?: string
@@ -1611,7 +1618,7 @@ export type Database = {
           p_institute_id?: string
           p_product_text?: string
           p_source_ids?: string[]
-          p_teacher_id?: string
+          p_teacher_ids?: string[]
           p_term_id?: string
         }
         Returns: {
@@ -1623,6 +1630,7 @@ export type Database = {
       }
       new_calls_pool: {
         Args: {
+          p_content_ids?: string[]
           p_course_id?: string
           p_created_from?: string
           p_created_to?: string
@@ -1632,7 +1640,7 @@ export type Database = {
           p_offset?: number
           p_product_text?: string
           p_source_ids?: string[]
-          p_teacher_id?: string
+          p_teacher_ids?: string[]
           p_term_id?: string
         }
         Returns: {
@@ -1664,7 +1672,7 @@ export type Database = {
       }
       recommended_calls: {
         Args: {
-          p_content_id?: string
+          p_content_ids?: string[]
           p_counsellor_id?: string
           p_course_id?: string
           p_created_from?: string
@@ -1681,7 +1689,7 @@ export type Database = {
           p_source_id?: string
           p_status?: Database["public"]["Enums"]["enquiry_status"]
           p_subject_id?: string
-          p_teacher_id?: string
+          p_teacher_ids?: string[]
           p_term_id?: string
           p_type?: Database["public"]["Enums"]["enquiry_type"]
         }
@@ -1715,7 +1723,7 @@ export type Database = {
       }
       recommended_facets: {
         Args: {
-          p_content_id?: string
+          p_content_ids?: string[]
           p_counsellor_id?: string
           p_course_id?: string
           p_created_from?: string
@@ -1730,7 +1738,7 @@ export type Database = {
           p_source_id?: string
           p_status?: Database["public"]["Enums"]["enquiry_status"]
           p_subject_id?: string
-          p_teacher_id?: string
+          p_teacher_ids?: string[]
           p_term_id?: string
           p_type?: Database["public"]["Enums"]["enquiry_type"]
         }

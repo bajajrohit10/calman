@@ -49,6 +49,8 @@ export type ListSpec = {
   orderBy: { column: string; ascending: boolean }[];
   /** Rendered grouped under their course rather than as one flat list. */
   groupByCourse?: boolean;
+  /** Carries sort_order and shows up/down controls (§11.1). */
+  reorderable?: boolean;
 };
 
 const NAME: FieldSpec = {
@@ -102,9 +104,14 @@ export const LISTS: ListSpec[] = [
     label: "Courses",
     table: "courses",
     pk: "id",
-    blurb: "CA Final, CA Inter and so on. Subjects hang off these.",
+    blurb:
+      "CA Final, CA Inter and so on. Subjects hang off these. The order here is the order every filter, facet and picker uses.",
     fields: [NAME],
-    orderBy: [{ column: "name", ascending: true }],
+    orderBy: [
+      { column: "sort_order", ascending: true },
+      { column: "name", ascending: true },
+    ],
+    reorderable: true,
   },
   {
     key: "subjects",
@@ -117,8 +124,12 @@ export const LISTS: ListSpec[] = [
       NAME,
       { name: "course_id", label: "Course", kind: "course", required: true, width: "w-48" },
     ],
-    orderBy: [{ column: "name", ascending: true }],
+    orderBy: [
+      { column: "sort_order", ascending: true },
+      { column: "name", ascending: true },
+    ],
     groupByCourse: true,
+    reorderable: true,
   },
   {
     key: "contents",

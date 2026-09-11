@@ -9,7 +9,7 @@
 -- Idempotent: every insert is ON CONFLICT DO NOTHING against a unique name, so
 -- this runs on `supabase db reset` and against the hosted project alike.
 --
--- Counts: 7 sources · 73 teachers · 7 courses · 24 subjects · 5 contents
+-- Counts: 7 sources · 73 teachers · 9 courses · 43 subjects · 5 contents
 --         13 terms · 3 WhatsApp templates · 0 holidays
 
 -- ---------------------------------------------------------------------------
@@ -128,83 +128,129 @@ insert into public.teachers (name) values
 on conflict (name) do nothing;
 
 -- ---------------------------------------------------------------------------
--- Courses and subjects. ACCA and CFA carry no subjects yet; CS and CMA use the
+-- Courses and subjects (§11.1).
+--
+-- sort_order is the syllabus order, not alphabetical, and every filter, facet
+-- and picker honours it. ACCA and CFA carry no subjects; CS keeps its
 -- three-level structure rather than paper names.
+--
+-- Idempotent against a database that has already been reconciled: the upserts
+-- set sort_order on conflict, so a re-run corrects drift without creating
+-- duplicates and without touching anything else. The legacy single "CMA"
+-- course and its Foundation/Inter/Final subjects are deliberately absent — a
+-- fresh database goes straight to the three CMA levels.
 -- ---------------------------------------------------------------------------
 
-insert into public.courses (name) values
-  ('CA Final'),
-  ('CA Inter'),
-  ('CA Foundation'),
-  ('CS'),
-  ('CMA'),
-  ('ACCA'),
-  ('CFA')
-on conflict (name) do nothing;
+insert into public.courses (name, sort_order) values
+  ('CA Final', 1),
+  ('CA Inter', 2),
+  ('CA Foundation', 3),
+  ('CMA Final', 4),
+  ('CMA Inter', 5),
+  ('CMA Foundation', 6),
+  ('ACCA', 7),
+  ('CFA', 8),
+  ('CS', 9)
+on conflict (name) do update set sort_order = excluded.sort_order;
 
-insert into public.subjects (course_id, name)
-select c.id, v.name
+insert into public.subjects (course_id, name, sort_order)
+select c.id, v.name, v.n
   from public.courses c
  cross join (values
-          ('FR'),
-          ('AFM'),
-          ('Audit'),
-          ('DT'),
-          ('IDT'),
-          ('Set A Law'),
-          ('Set B Cost'),
-          ('IBS')
-        ) as v(name)
+          ('FR', 1),
+          ('AFM/SFM', 2),
+          ('Audit', 3),
+          ('Direct Tax', 4),
+          ('Indirect Tax', 5),
+          ('Integrated Business Solutions', 6),
+          ('Set A - Law', 7),
+          ('Set B - Costing', 8)
+        ) as v(name, n)
  where c.name = 'CA Final'
-on conflict (course_id, name) do nothing;
+on conflict (course_id, name) do update set sort_order = excluded.sort_order;
 
-insert into public.subjects (course_id, name)
-select c.id, v.name
+insert into public.subjects (course_id, name, sort_order)
+select c.id, v.name, v.n
   from public.courses c
  cross join (values
-          ('Adv Account'),
-          ('Law'),
-          ('Audit'),
-          ('Costing'),
-          ('Taxation'),
-          ('FM SM')
-        ) as v(name)
+          ('Advanced Accounting', 1),
+          ('Corporate Law', 2),
+          ('Taxation', 3),
+          ('Costing', 4),
+          ('Audit and Ethics', 5),
+          ('FM SM', 6)
+        ) as v(name, n)
  where c.name = 'CA Inter'
-on conflict (course_id, name) do nothing;
+on conflict (course_id, name) do update set sort_order = excluded.sort_order;
 
-insert into public.subjects (course_id, name)
-select c.id, v.name
+insert into public.subjects (course_id, name, sort_order)
+select c.id, v.name, v.n
   from public.courses c
  cross join (values
-          ('Accounts'),
-          ('Law'),
-          ('Maths & Stats'),
-          ('Economics')
-        ) as v(name)
+          ('Accounts', 1),
+          ('Law', 2),
+          ('Maths & Stats', 3),
+          ('Economics', 4)
+        ) as v(name, n)
  where c.name = 'CA Foundation'
-on conflict (course_id, name) do nothing;
+on conflict (course_id, name) do update set sort_order = excluded.sort_order;
 
-insert into public.subjects (course_id, name)
-select c.id, v.name
+insert into public.subjects (course_id, name, sort_order)
+select c.id, v.name, v.n
   from public.courses c
  cross join (values
-          ('Foundation'),
-          ('Inter'),
-          ('Final')
-        ) as v(name)
+          ('Corporate Law (Paper 13)', 1),
+          ('SFM (Paper 14)', 2),
+          ('Direct Tax (Paper 15)', 3),
+          ('SCM (Paper 16)', 4),
+          ('Cost Audit (Paper 17)', 5),
+          ('CFR (Paper 18)', 6),
+          ('Indirect Tax (Paper 19)', 7),
+          ('Elective SPMBV (Paper 20A)', 8),
+          ('Elective Risk Management (Paper 20B)', 9),
+          ('Elective Entrepreneurship And Startup (Paper 20C)', 10)
+        ) as v(name, n)
+ where c.name = 'CMA Final'
+on conflict (course_id, name) do update set sort_order = excluded.sort_order;
+
+insert into public.subjects (course_id, name, sort_order)
+select c.id, v.name, v.n
+  from public.courses c
+ cross join (values
+          ('Business Law (Paper 5)', 1),
+          ('Financial Accounts (Paper 6)', 2),
+          ('Direct & Indirect Tax (Paper 7)', 3),
+          ('Cost Accounts (Paper 8)', 4),
+          ('OM & SM (Paper 9)', 5),
+          ('Corporate Accounts and Audit (Paper 10)', 6),
+          ('FM & DA (Paper 11)', 7),
+          ('Mgmt Accounts (Paper 12)', 8)
+        ) as v(name, n)
+ where c.name = 'CMA Inter'
+on conflict (course_id, name) do update set sort_order = excluded.sort_order;
+
+insert into public.subjects (course_id, name, sort_order)
+select c.id, v.name, v.n
+  from public.courses c
+ cross join (values
+          ('Business Law & Comm (Paper 1)', 1),
+          ('Financial & Cost Accounting (Paper 2)', 2),
+          ('Business Maths & Stats (Paper 3)', 3),
+          ('Business Economics & Mgmt (Paper 4)', 4)
+        ) as v(name, n)
+ where c.name = 'CMA Foundation'
+on conflict (course_id, name) do update set sort_order = excluded.sort_order;
+
+insert into public.subjects (course_id, name, sort_order)
+select c.id, v.name, v.n
+  from public.courses c
+ cross join (values
+          ('Foundation', 1),
+          ('Inter', 2),
+          ('Final', 3)
+        ) as v(name, n)
  where c.name = 'CS'
-on conflict (course_id, name) do nothing;
-
-insert into public.subjects (course_id, name)
-select c.id, v.name
-  from public.courses c
- cross join (values
-          ('Foundation'),
-          ('Inter'),
-          ('Final')
-        ) as v(name)
- where c.name = 'CMA'
-on conflict (course_id, name) do nothing;
+on conflict (course_id, name) do update set sort_order = excluded.sort_order;
 
 -- ---------------------------------------------------------------------------
 -- Contents, in the §6 priority order: lower number is called first.

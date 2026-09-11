@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-import { FacetSelect } from "@/components/filter-fields";
+import { FacetMultiSelect, FacetSelect } from "@/components/filter-fields";
 import { Badge, Button, ErrorNote, Input, cx } from "@/components/ui";
-import { countLabel, orderOptions, type FacetMap } from "@/lib/facet-shape";
+import type { FacetMap } from "@/lib/facet-shape";
 import { IMPORTANCE_LABELS, type Importance } from "@/lib/enquiry-labels";
 import { formatDate } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
@@ -43,6 +43,8 @@ export function NewCallsBoard({
   pageSize,
   search,
   sourceIds,
+  teacherIds,
+  contentIds,
   masters,
   selected,
   facets,
@@ -55,9 +57,12 @@ export function NewCallsBoard({
   pageSize: number;
   search: string;
   sourceIds: string[];
+  teacherIds: string[];
+  contentIds: string[];
   masters: {
     teachers: Master[];
     institutes: Master[];
+    contents: Master[];
     courses: Master[];
     terms: Master[];
     sources: Master[];
@@ -102,34 +107,35 @@ export function NewCallsBoard({
     <div className="flex flex-col gap-3">
       <form method="GET" className="rounded-lg border border-line bg-surface p-3">
         <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4">
-          <label className="flex flex-col gap-1 sm:row-span-2">
-            <span className="text-[10.5px] font-medium uppercase tracking-wide text-ink-3">
-              Source (several)
-            </span>
-            <select
+          <Labelled label="Source (several)">
+            <FacetMultiSelect
               name="source"
-              multiple
-              size={5}
-              defaultValue={sourceIds}
-              className="rounded-md border border-line-2 bg-surface px-2 py-1 text-[13px]"
-            >
-              {orderOptions(masters.sources, facets?.byFacet.source).map((s) => (
-                <option
-                  key={s.id}
-                  value={s.id}
-                  className={
-                    facets && !(facets.byFacet.source?.[s.id]?.numbers ?? 0)
-                      ? "text-ink-3"
-                      : undefined
-                  }
-                >
-                  {facets
-                    ? countLabel(s.name, "source", facets.byFacet.source?.[s.id])
-                    : s.name}
-                </option>
-              ))}
-            </select>
-          </label>
+              facet="source"
+              options={masters.sources}
+              values={sourceIds}
+              facets={facets}
+            />
+          </Labelled>
+
+          <Labelled label="Teacher (several)">
+            <FacetMultiSelect
+              name="teacher"
+              facet="teacher"
+              options={masters.teachers}
+              values={teacherIds}
+              facets={facets}
+            />
+          </Labelled>
+
+          <Labelled label="Content (several)">
+            <FacetMultiSelect
+              name="content"
+              facet="content"
+              options={masters.contents}
+              values={contentIds}
+              facets={facets}
+            />
+          </Labelled>
 
           <Labelled label="Course">
             <FacetSelect
@@ -151,15 +157,7 @@ export function NewCallsBoard({
             />
           </Labelled>
 
-          <Labelled label="Teacher">
-            <FacetSelect
-              name="teacher"
-              facet="teacher"
-              options={masters.teachers}
-              value={selected.teacher}
-              facets={facets}
-            />
-          </Labelled>
+
 
           <Labelled label="Importance">
             <FacetSelect

@@ -52,6 +52,7 @@ export function AssignDesk({
   error,
   facets,
   facetError,
+  multi,
   date,
   page,
   pageSize,
@@ -67,6 +68,8 @@ export function AssignDesk({
   /** Absent when the counts could not be trusted; see lib/facets.ts. */
   facets?: FacetMap;
   facetError?: string | null;
+  /** Teacher and Content are multi-select (§11.2); the rest are single. */
+  multi?: Record<string, string[]>;
   date: string;
   page: number;
   pageSize: number;
@@ -144,6 +147,7 @@ export function AssignDesk({
             <CommonFilterFields
               masters={masters}
               selected={selected}
+              multi={multi}
               roster={roster}
               facets={facets}
             />

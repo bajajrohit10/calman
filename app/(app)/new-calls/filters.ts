@@ -21,7 +21,8 @@ const str = (get: ParamReader, key: string) => {
 export type NewCallsArgs = {
   p_source_ids: string[] | undefined;
   p_course_id: string | undefined;
-  p_teacher_id: string | undefined;
+  p_teacher_ids: string[] | undefined;
+  p_content_ids: string[] | undefined;
   p_institute_id: string | undefined;
   p_importance: Importance | undefined;
   p_term_id: string | undefined;
@@ -33,25 +34,35 @@ export type NewCallsArgs = {
 export function parseNewCallsParams(get: ParamReader): {
   page: number;
   sourceIds: string[];
+  teacherIds: string[];
+  contentIds: string[];
   filters: NewCallsArgs;
 } {
   const page = Math.max(1, Number(str(get, "page") ?? 1) || 1);
   // Repeated ?source= values arrive comma-joined by the form, so both shapes
   // are accepted.
-  const sourceIds = (str(get, "source") ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const many = (key: string) =>
+    (str(get, key) ?? "")
+      .split(",")
+      .map((v) => v.trim())
+      .filter(Boolean);
+
+  const sourceIds = many("source");
+  const teacherIds = many("teacher");
+  const contentIds = many("content");
 
   const opt = (v: string | null) => v ?? undefined;
 
   return {
     page,
     sourceIds,
+    teacherIds,
+    contentIds,
     filters: {
       p_source_ids: sourceIds.length ? sourceIds : undefined,
       p_course_id: opt(str(get, "course")),
-      p_teacher_id: opt(str(get, "teacher")),
+      p_teacher_ids: teacherIds.length ? teacherIds : undefined,
+      p_content_ids: contentIds.length ? contentIds : undefined,
       p_institute_id: opt(str(get, "institute")),
       p_importance: opt(str(get, "importance")) as Importance | undefined,
       p_term_id: opt(str(get, "term")),

@@ -11,6 +11,18 @@ export const metadata = { title: "New Calls · Calman" };
 type Params = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || null;
 
+/**
+ * A native multi-select submits its values as repeated keys; a hand-built or
+ * pasted link may comma-join them. Both shapes reach the parsers as one
+ * comma-joined string, which is what the array filters expect — the old reader
+ * took the first value and silently dropped the rest.
+ */
+const read = (sp: Params) => (k: string): string | null => {
+  const v = sp[k];
+  if (Array.isArray(v)) return v.length ? v.join(",") : null;
+  return v ?? null;
+};
+
 /** §5.12. The unclaimed pool — all roles; anyone who calls can take work. */
 export default async function Page({
   searchParams,
@@ -19,23 +31,30 @@ export default async function Page({
 }) {
   await requireUser();
   const sp = await searchParams;
-  const { page, sourceIds, filters } = parseNewCallsParams((k) => one(sp[k]));
+  const { page, sourceIds, teacherIds, contentIds, filters } = parseNewCallsParams(read(sp));
 
   const supabase = await createClient();
-  const [list, facetResult, teachers, institutes, courses, terms, sources] = await Promise.all([
-    supabase.rpc("new_calls_pool", {
-      ...filters,
-      p_limit: PAGE_SIZE,
-      p_offset: (page - 1) * PAGE_SIZE,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any),
-    loadNewCallsFacets(filters),
-    supabase.from("teachers").select("id, name").eq("is_active", true).order("name"),
+  const [list, facetResult, teachers, institutes, courses, contents, terms, sources] =
+    await Promise.all([
+      supabase.rpc("new_calls_pool", {
+        ...filters,
+        p_limit: PAGE_SIZE,
+        p_offset: (page - 1) * PAGE_SIZE,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any),
+      loadNewCallsFacets(filters),
+      supabase.from("teachers").select("id, name").eq("is_active", true).order("name"),
       supabase.from("institutes").select("id, name").eq("is_active", true).order("name"),
-    supabase.from("courses").select("id, name").eq("is_active", true).order("name"),
-    supabase.from("terms").select("id, name").eq("is_active", true).order("sort_order"),
-    supabase.from("sources").select("id, name").eq("is_active", true).order("name"),
-  ]);
+      supabase
+        .from("courses")
+        .select("id, name")
+        .eq("is_active", true)
+        .order("sort_order")
+        .order("name"),
+      supabase.from("contents").select("id, name").eq("is_active", true).order("priority"),
+      supabase.from("terms").select("id, name").eq("is_active", true).order("sort_order"),
+      supabase.from("sources").select("id, name").eq("is_active", true).order("name"),
+    ]);
 
   const rows = (list.data ?? []) as unknown as PoolRow[];
   const search = new URLSearchParams(
@@ -68,10 +87,13 @@ export default async function Page({
         pageSize={PAGE_SIZE}
         search={search}
         sourceIds={sourceIds}
+        teacherIds={teacherIds}
+        contentIds={contentIds}
         masters={{
           teachers: teachers.data ?? [],
           institutes: institutes.data ?? [],
           courses: courses.data ?? [],
+          contents: contents.data ?? [],
           terms: terms.data ?? [],
           sources: sources.data ?? [],
         }}

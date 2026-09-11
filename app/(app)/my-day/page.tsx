@@ -55,8 +55,8 @@ export default async function Page({
       : Promise.resolve({ data: null }),
     Promise.all([
       supabase.from("teachers").select("id, name").eq("is_active", true).order("name"),
-      supabase.from("courses").select("id, name").eq("is_active", true).order("name"),
-      supabase.from("subjects").select("id, name, course_id").eq("is_active", true).order("name"),
+      supabase.from("courses").select("id, name").eq("is_active", true).order("sort_order").order("name"),
+      supabase.from("subjects").select("id, name, course_id").eq("is_active", true).order("sort_order").order("name"),
       supabase.from("contents").select("id, name").eq("is_active", true).order("priority"),
       supabase.from("terms").select("id, name").eq("is_active", true).order("sort_order"),
       supabase.from("sources").select("id, name").eq("is_active", true).order("name"),

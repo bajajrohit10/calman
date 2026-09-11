@@ -17,6 +17,21 @@ export type ListActionResult = { error: string | null; ok?: string };
  */
 type PgResult = { error: { message: string } | null };
 
+/** The reads the reorder needs, typed as loosely as the writes above. */
+type OrderedRow = { id: string; sort_order: number; course_id?: string | null };
+type ListResult = { data: OrderedRow[] | null; error: { message: string } | null };
+type OneResult = { data: OrderedRow | null; error: { message: string } | null };
+
+type NeighbourQuery = {
+  eq(column: string, value: unknown): NeighbourQuery;
+  gt(column: string, value: unknown): NeighbourQuery;
+  lt(column: string, value: unknown): NeighbourQuery;
+  limit(n: number): PromiseLike<ListResult>;
+  maybeSingle(): PromiseLike<OneResult>;
+  order(column: string, opts: { ascending: boolean }): NeighbourQuery;
+};
+type GenericReader = { select(columns: string): NeighbourQuery };
+
 type GenericWriter = {
   insert(values: Record<string, unknown>): PromiseLike<PgResult>;
   update(values: Record<string, unknown>): {
@@ -153,4 +168,66 @@ function friendly(message: string, label: string) {
     return "That refers to something which no longer exists.";
   }
   return message;
+}
+
+/**
+ * Move one row up or down its list (§11.1).
+ *
+ * Swaps sort_order with the adjacent row rather than renumbering everything:
+ * two writes instead of N, and a list somebody else is reordering at the same
+ * moment ends up shuffled rather than flattened.
+ *
+ * Only the lists that declare `reorderable` in config.ts accept this — courses
+ * and subjects. The rest are alphabetical or carry their own priority column.
+ */
+export async function moveItem(
+  _prev: ListActionResult,
+  formData: FormData,
+): Promise<ListActionResult> {
+  const spec = resolveTable(formData);
+  if (!spec) return { error: "Unknown list." };
+  if (!spec.reorderable) return { error: `${spec.label} is not reorderable.` };
+
+  const id = String(formData.get("id") ?? "");
+  const direction = String(formData.get("direction") ?? "");
+  if (!id) return { error: "Missing row identifier." };
+  if (direction !== "up" && direction !== "down") return { error: "Unknown direction." };
+
+  const supabase = await createClient();
+  const reader = supabase.from(spec.table) as unknown as GenericReader;
+
+  // course_id only exists on subjects; asking courses for it is an error.
+  const columns = spec.groupByCourse ? "id, sort_order, course_id" : "id, sort_order";
+  const { data: row, error: rowError } = await reader
+    .select(columns)
+    .eq(spec.pk, id)
+    .maybeSingle();
+  if (rowError) return { error: friendly(rowError.message, spec.label) };
+  if (!row) return { error: "That row no longer exists." };
+
+  // Subjects are ordered within their course, courses across the whole list.
+  let neighbours = reader
+    .select(columns)
+    .order("sort_order", { ascending: direction === "down" });
+  if (spec.groupByCourse && row.course_id) {
+    neighbours = neighbours.eq("course_id", row.course_id);
+  }
+  neighbours =
+    direction === "down"
+      ? neighbours.gt("sort_order", row.sort_order)
+      : neighbours.lt("sort_order", row.sort_order);
+
+  const { data: next, error: nextError } = await neighbours.limit(1);
+  if (nextError) return { error: friendly(nextError.message, spec.label) };
+  if (!next?.length) return { error: null, ok: "Already at the end." };
+
+  const other = next[0];
+  const writer = supabase.from(spec.table) as unknown as GenericWriter;
+  const a = await writer.update({ sort_order: other.sort_order }).eq(spec.pk, row.id);
+  if (a.error) return { error: friendly(a.error.message, spec.label) };
+  const b = await writer.update({ sort_order: row.sort_order }).eq(spec.pk, other.id);
+  if (b.error) return { error: friendly(b.error.message, spec.label) };
+
+  revalidatePath("/settings/master-lists");
+  return { error: null, ok: "Moved." };
 }

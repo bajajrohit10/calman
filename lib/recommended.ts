@@ -47,10 +47,10 @@ export type RecommendedFilters = {
   date?: string | null;
   includeNotDue?: boolean;
   counsellorId?: string | null;
-  teacherId?: string | null;
+  teacherIds?: string[] | null;
   courseId?: string | null;
   subjectId?: string | null;
-  contentId?: string | null;
+  contentIds?: string[] | null;
   instituteId?: string | null;
   termId?: string | null;
   sourceId?: string | null;
@@ -71,14 +71,17 @@ type Args = Database["public"]["Functions"]["recommended_calls"]["Args"];
 /** Undefined rather than null, so the SQL defaults apply. */
 function args(f: RecommendedFilters): Args {
   const clean = <T>(v: T | null | undefined) => (v === null || v === "" ? undefined : v);
+  // An empty multi-select widens the filter rather than emptying the list, so
+  // it goes as undefined and the SQL default ("any") applies.
+  const list = (v: string[] | null | undefined) => (v && v.length ? v : undefined);
   return {
     p_date: clean(f.date),
     p_include_not_due: f.includeNotDue ?? false,
     p_counsellor_id: clean(f.counsellorId),
-    p_teacher_id: clean(f.teacherId),
+    p_teacher_ids: list(f.teacherIds),
     p_course_id: clean(f.courseId),
     p_subject_id: clean(f.subjectId),
-    p_content_id: clean(f.contentId),
+    p_content_ids: list(f.contentIds),
     p_institute_id: clean(f.instituteId),
     p_term_id: clean(f.termId),
     p_source_id: clean(f.sourceId),
