@@ -2,6 +2,7 @@ import { PageHeader } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { facetsAgreeWithList, loadNewCallsFacets } from "@/lib/facets";
 import { loadMasters } from "@/lib/masters";
+import { logServerTiming } from "@/lib/server-timing";
 import { createClient } from "@/lib/supabase/server";
 
 import { PAGE_SIZE, parseNewCallsParams } from "./filters";
@@ -55,6 +56,9 @@ export default async function Page({
     ),
   ).toString();
 
+
+  // One line per render, so the phase breakdown is in the server log.
+  logServerTiming("/new-calls");
   return (
     <div className="flex flex-col gap-5">
       <PageHeader

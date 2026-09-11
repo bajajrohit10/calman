@@ -1,5 +1,6 @@
 import "server-only";
 
+import { timed } from "@/lib/server-timing";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -85,7 +86,7 @@ export function clearMasters() {
 
 export async function loadMasters(): Promise<Masters> {
   if (cache && Date.now() - cache.at < TTL_MS) return cache.data;
-  const data = await readMasters();
+  const data = await timed("masters", () => readMasters());
   cache = { at: Date.now(), data };
   return data;
 }

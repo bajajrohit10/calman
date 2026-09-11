@@ -3,6 +3,7 @@ import { requireAdminProfile } from "@/lib/auth";
 import { facetsAgreeWithList, loadDeskFacets } from "@/lib/facets";
 import { loadRecommended } from "@/lib/recommended";
 import { loadMasters } from "@/lib/masters";
+import { logServerTiming } from "@/lib/server-timing";
 import { createClient } from "@/lib/supabase/server";
 
 import { AssignDesk } from "./assign-desk";
@@ -80,6 +81,9 @@ export default async function Page({
     }),
   );
 
+
+  // One line per render, so the phase breakdown is in the server log.
+  logServerTiming("/assign");
   return (
     <div className="flex flex-col gap-5">
       <PageHeader

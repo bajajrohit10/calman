@@ -2,6 +2,7 @@ import { PageHeader } from "@/components/ui";
 import { isAdmin, requireUser } from "@/lib/auth";
 import { istDatePlus, istToday } from "@/lib/format";
 import { loadMasters } from "@/lib/masters";
+import { logServerTiming } from "@/lib/server-timing";
 import { loadMyDay } from "@/lib/my-day";
 import { loadRecommended } from "@/lib/recommended";
 import { createClient } from "@/lib/supabase/server";
@@ -57,6 +58,9 @@ export default async function Page({
       })
     : { rows: [], total: 0, error: null };
 
+
+  // One line per render, so the phase breakdown is in the server log.
+  logServerTiming("/my-day");
   return (
     <div className="flex flex-col gap-5">
       <PageHeader

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { ReactNode } from "react";
 
 import { Button, cx } from "@/components/ui";
 
@@ -63,14 +64,18 @@ export function Sidebar({
   showSettings,
   fullName,
   roleLabel,
-  counts,
+  badge,
   signOut,
 }: {
   showSettings: boolean;
   fullName: string;
   roleLabel: string;
-  /** Server-rendered, so it refreshes on navigation (§5.12). */
-  counts: { newCalls: number };
+  /**
+   * The New Calls count, as a streamed server component rather than a number.
+   * It arrives after the rest of the rail, so nothing here can wait on it —
+   * which is the point: see the Suspense boundary in the layout.
+   */
+  badge: ReactNode;
   signOut: () => Promise<void>;
 }) {
   const pathname = usePathname();
@@ -121,17 +126,20 @@ export function Sidebar({
                   {item.icon}
                 </span>
                 <span className="truncate">{item.label}</span>
-                {item.badge && counts[item.badge] > 0 ? (
+                {item.badge ? (
+                  // empty:hidden is what lets the count stream in. While the
+                  // boundary is still pending — and when the count is zero,
+                  // which renders nothing — this span has no children and CSS
+                  // removes it, so there is never an empty coloured pill.
                   <span
-                    aria-label={`${counts[item.badge]} waiting`}
                     className={cx(
-                      "ml-auto rounded-[9px] px-1.5 text-[10.5px]/[16px] font-semibold",
+                      "ml-auto rounded-[9px] px-1.5 text-[10.5px]/[16px] font-semibold empty:hidden",
                       active
                         ? "bg-accent-ink/20 text-accent-ink"
                         : "bg-accent text-accent-ink",
                     )}
                   >
-                    {counts[item.badge]}
+                    {badge}
                   </span>
                 ) : null}
               </Link>

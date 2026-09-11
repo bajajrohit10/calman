@@ -2,6 +2,7 @@ import { PageHeader } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { loadEnquiries } from "@/lib/enquiries";
 import { loadMasters } from "@/lib/masters";
+import { logServerTiming } from "@/lib/server-timing";
 import { createClient } from "@/lib/supabase/server";
 
 import { PAGE_SIZE, parseEnquiriesParams } from "../assign/filters";
@@ -57,6 +58,9 @@ export default async function Page({
         .order("full_name"),
     ]);
 
+
+  // One line per render, so the phase breakdown is in the server log.
+  logServerTiming("/enquiries");
   return (
     <div className="flex flex-col gap-5">
       <PageHeader

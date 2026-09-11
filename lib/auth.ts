@@ -5,6 +5,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 
 import { isAdmin } from "@/lib/roles";
+import { timed } from "@/lib/server-timing";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/database";
 
@@ -19,11 +20,23 @@ export type { Role } from "@/lib/roles";
  * The signed-in user and their profile.
  *
  * Wrapped in React's cache(): the layout asks for the viewer and then so does
- * the page, and each call is two sequential network round trips —
- * auth.getUser() to validate the JWT, then the profiles row. Measured, that
- * duplication cost 320ms per navigation against 148ms for a single lookup.
- * cache() dedupes it within one request; across requests nothing is retained,
- * so a deactivated account still loses access on its next navigation.
+ * the page. cache() dedupes it within one request; across requests nothing is
+ * retained, so a deactivated account still loses access on its next
+ * navigation.
+ *
+ * One network round trip, not two. This used to call auth.getUser(), which
+ * asks the Supabase auth server to validate the JWT, and then read the profile
+ * — two crossings to a database that Brief 15 found was on another continent.
+ * getClaims() verifies the same token locally with WebCrypto against the
+ * project's public signing key, because this project signs with ES256 and the
+ * token carries a kid. It is the same verification, done here instead of over
+ * the wire: a forged or tampered token fails the signature check and never
+ * reaches the profile read.
+ *
+ * The key set is fetched once per server instance and cached in module memory
+ * by auth-js, so only the first request after a cold start pays for it. If the
+ * project ever moves back to a shared-secret HS256 key, getClaims() falls back
+ * to getUser() on its own — correct, just slower, which is the right way round.
  *
  * `profile` is null in two different situations that look the same from here,
  * and should: no profile row was ever created, or the row exists with
@@ -37,19 +50,19 @@ export const getViewer = cache(async function getViewer(): Promise<{
   profile: Profile | null;
 }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  if (!user) return { userId: null, email: null, profile: null };
+  const { data, error } = await timed("auth", () => supabase.auth.getClaims());
+  const claims = data?.claims;
+  const userId = typeof claims?.sub === "string" ? claims.sub : null;
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .maybeSingle();
+  if (error || !userId) return { userId: null, email: null, profile: null };
 
-  return { userId: user.id, email: user.email ?? null, profile: profile ?? null };
+  const { data: profile } = await timed("profile", () =>
+    supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
+  );
+
+  const email = typeof claims?.email === "string" ? claims.email : null;
+  return { userId, email, profile: profile ?? null };
 });
 
 /** For pages behind the app shell. Sends anonymous visitors to the login page. */

@@ -1,11 +1,34 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 
 import { signOut } from "@/app/actions/sign-out";
 import { Button } from "@/components/ui";
 import { ROLE_LABELS, isAdmin, requireUser } from "@/lib/auth";
+import { timed } from "@/lib/server-timing";
 import { createClient } from "@/lib/supabase/server";
 
 import { Sidebar } from "./sidebar";
+
+/**
+ * The number on the New Calls badge (§5.12).
+ *
+ * Its own component so it has its own Suspense boundary: server-rendered, so
+ * it is still current on every navigation without polling, but off the path
+ * everything else is waiting on.
+ */
+async function NewCallsCount() {
+  const supabase = await createClient();
+  const { data } = await timed("badge", () =>
+    supabase.rpc("new_calls_pool", {
+      p_limit: 1,
+      p_offset: 0,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any),
+  );
+  const n = Number((data as { total_count: number }[] | null)?.[0]?.total_count ?? 0);
+  // Nothing rather than a zero: the wrapper in the sidebar is `empty:hidden`,
+  // so returning null is what makes the pill disappear.
+  return n > 0 ? <>{n}</> : null;
+}
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const { email, profile } = await requireUser();
@@ -39,22 +62,19 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  // One count for the New Calls badge. Rendered with the layout, so it is
-  // current on every navigation without polling (§5.12).
-  const supabase = await createClient();
-  const { data: pool } = await supabase.rpc("new_calls_pool", {
-    p_limit: 1,
-    p_offset: 0,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any);
-  const newCallsCount = Number(
-    (pool as { total_count: number }[] | null)?.[0]?.total_count ?? 0,
-  );
-
   return (
     <div className="flex min-h-dvh bg-ground">
       <Sidebar
-        counts={{ newCalls: newCallsCount }}
+        // Streamed, not awaited. This count is one RPC, and it used to sit at
+        // the top of the layout where every route on every navigation waited
+        // for it before rendering a single row — a whole round trip spent
+        // numbering a badge. Inside Suspense it arrives when it arrives, and
+        // the page no longer knows it exists.
+        badge={
+          <Suspense fallback={null}>
+            <NewCallsCount />
+          </Suspense>
+        }
         showSettings={isAdmin(profile.role)}
         fullName={profile.full_name}
         roleLabel={ROLE_LABELS[profile.role]}

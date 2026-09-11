@@ -15,6 +15,7 @@ import {
   type MyDayView,
 } from "@/lib/my-day-tabs";
 import { fetchAllRows } from "@/lib/paged";
+import { timed } from "@/lib/server-timing";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -85,7 +86,7 @@ export async function loadMyDay(input: {
   const supabase = await createClient();
   const today = istToday();
 
-  const [day, tickets] = await Promise.all([
+  const [day, tickets] = await timed("list", () => Promise.all([
     // Paged even though a day is rarely more than a hundred rows: PostgREST
     // caps an RPC at max_rows without saying so, and a campaign day is exactly
     // the day somebody would notice the list stopping at 1,000.
@@ -106,7 +107,7 @@ export async function loadMyDay(input: {
       p_offset: 0,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any),
-  ]);
+  ]));
 
   const ticketRows = (tickets.data ?? []) as unknown as {
     enquiry_id: number;
