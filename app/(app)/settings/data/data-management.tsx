@@ -16,10 +16,11 @@ import type { ExportResult } from "@/lib/export-actions";
 import { formatDate, formatDateTime } from "@/lib/format";
 
 import {
-  archiveBatch,
-  buildArchiveExport,
+  archiveByFilter,
+  confirmBatchExport,
   purgeArchived,
   reExportBatch,
+  rollbackBatch,
 } from "./actions";
 
 const STATUSES: EnquiryStatus[] = ["open", "won", "lost", "closed"];
@@ -107,17 +108,62 @@ export function DataManagement({
     return true;
   }
 
+  /**
+   * Archive first, then export. Archiving takes the set out of every list and
+   * out of Quick Add before the workbook is built, so a call cannot land on a
+   * row mid-export and end up missing from the file.
+   *
+   * Everything after the archive is wrapped: any failure — the export erroring,
+   * the workbook failing to build, the browser refusing the download — rolls
+   * the whole batch back, assignments included, and says nothing was archived.
+   */
   function exportAndArchive() {
     setResult(null);
     start(async () => {
-      const res = await buildArchiveExport(filter, false);
-      const ok = await downloadFrom(res);
-      // Archive only once the file actually exists. If this never runs,
-      // nothing was archived and the operator simply tries again.
-      if (!ok || !res.ids) return;
-      const marked = await archiveBatch(res.ids, filter);
-      setResult(marked);
-      if (!marked.error) router.refresh();
+      const marked = await archiveByFilter(filter);
+      if (marked.error || !marked.batchId) {
+        setResult({ error: marked.error ?? "Could not archive." });
+        return;
+      }
+
+      try {
+        const res = await reExportBatch(marked.batchId);
+        if (res.error || !res.rows || !res.columns) {
+          throw new Error(res.error ?? "Could not build the export.");
+        }
+        const ok = await downloadFrom(res);
+        if (!ok) throw new Error("The workbook could not be produced.");
+
+        await confirmBatchExport(marked.batchId);
+        setResult({
+          error: null,
+          ok: `Archived ${marked.count} enquir${marked.count === 1 ? "y" : "ies"} and downloaded the workbook.`,
+        });
+      } catch (e) {
+        const rolled = await rollbackBatch(marked.batchId);
+        setResult({
+          error: rolled.error
+            ? `The export failed (${(e as Error).message}), and rolling the archive back also failed: ${rolled.error}. Unarchive the batch from the log below.`
+            : `The export failed (${(e as Error).message}), so nothing was archived — all ${rolled.restored ?? marked.count} enquiries are back in the lists.`,
+        });
+      }
+      router.refresh();
+    });
+  }
+
+  function undoBatch(batchId: string) {
+    setResult(null);
+    start(async () => {
+      const res = await rollbackBatch(batchId);
+      setResult(
+        res.error
+          ? res
+          : {
+              error: null,
+              ok: `Unarchived ${res.restored ?? 0} enquir${res.restored === 1 ? "y" : "ies"} — they are back in the lists.`,
+            },
+      );
+      if (!res.error) router.refresh();
     });
   }
 
@@ -344,7 +390,14 @@ export function DataManagement({
                     {b.call_count}
                   </td>
                   <td className="px-2 py-1.5">
-                    {b.purged_at ? (
+                    {!b.purged_at && !b.exported_at ? (
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        <Badge tone="warn">Export not confirmed</Badge>
+                        <span className="text-[11.5px] text-ink-3">
+                          {b.remaining} archived, no workbook produced
+                        </span>
+                      </span>
+                    ) : b.purged_at ? (
                       <span className="flex flex-wrap items-center gap-1.5">
                         <Badge tone="neutral">Purged</Badge>
                         <span className="text-[11.5px] text-ink-3">
@@ -365,15 +418,28 @@ export function DataManagement({
                     )}
                   </td>
                   <td className="px-2 py-1.5 text-right">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      disabled={pending || b.remaining === 0}
-                      onClick={() => reExport(b.id)}
-                    >
-                      Download
-                    </Button>
+                    <span className="inline-flex gap-1.5">
+                      {!b.purged_at && !b.exported_at ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="danger"
+                          disabled={pending}
+                          onClick={() => undoBatch(b.id)}
+                        >
+                          Unarchive
+                        </Button>
+                      ) : null}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        disabled={pending || b.remaining === 0}
+                        onClick={() => reExport(b.id)}
+                      >
+                        Download
+                      </Button>
+                    </span>
                   </td>
                 </tr>
               ))}
@@ -388,10 +454,14 @@ export function DataManagement({
           </table>
         </div>
         <p className="mt-1.5 text-[11.5px] text-ink-3">
-          The log keeps the filter, the counts and who ran it — not the file. Until a
-          batch is purged the rows are still in the database, so Download rebuilds the
-          workbook from them and is always current. After a purge there is nothing left
-          to rebuild, and the copy downloaded at the time is the record.
+          Archiving happens before the export, so nothing can be called while the
+          workbook is being built. If the export fails the batch is rolled back
+          automatically; if the tab was closed mid-flight it shows here as
+          &ldquo;export not confirmed&rdquo; and can be unarchived by hand. The log keeps
+          the filter, the counts and who ran it — not the file. Until a batch is purged
+          the rows are still in the database, so Download rebuilds the workbook from
+          them and is always current. After a purge there is nothing left to rebuild,
+          and the copy downloaded at the time is the record.
         </p>
       </section>
     </div>

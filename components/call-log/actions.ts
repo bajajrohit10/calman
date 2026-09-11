@@ -159,12 +159,23 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
 
   const { data: enquiry, error: enquiryError } = await supabase
     .from("enquiries")
-    .select("id, type, status, student_id, students ( mobile )")
+    .select("id, type, status, student_id, archived_at, students ( mobile )")
     .eq("id", input.enquiryId)
     .maybeSingle();
 
   if (enquiryError) return { error: enquiryError.message };
   if (!enquiry) return { error: "That enquiry no longer exists." };
+
+  // §9: an archived enquiry has been exported, or is being exported right now.
+  // Every screen already hides it, but a tab left open from before the archive
+  // is still a way in, and a call landing after the workbook was built would be
+  // a call that exists nowhere in the archive.
+  if (enquiry.archived_at) {
+    return {
+      error:
+        "That enquiry has been archived. Unarchive it from the student's history before logging a call.",
+    };
+  }
 
   const type = enquiry.type as EnquiryType;
   const outcome = input.outcome;

@@ -45,6 +45,7 @@ export type Database = {
           created_at: string
           created_by: string
           enquiry_count: number
+          exported_at: string | null
           filter: Json
           id: string
           item_count: number
@@ -56,12 +57,14 @@ export type Database = {
           purged_import_rows: number | null
           purged_items: number | null
           purged_whatsapp_sends: number | null
+          removed_assignments: Json
         }
         Insert: {
           call_count: number
           created_at?: string
           created_by: string
           enquiry_count: number
+          exported_at?: string | null
           filter: Json
           id?: string
           item_count: number
@@ -73,12 +76,14 @@ export type Database = {
           purged_import_rows?: number | null
           purged_items?: number | null
           purged_whatsapp_sends?: number | null
+          removed_assignments?: Json
         }
         Update: {
           call_count?: number
           created_at?: string
           created_by?: string
           enquiry_count?: number
+          exported_at?: string | null
           filter?: Json
           id?: string
           item_count?: number
@@ -90,6 +95,7 @@ export type Database = {
           purged_import_rows?: number | null
           purged_items?: number | null
           purged_whatsapp_sends?: number | null
+          removed_assignments?: Json
         }
         Relationships: [
           {
@@ -1310,6 +1316,7 @@ export type Database = {
           surface: string
         }[]
       }
+      confirm_batch_export: { Args: { p_batch_id: string }; Returns: undefined }
       daily_counsellor_report: {
         Args: { p_counsellor_id?: string; p_from: string; p_to: string }
         Returns: {
@@ -1629,6 +1636,7 @@ export type Database = {
           total_count: number
         }[]
       }
+      unarchive_batch: { Args: { p_batch_id: string }; Returns: number }
       unarchive_enquiry: { Args: { p_id: number }; Returns: undefined }
     }
     Enums: {

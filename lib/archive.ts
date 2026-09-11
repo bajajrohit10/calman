@@ -45,6 +45,8 @@ export type ArchiveBatch = {
   enquiry_count: number;
   call_count: number;
   item_count: number;
+  /** Null means the browser never confirmed the download; the batch can be undone. */
+  exported_at: string | null;
   purged_at: string | null;
   purged_by_name: string | null;
   purged_enquiries: number | null;
@@ -124,7 +126,7 @@ export async function loadArchiveBatches(): Promise<{
     .from("archive_batches")
     .select(
       `id, created_at, created_by, filter, enquiry_count, call_count, item_count,
-       purged_at, purged_enquiries, purged_calls, purged_items,
+       exported_at, purged_at, purged_enquiries, purged_calls, purged_items,
        purged_assignments, purged_whatsapp_sends, purged_import_rows,
        creator:profiles!archive_batches_created_by_fkey ( full_name ),
        purger:profiles!archive_batches_purged_by_fkey ( full_name )`,
@@ -152,6 +154,7 @@ export async function loadArchiveBatches(): Promise<{
         enquiry_count: b.enquiry_count,
         call_count: b.call_count,
         item_count: b.item_count,
+        exported_at: b.exported_at,
         purged_at: b.purged_at,
         purged_by_name:
           (b.purger as { full_name: string | null } | null)?.full_name ?? null,

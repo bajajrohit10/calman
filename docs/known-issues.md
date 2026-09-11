@@ -82,6 +82,38 @@ The `Function Scan` line an `explain` gives you for an RPC hides all of this.
 
 ---
 
+## The three enquiry partial indexes were rebuilt non-concurrently
+
+Migration `20260910000030` rebuilds `enquiries_follow_up_queue_idx`,
+`enquiries_new_calls_idx` and `enquiries_ticket_queue_idx` with plain DDL,
+which takes an `ACCESS EXCLUSIVE` lock on `enquiries` for the duration —
+instant at the current size, but blocking writes on a large table. Neither
+`supabase db push` nor `supabase db query` can run `CONCURRENTLY`, because both
+wrap statements in a transaction and there is no `psql` or node `pg` client on
+this project. On a large table, run these by hand first and the migration's
+`if not exists` clauses become no-ops:
+
+```sql
+drop index concurrently enquiries_follow_up_queue_idx;
+create index concurrently enquiries_follow_up_queue_idx
+  on public.enquiries (next_follow_up_date)
+  where status = 'open' and type = 'purchase' and archived_at is null;
+
+drop index concurrently enquiries_new_calls_idx;
+create index concurrently enquiries_new_calls_idx
+  on public.enquiries (importance, created_at)
+  where status = 'open' and type = 'purchase' and fresh_call_date is null
+    and archived_at is null;
+
+drop index concurrently enquiries_ticket_queue_idx;
+create index concurrently enquiries_ticket_queue_idx
+  on public.enquiries (next_follow_up_date)
+  where type = 'after_sale' and status in ('open', 'escalated')
+    and archived_at is null;
+```
+
+---
+
 ## Deliberate audit gaps
 
 The audit log is meant to be complete. There is exactly one place it is not,
