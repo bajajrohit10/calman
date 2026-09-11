@@ -20,6 +20,7 @@ import {
   type NumberStatus,
   type RowDecision,
 } from "./actions";
+import { SAMPLE_HEADERS, SampleFileButton } from "./sample";
 
 type Master = { id: string; name: string };
 
@@ -37,6 +38,16 @@ const FIELDS = [
 ] as const;
 
 type FieldKey = (typeof FIELDS)[number]["key"];
+
+/** The field each SAMPLE_HEADERS entry maps to, by position. */
+const SAMPLE_FIELD_ORDER: FieldKey[] = [
+  "mobile",
+  "name",
+  "source",
+  "product_text",
+  "term",
+  "importance",
+];
 
 type ParsedRow = { rowNumber: number; raw: Record<string, string> };
 
@@ -188,9 +199,29 @@ export function Importer({ masters }: { masters: ImportMasters }) {
       setParsed(rows.map((raw, i) => ({ rowNumber: i + 2, raw })));
 
       // Guess by name, then let a remembered mapping override the guess.
+      //
+      // The sample file's own headings are matched first and exactly. The
+      // loose patterns below are what make a stranger's spreadsheet mostly
+      // work, but "loose" cuts both ways — a sheet with both "Name" and
+      // "Product name" is one `find` order away from mapping the wrong one —
+      // and a file built from our own sample should never be at their mercy.
       const guess = { ...mapping };
+      const exact = new Map<string, FieldKey>(
+        SAMPLE_HEADERS.map((h, i) => [h.toLowerCase(), SAMPLE_FIELD_ORDER[i]]),
+      );
+      const claimed = new Set<string>();
+      for (const c of cols) {
+        const key = exact.get(c.trim().toLowerCase());
+        if (key && !guess[key]) {
+          guess[key] = c;
+          claimed.add(c);
+        }
+      }
+
       for (const f of FIELDS) {
+        if (guess[f.key]) continue;
         const hit = cols.find((c) => {
+          if (claimed.has(c)) return false;
           const n = c.toLowerCase();
           if (f.key === "mobile") return /mobile|phone|number|contact/.test(n);
           if (f.key === "product_text") return /product|item|course name|title/.test(n);
@@ -497,6 +528,14 @@ export function Importer({ masters }: { masters: ImportMasters }) {
               if (f) void onFile(f);
             }}
           />
+          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-3">
+            <SampleFileButton masters={masters} />
+            <span className="text-[12px] text-ink-3">
+              Starter workbook with the headings this screen recognises, and a
+              second sheet listing the Source names, Term labels and Importance
+              codes that are valid today.
+            </span>
+          </div>
         </div>
       ) : null}
 

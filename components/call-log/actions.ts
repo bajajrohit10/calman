@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requireUser } from "@/lib/auth";
+import { istToday } from "@/lib/format";
 import {
   outcomesFor,
   type CallOutcome,
@@ -328,9 +329,44 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
 
   if (callError) return { error: `Could not log the call: ${callError.message}` };
 
+  // ---- 4. Claim the day, if nobody else has --------------------------------
+  // A call is work done today, and My Day is "what I worked today" — so an
+  // enquiry nobody was assigned becomes the caller's. Without this, a lead
+  // picked up in Quick Add would be called, closed and never appear on the
+  // caller's day or in the day's counts, and a hand-called lead would sit in
+  // the New Calls pool tomorrow looking untouched.
+  //
+  // The insert is the check: (enquiry_id, date) is unique, so an enquiry the
+  // Assignment Desk already handed to someone stays theirs and this quietly
+  // loses the race. That is the point — this claims unowned work only, it
+  // never takes work off a colleague.
+  //
+  // Purchase only. After-sale work is worked in Tickets, which is its own tab
+  // on My Day; an assignment would have it counted in two places at once.
+  if (type === "purchase") {
+    const { error: claimError } = await supabase.from("assignments").insert({
+      enquiry_id: input.enquiryId,
+      date: istToday(),
+      counsellor_id: viewer.userId!,
+      // The same bucket taking a lead from the New Calls pool uses: this is
+      // the counsellor picking up work for themselves, not a manager handing
+      // it out, and My Day's tabs read the bucket to tell those apart.
+      bucket: "fresh",
+      assigned_by: viewer.userId!,
+    });
+    // 23505 is the expected outcome whenever the enquiry was already on
+    // somebody's day. Anything else is worth a server log, but never worth
+    // failing a call that is already written.
+    if (claimError && claimError.code !== "23505") {
+      console.error("Could not claim the enquiry for today:", claimError.message);
+    }
+  }
+
   const mobile = (enquiry.students as { mobile: string } | null)?.mobile;
   if (mobile) revalidatePath(`/students/${mobile}`);
   revalidatePath("/quick-add");
+  revalidatePath("/my-day");
+  revalidatePath("/new-calls");
 
   return { error: null, ok: "Call logged." };
 }

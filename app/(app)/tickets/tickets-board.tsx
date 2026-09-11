@@ -6,17 +6,14 @@ import { useState, useTransition } from "react";
 
 import { loadPanelEnquiry, type PanelPayload } from "@/components/call-log/actions";
 import { CallLogPanel, type PanelMasters } from "@/components/call-log/panel";
-import { Badge, Button, ErrorNote, Input, Select, cx } from "@/components/ui";
+import { TicketTable } from "@/components/ticket-table";
+import { Button, ErrorNote, Input, Select } from "@/components/ui";
 import {
-  ENQUIRY_STATUS_LABELS,
   ISSUE_CATEGORY_LABELS,
-  OUTCOME_SHORT,
   type CallOutcome,
   type EnquiryStatus,
   type IssueCategory,
 } from "@/lib/enquiry-labels";
-import { formatDate } from "@/lib/format";
-import { formatMobile } from "@/lib/mobile";
 
 export type TicketRow = {
   enquiry_id: number;
@@ -36,12 +33,6 @@ export type TicketRow = {
   call_count: number;
   total_count: number;
 };
-
-const SORTABLE = [
-  { key: "reminder", label: "Reminder" },
-  { key: "last_call", label: "Last call" },
-  { key: "created", label: "Raised" },
-] as const;
 
 export function TicketsBoard({
   rows,
@@ -192,103 +183,14 @@ export function TicketsBoard({
       {loadError ? <ErrorNote>{loadError}</ErrorNote> : null}
 
       <div className="flex flex-col gap-3 xl:flex-row">
-        <div className="min-w-0 flex-1 overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
-          <table className="w-full min-w-[900px] border-collapse text-[12.5px]">
-            <thead>
-              <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-                <th className="px-2 py-[7px]">Student</th>
-                <th className="px-2 py-[7px]">Status</th>
-                <th className="px-2 py-[7px]">Issue</th>
-                {SORTABLE.map((col) => {
-                  const active = sort === col.key;
-                  const nextDir = active && dir === "asc" ? "desc" : "asc";
-                  return (
-                    <th key={col.key} className="px-2 py-[7px]">
-                      <Link
-                        href={withParam({ sort: col.key, dir: nextDir, page: "" })}
-                        className="inline-flex items-center gap-1 hover:text-ink"
-                      >
-                        {col.label}
-                        {active ? <span>{dir === "asc" ? "▲" : "▼"}</span> : null}
-                      </Link>
-                    </th>
-                  );
-                })}
-                <th className="px-2 py-[7px]">Last note</th>
-                <th className="px-2 py-[7px]">Last called by</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr
-                  key={r.enquiry_id}
-                  onClick={() => openRow(r)}
-                  className={cx(
-                    "border-b border-line last:border-b-0",
-                    r.status !== "closed" && "cursor-pointer hover:bg-sunk/40",
-                    // Escalated means somebody outside this screen is waiting.
-                    r.status === "escalated" && "bg-accent-soft/40",
-                    open?.id === r.enquiry_id && "bg-accent-soft/60",
-                  )}
-                >
-                  <td className="px-2 py-[5px]">
-                    <span className="text-ink">{r.student_name || "No name"}</span>
-                    <Link
-                      href={`/students/${r.mobile}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="ml-1.5 tabular-nums text-ink-3 underline-offset-2 hover:underline"
-                    >
-                      {formatMobile(r.mobile)}
-                    </Link>
-                  </td>
-                  <td className="px-2 py-[5px]">
-                    <Badge
-                      dot
-                      tone={
-                        r.status === "escalated"
-                          ? "accent"
-                          : r.status === "closed"
-                            ? "neutral"
-                            : "info"
-                      }
-                    >
-                      {r.status === "closed" ? "Resolved" : ENQUIRY_STATUS_LABELS[r.status]}
-                    </Badge>
-                  </td>
-                  <td className="px-2 py-[5px] text-ink-2">
-                    {r.issue_category ? ISSUE_CATEGORY_LABELS[r.issue_category] : "—"}
-                  </td>
-                  <td className="px-2 py-[5px] whitespace-nowrap tabular-nums text-ink-2">
-                    {r.reminder_date ? formatDate(r.reminder_date) : "—"}
-                  </td>
-                  <td className="px-2 py-[5px] whitespace-nowrap text-ink-3">
-                    {r.last_outcome ? (
-                      <>
-                        {OUTCOME_SHORT[r.last_outcome]} {formatDate(r.last_call_at)}
-                      </>
-                    ) : (
-                      "never"
-                    )}
-                  </td>
-                  <td className="px-2 py-[5px] whitespace-nowrap text-ink-3">
-                    {formatDate(r.created_at)}
-                  </td>
-                  <td className="max-w-[280px] truncate px-2 py-[5px] text-ink-3">
-                    {r.last_discussion ?? "—"}
-                  </td>
-                  <td className="px-2 py-[5px] text-ink-3">{r.last_caller_name ?? "—"}</td>
-                </tr>
-              ))}
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-ink-3">
-                    No tickets match these filters.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
+        <TicketTable
+          rows={rows}
+          openId={open?.id ?? null}
+          onOpen={(row) => openRow(row as TicketRow)}
+          sort={sort}
+          dir={dir}
+          hrefFor={(col, nextDir) => withParam({ sort: col, dir: nextDir, page: "" })}
+        />
 
         {open ? (
           <aside className="w-full shrink-0 xl:w-[520px]">

@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 
 import { loadPanelEnquiry, type PanelPayload } from "@/components/call-log/actions";
-import { ExportButton } from "@/components/export-button";
 import { CallLogPanel, type PanelMasters } from "@/components/call-log/panel";
+import { ExportButton } from "@/components/export-button";
+import { TicketTable } from "@/components/ticket-table";
 import {
   Badge,
   Button,
@@ -17,25 +18,48 @@ import {
   Select,
   cx,
 } from "@/components/ui";
-import { BUCKET_LABELS, type AssignmentBucket } from "@/lib/enquiry-labels";
-import { formatDate } from "@/lib/format";
+import {
+  ENQUIRY_STATUS_LABELS,
+  OUTCOME_SHORT,
+  type AssignmentBucket,
+} from "@/lib/enquiry-labels";
+import { formatDate, formatTime } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
+import type { MyDayData, MyDayRow, MyDayTicket } from "@/lib/my-day";
 import type { RecommendedRow } from "@/lib/recommended";
 
 import { dismissOverdue } from "../assign/actions";
+import { refreshMyDay } from "./actions";
 
-/** §6 order, reused for grouping the day. */
-const BUCKET_ORDER: AssignmentBucket[] = [
-  "follow_up",
-  "offer",
-  "fresh",
-  "campaign",
-  "call_back",
+/**
+ * The day, as five boxes.
+ *
+ * It used to be one scrolling column of bucket sections, which answered "what
+ * is next" and nothing else — not how much is left, not what has already been
+ * done, and not where the after-sale work was. The tabs answer all three at a
+ * glance: each carries "still to call / assigned today", and the one you are
+ * in splits into Pending and Done.
+ *
+ * The buckets map to the tabs rather than being shown raw, because two of them
+ * mean the same thing to a counsellor: a follow-up and a call back are both
+ * "the desk gave me this", which is what Assigned Calls says.
+ */
+type TabKey = "new" | "offer" | "assigned" | "custom" | "tickets";
+
+const TABS: { key: TabKey; label: string; buckets: AssignmentBucket[] }[] = [
+  { key: "new", label: "New Calls", buckets: ["fresh"] },
+  { key: "offer", label: "Offer Calls", buckets: ["offer"] },
+  { key: "assigned", label: "Assigned Calls", buckets: ["follow_up", "call_back"] },
+  { key: "custom", label: "Customised", buckets: ["campaign"] },
+  { key: "tickets", label: "Tickets", buckets: [] },
 ];
 
+/** Newest call first — the Done list reads as a log of the day. */
+const byCallTimeDesc = <T extends { last_call_at: string | null }>(a: T, b: T) =>
+  (b.last_call_at ?? "").localeCompare(a.last_call_at ?? "");
+
 export function MyDay({
-  rows,
-  error,
+  initial,
   date,
   isAdmin,
   counsellorName,
@@ -45,8 +69,7 @@ export function MyDay({
   overdueDismissed,
   masters,
 }: {
-  rows: RecommendedRow[];
-  error: string | null;
+  initial: MyDayData;
   date: string;
   isAdmin: boolean;
   counsellorName: string | null;
@@ -57,30 +80,68 @@ export function MyDay({
   masters: PanelMasters;
 }) {
   const router = useRouter();
+
+  // The day is client state after the first paint so a saved call can move the
+  // counts without the route re-rendering and losing the open tab (see
+  // refreshMyDay). `initial` is the server's copy and seeds it.
+  const [data, setData] = useState<MyDayData>(initial);
+  const [tab, setTab] = useState<TabKey>("new");
+  const [view, setView] = useState<"pending" | "done">("pending");
   const [open, setOpen] = useState<PanelPayload | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  // One button per row, in render order, so focus can move to the next row
-  // after a call is logged without the list having to be re-queried first.
+  // One button per visible row, in render order, so focus can move to the next
+  // row after a call is logged without waiting for the list to come back.
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
   const openIndex = useRef<number>(-1);
 
-  const groups = BUCKET_ORDER.map((bucket) => ({
-    bucket,
-    rows: rows.filter((r) => r.bucket === bucket),
-  })).filter((g) => g.rows.length > 0);
+  const groups = useMemo(() => {
+    const out = {} as Record<
+      TabKey,
+      { pending: number; total: number; rows: MyDayRow[]; tickets: MyDayTicket[] }
+    >;
+    for (const t of TABS) {
+      if (t.key === "tickets") {
+        out[t.key] = {
+          pending: data.tickets.filter((x) => !x.called_today).length,
+          total: data.tickets.length,
+          rows: [],
+          tickets: data.tickets,
+        };
+        continue;
+      }
+      // my_day() already returns §6 order, so filtering preserves it.
+      const rows = data.rows.filter((r) => t.buckets.includes(r.bucket));
+      out[t.key] = {
+        pending: rows.filter((r) => !r.called_today).length,
+        total: rows.length,
+        rows,
+        tickets: [],
+      };
+    }
+    return out;
+  }, [data]);
 
-  // Flat index across groups — the visual order of the buttons.
-  let cursor = 0;
-  const indexOf = new Map<number, number>();
-  for (const g of groups) for (const r of g.rows) indexOf.set(r.enquiry_id, cursor++);
+  const current = groups[tab];
 
-  function openRow(row: RecommendedRow) {
+  const visibleRows = useMemo(() => {
+    const rows = current.rows.filter((r) => (view === "done" ? r.called_today : !r.called_today));
+    return view === "done" ? [...rows].sort(byCallTimeDesc) : rows;
+  }, [current.rows, view]);
+
+  const visibleTickets = useMemo(() => {
+    const rows = current.tickets.filter((t) =>
+      view === "done" ? t.called_today : !t.called_today,
+    );
+    return view === "done" ? [...rows].sort(byCallTimeDesc) : rows;
+  }, [current.tickets, view]);
+
+  function openEnquiry(enquiryId: number, index: number) {
     setLoadError(null);
-    openIndex.current = indexOf.get(row.enquiry_id) ?? -1;
+    openIndex.current = index;
     start(async () => {
-      const res = await loadPanelEnquiry(row.enquiry_id);
+      const res = await loadPanelEnquiry(enquiryId);
       if (res.error || !res.enquiry) {
         setLoadError(res.error ?? "Could not open that enquiry.");
         return;
@@ -90,16 +151,22 @@ export function MyDay({
   }
 
   function afterSave() {
-    const next = openIndex.current + 1;
+    const next = openIndex.current;
     setOpen(null);
-    router.refresh();
-    // The refreshed list may be shorter (a won or lost enquiry drops out), so
-    // fall back to whatever now sits at that position, then to the last row.
-    window.setTimeout(() => {
-      const list = buttons.current.filter(Boolean);
-      (list[next] ?? list[list.length - 1])?.focus();
-    }, 120);
+    start(async () => {
+      const fresh = await refreshMyDay({ date, counsellorId });
+      setData(fresh);
+      // The row just called leaves Pending, so whatever now sits at the same
+      // position is the next call — the list shortened under the cursor rather
+      // than the cursor moving down it.
+      window.setTimeout(() => {
+        const list = buttons.current.filter(Boolean);
+        (list[next] ?? list[list.length - 1])?.focus();
+      }, 60);
+    });
   }
+
+  const tabsTotal = TABS.reduce((n, t) => n + groups[t.key].total, 0);
 
   return (
     <div className="flex flex-col gap-4">
@@ -130,46 +197,154 @@ export function MyDay({
           </Button>
         </form>
         <span className="pb-1 text-[12px] text-ink-3">
-          {rows.length} assigned for {formatDate(date)}
+          {tabsTotal} assigned for {formatDate(date)}
         </span>
         <ExportButton source="myday" date={date} counsellorId={counsellorId} className="ml-auto" />
       </div>
 
-      {error ? <ErrorNote>{error}</ErrorNote> : null}
+      {data.error ? <ErrorNote>{data.error}</ErrorNote> : null}
       {loadError ? <ErrorNote>{loadError}</ErrorNote> : null}
 
+      {/* ---- the five boxes ---- */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+        {TABS.map((t) => {
+          const g = groups[t.key];
+          const active = tab === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              aria-pressed={active}
+              onClick={() => {
+                setTab(t.key);
+                // Landing on a tab with nothing left to call and showing an
+                // empty Pending list would look broken; the work is in Done.
+                setView(g.pending === 0 && g.total > 0 ? "done" : "pending");
+                setOpen(null);
+              }}
+              className={cx(
+                "rounded-lg border px-3 py-2 text-left transition-colors",
+                active
+                  ? "border-accent bg-accent-soft shadow-card"
+                  : "border-line bg-surface shadow-card hover:border-ink-3",
+              )}
+            >
+              <span
+                className={cx(
+                  "block text-[11.5px] font-medium",
+                  active ? "text-accent" : "text-ink-2",
+                )}
+              >
+                {t.label}
+              </span>
+              <span className="mt-0.5 block text-[17px] font-semibold tabular-nums text-ink">
+                {g.pending}
+                <span className="text-[13px] font-normal text-ink-3"> / {g.total}</span>
+              </span>
+              <span className="block text-[10.5px] text-ink-3">
+                {g.total === 0 ? "nothing today" : "to call / assigned"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ---- pending / done ---- */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="inline-flex overflow-hidden rounded-md border border-line-2">
+          {(["pending", "done"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              aria-pressed={view === v}
+              onClick={() => setView(v)}
+              className={cx(
+                "px-3 py-1 text-[12.5px] capitalize transition-colors",
+                view === v
+                  ? "bg-accent font-medium text-accent-ink"
+                  : "bg-surface text-ink-2 hover:bg-surface-2",
+              )}
+            >
+              {v}
+              <span className="ml-1.5 tabular-nums opacity-80">
+                {v === "pending"
+                  ? current.pending
+                  : current.total - current.pending}
+              </span>
+            </button>
+          ))}
+        </div>
+        <span className="text-[11.5px] text-ink-3">
+          {view === "pending"
+            ? "Still to call today, in the order §6 recommends."
+            : "Called today, most recent first."}
+        </span>
+        {pending ? <span className="text-[11.5px] text-ink-3">working…</span> : null}
+      </div>
+
       <div className="flex flex-col gap-4 lg:flex-row">
-        <div className="min-w-0 flex-1 flex flex-col gap-4">
-          {groups.map((group) => (
-            <section key={group.bucket}>
-              <h2 className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-                {BUCKET_LABELS[group.bucket]} ({group.rows.length})
-              </h2>
-              <ul className="overflow-hidden rounded-lg border border-line bg-surface shadow-card">
-                {group.rows.map((r) => (
-                  <li
-                    key={r.enquiry_id}
-                    className={cx(
-                      "flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line px-3 py-2 last:border-b-0",
-                      open?.id === r.enquiry_id && "bg-accent-soft/40",
-                    )}
+        <div className="flex min-w-0 flex-1 flex-col gap-4">
+          {tab === "tickets" ? (
+            <TicketTable
+              rows={visibleTickets}
+              openId={open?.id ?? null}
+              onOpen={(row) => {
+                if (row.status === "closed") return;
+                openEnquiry(
+                  row.enquiry_id,
+                  visibleTickets.findIndex((t) => t.enquiry_id === row.enquiry_id),
+                );
+              }}
+              empty={
+                view === "pending"
+                  ? "No open tickets waiting — every one has been called today."
+                  : "No ticket has been called today."
+              }
+            />
+          ) : visibleRows.length ? (
+            <ul className="overflow-hidden rounded-lg border border-line bg-surface shadow-card">
+              {visibleRows.map((r, i) => (
+                <li
+                  key={r.enquiry_id}
+                  className={cx(
+                    "flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line px-3 py-2 last:border-b-0",
+                    open?.id === r.enquiry_id &&
+                      "bg-accent-pick shadow-[inset_3px_0_0_var(--accent)]",
+                  )}
+                >
+                  <Link
+                    href={`/students/${r.mobile}`}
+                    className="text-[13px] font-medium text-ink underline-offset-2 hover:underline"
                   >
-                    <Link
-                      href={`/students/${r.mobile}`}
-                      className="text-[13px] font-medium text-ink underline-offset-2 hover:underline"
+                    {r.student_name || "No name"}
+                  </Link>
+                  <span className="text-[12.5px] tabular-nums text-ink-2">
+                    {formatMobile(r.mobile)}
+                  </span>
+                  {r.importance ? <ImportanceMark grade={r.importance} /> : null}
+                  {r.is_overdue && !r.called_today ? (
+                    <Badge tone="danger">Overdue</Badge>
+                  ) : null}
+                  {r.status !== "open" ? (
+                    <Badge
+                      dot
+                      tone={r.status === "won" ? "ok" : "neutral"}
                     >
-                      {r.student_name || "No name"}
-                    </Link>
-                    <span className="text-[12.5px] tabular-nums text-ink-2">
-                      {formatMobile(r.mobile)}
+                      {ENQUIRY_STATUS_LABELS[r.status]}
+                    </Badge>
+                  ) : null}
+                  <span className="text-[12px] text-ink-3">
+                    {r.teacher_names?.join(", ") || "no interests yet"}
+                  </span>
+
+                  {r.called_today ? (
+                    <span className="text-[12px] text-ink-2">
+                      {r.last_outcome ? OUTCOME_SHORT[r.last_outcome] : "Called"}{" "}
+                      <span className="tabular-nums text-ink-3">
+                        {formatTime(r.last_call_at)}
+                      </span>
                     </span>
-                    {r.importance ? (
-                      <ImportanceMark grade={r.importance} />
-                    ) : null}
-                    {r.is_overdue ? <Badge tone="danger">Overdue</Badge> : null}
-                    <span className="text-[12px] text-ink-3">
-                      {r.teacher_names?.join(", ") || "no interests yet"}
-                    </span>
+                  ) : (
                     <span
                       className={cx(
                         "text-[12px] tabular-nums",
@@ -178,33 +353,36 @@ export function MyDay({
                     >
                       {r.next_follow_up_date ? formatDate(r.next_follow_up_date) : "—"}
                     </span>
-                    <span className="text-[12px] tabular-nums text-ink-3">
-                      {r.follow_up_slots_used}/3
-                    </span>
-                    <span className="ml-auto">
-                      <Button
-                        ref={(el) => {
-                          buttons.current[indexOf.get(r.enquiry_id) ?? 0] = el;
-                        }}
-                        size="sm"
-                        variant="primary"
-                        disabled={pending}
-                        onClick={() => openRow(r)}
-                      >
-                        Log call
-                      </Button>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))}
+                  )}
 
-          {rows.length === 0 ? (
+                  <span className="text-[12px] tabular-nums text-ink-3">
+                    {r.follow_up_slots_used}/3
+                  </span>
+                  <span className="ml-auto">
+                    <Button
+                      ref={(el) => {
+                        buttons.current[i] = el;
+                      }}
+                      size="sm"
+                      variant={r.called_today ? "secondary" : "primary"}
+                      disabled={pending}
+                      onClick={() => openEnquiry(r.enquiry_id, i)}
+                    >
+                      {r.called_today ? "Log another" : "Log call"}
+                    </Button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
             <p className="rounded-lg border border-dashed border-line-2 px-4 py-8 text-center text-[13px] text-ink-3">
-              Nothing assigned for {formatDate(date)}.
+              {current.total === 0
+                ? `Nothing in ${TABS.find((t) => t.key === tab)?.label} for ${formatDate(date)}.`
+                : view === "pending"
+                  ? "All called — everything here is in Done."
+                  : "Nothing called yet in this tab."}
             </p>
-          ) : null}
+          )}
 
           {isAdmin ? (
             <OverdueReport

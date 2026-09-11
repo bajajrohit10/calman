@@ -13,7 +13,7 @@ import {
   type Importance,
   type LeadVerification,
 } from "@/lib/enquiry-labels";
-import { isValidMobile, mobileHint, normaliseMobile } from "@/lib/mobile";
+import { formatMobile, isValidMobile, mobileHint, normaliseMobile } from "@/lib/mobile";
 import type { StudentHistory } from "@/lib/students";
 
 import { createEnquiry, lookupMobile } from "./actions";
@@ -62,6 +62,9 @@ export function QuickAdd({
     student: StudentHistory | null;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // What the last "Send to New Calls" did, kept after the box is cleared so the
+  // counsellor sees it happened — the screen resets to empty either way.
+  const [pooled, setPooled] = useState<string | null>(null);
   const [creating, startCreate] = useTransition();
 
   const boxRef = useRef<HTMLInputElement | null>(null);
@@ -105,6 +108,49 @@ export function QuickAdd({
     setLogging(null);
     setError(null);
     boxRef.current?.focus();
+  }
+
+  /**
+   * "Send to New Calls": create the lead and stop.
+   *
+   * No call is logged and nothing is assigned, which is exactly what puts it
+   * in the shared pool — new_calls_pool() is "open, never had a fresh call,
+   * and on nobody's day". So the counsellor who took the ring is not the one
+   * committed to calling it back; whoever is free takes it from New Calls.
+   */
+  function sendToPool(input: {
+    type: EnquiryType;
+    name: string | null;
+    sourceId: string | null;
+    productText: string | null;
+    termId: string | null;
+    importance: Importance | "";
+    leadVerification: LeadVerification | "";
+  }) {
+    setError(null);
+    const number = mobile;
+    startCreate(async () => {
+      const res = await createEnquiry({
+        mobile: number,
+        name: input.name,
+        type: input.type,
+        sourceId: input.sourceId,
+        productText: input.productText,
+        termId: input.termId,
+        importance: input.importance,
+        leadVerification: input.leadVerification,
+        supersedeEnquiryId: null,
+      });
+      if (res.error || !res.enquiry) {
+        setError(res.error ?? "Could not save the lead.");
+        return;
+      }
+      reset();
+      setPooled(
+        `${formatMobile(number)} is in New Calls as enquiry #${res.enquiry.id}. ` +
+          "Anyone can take it.",
+      );
+    });
   }
 
   function openEnquiry(input: {
@@ -166,6 +212,7 @@ export function QuickAdd({
             setRaw(e.target.value);
             setLogging(null);
             setError(null);
+            setPooled(null);
           }}
           className="h-14 w-full max-w-md text-[24px] tracking-[0.12em] tabular-nums"
         />
@@ -188,12 +235,22 @@ export function QuickAdd({
 
       {error ? <ErrorNote>{error}</ErrorNote> : null}
 
+      {pooled ? (
+        <p
+          role="status"
+          className="rounded-md border border-ok/40 bg-ok-soft px-2.5 py-1.5 text-[12.5px] text-ok"
+        >
+          {pooled}
+        </p>
+      ) : null}
+
       {/* ---- branch: unknown number ---- */}
       {stage.kind === "unknown" ? (
         <NewEnquiryForm
           masters={masters}
           busy={creating}
           onSubmit={(values) => openEnquiry(values)}
+          onSendToPool={sendToPool}
         />
       ) : null}
 
@@ -344,22 +401,26 @@ function NewEnquiryButtons({
   );
 }
 
+type NewEnquiryValues = {
+  type: EnquiryType;
+  name: string | null;
+  sourceId: string | null;
+  productText: string | null;
+  termId: string | null;
+  importance: Importance | "";
+  leadVerification: LeadVerification | "";
+};
+
 function NewEnquiryForm({
   masters,
   busy,
   onSubmit,
+  onSendToPool,
 }: {
   masters: QuickAddMasters;
   busy: boolean;
-  onSubmit: (values: {
-    type: EnquiryType;
-    name: string | null;
-    sourceId: string | null;
-    productText: string | null;
-    termId: string | null;
-    importance: Importance | "";
-    leadVerification: LeadVerification | "";
-  }) => void;
+  onSubmit: (values: NewEnquiryValues) => void;
+  onSendToPool: (values: NewEnquiryValues) => void;
 }) {
   const [name, setName] = useState("");
   const [type, setType] = useState<EnquiryType>("purchase");
@@ -369,9 +430,8 @@ function NewEnquiryForm({
   const [importance, setImportance] = useState<Importance | "">("");
   const [leadVerification, setLeadVerification] = useState<LeadVerification | "">("");
 
-  function submit() {
-    if (busy) return;
-    onSubmit({
+  function values(): NewEnquiryValues {
+    return {
       type,
       name: name.trim() || null,
       sourceId: sourceId || null,
@@ -379,7 +439,12 @@ function NewEnquiryForm({
       termId: termId || null,
       importance,
       leadVerification,
-    });
+    };
+  }
+
+  function submit() {
+    if (busy) return;
+    onSubmit(values());
   }
 
   return (
@@ -396,10 +461,11 @@ function NewEnquiryForm({
       }}
       className="rounded-lg border border-line bg-surface shadow-card"
     >
-      <header className="flex items-center gap-2 border-b border-line px-4 py-2.5">
+      <header className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5">
         <Badge tone="ok">New number</Badge>
         <span className="text-[12.5px] text-ink-2">
-          Everything here is optional — only the number is required.
+          Everything here is optional — only the number is required. Fill what you
+          have, then choose whether you are calling it or passing it on.
         </span>
       </header>
 
@@ -477,11 +543,31 @@ function NewEnquiryForm({
         </div>
       </div>
 
-      <div className="flex items-center gap-2 border-t border-line px-4 py-3">
+      {/* Two ways out, said plainly. The distinction is who owns the call
+          next: keeping it means it is on your day from the moment you save,
+          passing it on means it is on nobody's until somebody takes it. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-line bg-sunk px-4 py-3">
         <Button type="submit" variant="primary" disabled={busy}>
-          {busy ? "Opening…" : "Save and log the call"}
+          {busy ? "Saving…" : "Add details & log call"}
         </Button>
-        <span className="text-[11.5px] text-ink-3">Enter opens the call log</span>
+        {type === "purchase" ? (
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={busy}
+            onClick={() => {
+              if (!busy) onSendToPool(values());
+            }}
+          >
+            Send to New Calls
+          </Button>
+        ) : null}
+        <span className="text-[11.5px] text-ink-3">
+          {type === "purchase"
+            ? "Log call assigns it to you for today · Send to New Calls leaves it unassigned for anyone to take"
+            : "After-sale enquiries are worked in Tickets, not the New Calls pool."}
+        </span>
+        <span className="ml-auto text-[11.5px] text-ink-3">Enter opens the call log</span>
       </div>
     </form>
   );

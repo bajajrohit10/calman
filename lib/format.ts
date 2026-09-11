@@ -36,9 +36,25 @@ export function formatDateTime(value: string | null | undefined): string {
   }).format(new Date(value));
 }
 
+/** "4:20 pm" from a timestamptz — for times the reader already knows the day of. */
+export function formatTime(value: string | null | undefined): string {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("en-IN", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: IST,
+  }).format(new Date(value));
+}
+
 /** Today in IST as yyyy-mm-dd, for date input defaults and min values. */
 export function istToday(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: IST }).format(new Date());
+}
+
+/** The IST calendar day a timestamp falls on, as yyyy-mm-dd. */
+export function istDateOf(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return new Intl.DateTimeFormat("en-CA", { timeZone: IST }).format(new Date(value));
 }
 
 /** yyyy-mm-dd `days` after today in IST. */

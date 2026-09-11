@@ -1,10 +1,9 @@
 import { PageHeader } from "@/components/ui";
 import { isAdmin, requireUser } from "@/lib/auth";
-import type { AssignmentBucket } from "@/lib/enquiry-labels";
 import { istDatePlus, istToday } from "@/lib/format";
-import { fetchAllRows } from "@/lib/paged";
-import { loadRecommended } from "@/lib/recommended";
 import { loadMasters } from "@/lib/masters";
+import { loadMyDay } from "@/lib/my-day";
+import { loadRecommended } from "@/lib/recommended";
 import { createClient } from "@/lib/supabase/server";
 
 import { MyDay } from "./my-day";
@@ -33,18 +32,8 @@ export default async function Page({
 
   const masters = await loadMasters();
 
-  const [list, assignments, roster, dismissal] = await Promise.all([
-    // includeNotDue: My Day is "what am I assigned", not "what is due" — a
-    // campaign assignment is by definition not due today.
-    loadRecommended({ date, counsellorId, includeNotDue: true, limit: 500 }),
-    fetchAllRows<{ enquiry_id: number; bucket: AssignmentBucket }>((from, to) =>
-      supabase
-        .from("assignments")
-        .select("enquiry_id, bucket")
-        .eq("date", date)
-        .eq("counsellor_id", counsellorId)
-        .range(from, to) as never,
-    ),
+  const [day, roster, dismissal] = await Promise.all([
+    loadMyDay({ date, counsellorId }),
     admin
       ? supabase
           .from("profiles")
@@ -56,21 +45,7 @@ export default async function Page({
     admin
       ? supabase.from("overdue_dismissals").select("date").eq("date", date).maybeSingle()
       : Promise.resolve({ data: null }),
-    Promise.all([
-    ]),
   ]);
-
-  // The assignment carries its own bucket — a campaign row is a campaign row
-  // even though the enquiry itself derives as a follow-up. Group by what was
-  // assigned; order within the group is whatever §6 already returned.
-  const assignedBucket = new Map<number, AssignmentBucket>(
-    assignments.rows.map((a) => [a.enquiry_id, a.bucket]),
-  );
-
-  const rows = list.rows.map((r) => ({
-    ...r,
-    bucket: assignedBucket.get(r.enquiry_id) ?? r.bucket,
-  }));
 
   // §5.8 overdue report: open follow-ups whose date has passed, uncalled since.
   const overdue = admin
@@ -82,7 +57,6 @@ export default async function Page({
       })
     : { rows: [], total: 0, error: null };
 
-
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
@@ -90,8 +64,7 @@ export default async function Page({
         description="Today's assigned calls, in the order the spec recommends working them."
       />
       <MyDay
-        rows={rows}
-        error={list.error}
+        initial={day}
         date={date}
         isAdmin={admin}
         counsellorName={viewer.profile?.full_name ?? null}

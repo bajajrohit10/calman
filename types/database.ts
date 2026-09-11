@@ -1611,6 +1611,31 @@ export type Database = {
           ok: boolean
         }[]
       }
+      my_day: {
+        Args: { p_counsellor_id?: string; p_date?: string }
+        Returns: {
+          bucket: Database["public"]["Enums"]["assignment_bucket"]
+          bucket_rank: number
+          called_today: boolean
+          enquiry_id: number
+          follow_up_slots_used: number
+          importance: Database["public"]["Enums"]["importance"]
+          is_overdue: boolean
+          item_count: number
+          last_call_at: string
+          last_outcome: Database["public"]["Enums"]["call_outcome"]
+          mobile: string
+          next_follow_up_date: string
+          product_text: string
+          status: Database["public"]["Enums"]["enquiry_status"]
+          student_id: string
+          student_name: string
+          teacher_names: string[]
+          term_name: string
+          top_content_priority: number
+          type: Database["public"]["Enums"]["enquiry_type"]
+        }[]
+      }
       new_calls_facets: {
         Args: {
           p_content_ids?: string[]
