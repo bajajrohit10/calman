@@ -1,8 +1,16 @@
 "use client";
 
-import { useId, useMemo, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 
 import { Badge, Button, ErrorNote, Input, Select, Textarea, cx } from "@/components/ui";
+import {
+  InterestLineRows,
+  blankLine,
+  isComplete,
+  type ItemMaster,
+  type NewLine,
+  type SubjectMaster,
+} from "@/components/interest-lines";
 import {
   ISSUE_CATEGORY_LABELS,
   ITEM_STATUS_LABELS,
@@ -23,8 +31,8 @@ import { stageOf } from "@/lib/whatsapp-text";
 
 import { logCall, type LogCallResult } from "./actions";
 
-export type Master = { id: string; name: string };
-export type SubjectMaster = { id: string; name: string; course_id: string };
+export type Master = ItemMaster;
+export type { SubjectMaster };
 
 export type PanelMasters = {
   teachers: Master[];
@@ -59,118 +67,9 @@ export type PanelEnquiry = {
   items: PanelItem[];
 };
 
-type NewLine = {
-  key: string;
-  teacherId: string;
-  courseId: string;
-  subjectId: string;
-  contentId: string;
-  won: boolean;
-  amount: string;
-};
-
 type Decision = { won: boolean; amount: string; close: boolean };
 
 /* -------------------------------------------------------------------------- */
-
-/**
- * Teacher typeahead. 73 names is too many to scan in a native select and far
- * too few to need a server round-trip, so the whole list is filtered in place.
- * Enter is consumed here when the list is open, otherwise it would reach the
- * panel's save handler while the counsellor is still choosing.
- */
-function TeacherPicker({
-  teachers,
-  value,
-  onChange,
-}: {
-  teachers: Master[];
-  value: string;
-  onChange: (id: string) => void;
-}) {
-  const selected = teachers.find((t) => t.id === value) ?? null;
-  const [query, setQuery] = useState(selected?.name ?? "");
-  const [open, setOpen] = useState(false);
-  const [cursor, setCursor] = useState(0);
-  const listId = useId();
-
-  const matches = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return teachers.slice(0, 8);
-    return teachers.filter((t) => t.name.toLowerCase().includes(q)).slice(0, 8);
-  }, [teachers, query]);
-
-  function choose(teacher: Master) {
-    onChange(teacher.id);
-    setQuery(teacher.name);
-    setOpen(false);
-  }
-
-  return (
-    <div className="relative">
-      <Input
-        role="combobox"
-        aria-expanded={open}
-        aria-controls={listId}
-        aria-label="Teacher"
-        placeholder="Teacher…"
-        value={query}
-        onChange={(e) => {
-          setQuery(e.target.value);
-          setOpen(true);
-          setCursor(0);
-          if (value) onChange("");
-        }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => window.setTimeout(() => setOpen(false), 120)}
-        onKeyDown={(e) => {
-          if (!open || matches.length === 0) return;
-          if (e.key === "ArrowDown") {
-            e.preventDefault();
-            setCursor((c) => (c + 1) % matches.length);
-          } else if (e.key === "ArrowUp") {
-            e.preventDefault();
-            setCursor((c) => (c - 1 + matches.length) % matches.length);
-          } else if (e.key === "Enter") {
-            // Consumed: the panel saves on Enter, and picking a teacher must
-            // not also submit the call.
-            e.preventDefault();
-            e.stopPropagation();
-            choose(matches[cursor]);
-          } else if (e.key === "Escape") {
-            e.stopPropagation();
-            setOpen(false);
-          }
-        }}
-      />
-      {open && matches.length > 0 ? (
-        <ul
-          id={listId}
-          role="listbox"
-          className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-md border border-line-2 bg-surface py-1 shadow-lg"
-        >
-          {matches.map((t, i) => (
-            <li key={t.id}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={i === cursor}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => choose(t)}
-                className={cx(
-                  "block w-full px-2.5 py-1 text-left text-[12.5px]",
-                  i === cursor ? "bg-accent-soft text-accent" : "text-ink-2",
-                )}
-              >
-                {t.name}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
-  );
-}
 
 function itemLabel(item: PanelItem) {
   return (
@@ -204,18 +103,44 @@ export function CallLogPanel({
   const [issueCategory, setIssueCategory] = useState<IssueCategory | "">("");
   const [orderId, setOrderId] = useState("");
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
-  const [newLines, setNewLines] = useState<NewLine[]>([]);
-  const [showInterests, setShowInterests] = useState(false);
+  // Seeded with one blank row so the table always has something to type into.
+  const [newLines, setNewLines] = useState<NewLine[]>(() => [blankLine()]);
+  const [askedAboutItems, setAskedAboutItems] = useState(false);
   const [result, setResult] = useState<LogCallResult | null>(null);
   const [pending, startTransition] = useTransition();
 
   const noteRef = useRef<HTMLTextAreaElement | null>(null);
+  const firstTeacherRef = useRef<HTMLInputElement | null>(null);
 
   const purchased = outcome === "purchased";
+  const filledLines = newLines.filter(isComplete);
   const tickedCount =
     Object.values(decisions).filter((d) => d.won).length +
-    newLines.filter((l) => l.won).length;
-  const needsAnItem = purchased && openItems.length === 0 && newLines.length === 0;
+    filledLines.filter((l) => l.won).length;
+
+  /**
+   * §5.3 save-time prompts. All three rules turn on the same question — will
+   * this enquiry still have no interest against it once the call is saved? —
+   * but they differ in how hard they push:
+   *
+   *   purchased  hard block: a sale with no teacher cannot be attributed.
+   *   competitor hard block: the whole point of recording a loss is knowing
+   *              which teacher lost it.
+   *   follow_up  soft prompt: a first conversation that got nowhere is a real
+   *              outcome, so it may be saved anyway once asked.
+   *   call_back / closed  nothing. Neither says anything about a teacher.
+   */
+  const willHaveNoItems = enquiry.items.length === 0 && filledLines.length === 0;
+  // Purchased is stricter still: there must be something *open* to tick, or a
+  // new line to tick, not merely an item somewhere in the history.
+  const needsAnItem = purchased && openItems.length === 0 && filledLines.length === 0;
+  const blocksSave = needsAnItem || (outcome === "competitor" && willHaveNoItems);
+  const softPrompt = outcome === "follow_up" && willHaveNoItems && askedAboutItems;
+
+  function focusInterests() {
+    firstTeacherRef.current?.focus();
+    firstTeacherRef.current?.scrollIntoView({ block: "center" });
+  }
 
   function decision(id: string): Decision {
     return decisions[id] ?? { won: false, amount: "", close: false };
@@ -225,61 +150,42 @@ export function CallLogPanel({
     setDecisions((d) => ({ ...d, [id]: { ...decision(id), ...patch } }));
   }
 
-  function addLine() {
-    setNewLines((l) => [
-      ...l,
-      {
-        key: `${Date.now()}-${l.length}`,
-        teacherId: "",
-        courseId: "",
-        subjectId: "",
-        contentId: "",
-        // A line added during a purchase was almost certainly added because it
-        // was bought — pre-ticked so the common case is one click, not two.
-        won: purchased,
-        amount: "",
-      },
-    ]);
-  }
-
-  function setLine(key: string, patch: Partial<NewLine>) {
-    setNewLines((lines) =>
-      lines.map((l) => (l.key === key ? { ...l, ...patch } : l)),
-    );
-  }
-
   /** Outcome drives what the rest of the form is asking for. */
   function chooseOutcome(next: CallOutcome | "") {
     setOutcome(next);
     setResult(null);
+    // A fresh outcome is a fresh decision: re-ask if the new one wants items.
+    setAskedAboutItems(false);
     if (next === "call_back") {
       // §6 bucket 5: call backs are re-tried the same evening.
       setFollowUpDate(istToday());
-    } else if (next === "follow_up" || next === "noted") {
-      setFollowUpDate("");
     } else {
       setFollowUpDate("");
     }
-    if (next === "purchased" && enquiry.items.filter((i) => i.status === "open").length === 0) {
-      // Nothing to tick: open the interests editor rather than let them hit a
-      // wall on save.
-      setShowInterests(true);
-      setNewLines((l) => (l.length ? l : [
-        {
-          key: `${Date.now()}`,
-          teacherId: "",
-          courseId: "",
-          subjectId: "",
-          contentId: "",
-          won: true,
-          amount: "",
-        },
-      ]));
+    if (next === "purchased" && openItems.length === 0) {
+      // Nothing to tick, so whatever gets typed below is what was bought —
+      // pre-ticked so the common case is one click, not two.
+      setNewLines((lines) => lines.map((l) => ({ ...l, won: true })));
+      focusInterests();
+    }
+    if (next === "competitor" && enquiry.items.length === 0) {
+      focusInterests();
     }
   }
 
   function save() {
     if (pending) return;
+    if (blocksSave) {
+      focusInterests();
+      return;
+    }
+    // The soft prompt. A second Enter, or the "Save anyway" button, gets past
+    // it — one deliberate confirmation, not a dialog to dismiss every time.
+    if (outcome === "follow_up" && willHaveNoItems && !askedAboutItems) {
+      setAskedAboutItems(true);
+      focusInterests();
+      return;
+    }
     setResult(null);
     startTransition(async () => {
       const res = await logCall({
@@ -295,8 +201,7 @@ export function CallLogPanel({
           amount: decision(i.id).amount || null,
           close: decision(i.id).close,
         })),
-        newItems: newLines
-          .filter((l) => l.teacherId && l.courseId)
+        newItems: filledLines
           .map((l) => ({
             teacherId: l.teacherId,
             courseId: l.courseId,
@@ -557,18 +462,18 @@ export function CallLogPanel({
         />
 
         {/* Interests are a purchase concept: an after-sale enquiry is about an
-            order that already exists, so there is nothing to record here. */}
-        <div className={isPurchase ? undefined : "hidden"}>
-          <button
-            type="button"
-            onClick={() => setShowInterests((s) => !s)}
-            className="text-[12.5px] text-ink-2 underline-offset-2 hover:underline"
-          >
-            {showInterests ? "▾" : "›"} Edit interests ({enquiry.items.length})
-          </button>
+            order that already exists, so there is nothing to record here.
 
-          {showInterests ? (
-            <div className="mt-2 rounded-md border border-line bg-sunk/30 px-3 py-2.5">
+            Open by default (Brief 8): the teacher on a lead is the one field
+            §7 cannot be rebuilt without, and a link nobody clicks records
+            nothing. */}
+        {isPurchase ? (
+          <section>
+            <h4 className="text-[11px] font-medium uppercase tracking-wide text-ink-3">
+              Interests ({enquiry.items.length})
+            </h4>
+
+            <div className="mt-1.5 rounded-md border border-line bg-sunk/30 px-3 py-2.5">
               {enquiry.items.length ? (
                 <ul className="mb-2 flex flex-col gap-0.5 text-[12px] text-ink-2">
                   {enquiry.items.map((i) => (
@@ -583,95 +488,44 @@ export function CallLogPanel({
                 </ul>
               ) : null}
 
-              {newLines.map((line) => {
-                const subjects = masters.subjects.filter(
-                  (s) => s.course_id === line.courseId,
-                );
-                return (
-                  <div
-                    key={line.key}
-                    className="mb-2 flex flex-wrap items-center gap-2 border-b border-line pb-2 last:border-b-0"
-                  >
-                    <div className="w-[190px]">
-                      <TeacherPicker
-                        teachers={masters.teachers}
-                        value={line.teacherId}
-                        onChange={(id) => setLine(line.key, { teacherId: id })}
-                      />
-                    </div>
-                    <Select
-                      className="w-[140px]"
-                      aria-label="Course"
-                      value={line.courseId}
-                      onChange={(e) =>
-                        setLine(line.key, { courseId: e.target.value, subjectId: "" })
-                      }
-                    >
-                      <option value="">Course…</option>
-                      {masters.courses.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </Select>
-                    <Select
-                      className="w-[140px]"
-                      aria-label="Subject"
-                      value={line.subjectId}
-                      disabled={!line.courseId}
-                      onChange={(e) => setLine(line.key, { subjectId: e.target.value })}
-                    >
-                      <option value="">{line.courseId ? "Subject…" : "Course first"}</option>
-                      {subjects.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </Select>
-                    <Select
-                      className="w-[130px]"
-                      aria-label="Content"
-                      value={line.contentId}
-                      onChange={(e) => setLine(line.key, { contentId: e.target.value })}
-                    >
-                      <option value="">Content…</option>
-                      {masters.contents.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </Select>
-
-                    {purchased ? (
-                      <label className="flex cursor-pointer items-center gap-1 text-[11.5px] text-ink-2">
-                        <input
-                          type="checkbox"
-                          checked={line.won}
-                          onChange={(e) => setLine(line.key, { won: e.target.checked })}
-                        />
-                        bought
-                      </label>
-                    ) : null}
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setNewLines((l) => l.filter((x) => x.key !== line.key))
-                      }
-                      className="text-[11.5px] text-ink-3 hover:text-danger"
-                    >
-                      remove
-                    </button>
-                  </div>
-                );
-              })}
-
-              <Button type="button" size="sm" variant="secondary" onClick={addLine}>
-                Add line
-              </Button>
+              <InterestLineRows
+                lines={newLines}
+                masters={masters}
+                showWon={purchased}
+                onChange={setNewLines}
+                firstFieldRef={firstTeacherRef}
+              />
             </div>
-          ) : null}
-        </div>
+
+            {outcome === "competitor" && willHaveNoItems ? (
+              <p className="mt-1.5 text-[12px] text-danger">
+                Add the teacher that lost this student before saving — a competitor
+                loss with no teacher against it tells the teacher-wise report nothing.
+              </p>
+            ) : null}
+
+            {softPrompt ? (
+              <div className="mt-1.5 flex flex-wrap items-center gap-2 rounded-md border border-warn/50 bg-warn-soft/40 px-3 py-2">
+                <span className="text-[12px] text-ink-2">
+                  No interests recorded — add now or save anyway?
+                </span>
+                <Button type="button" size="sm" variant="secondary" onClick={focusInterests}>
+                  Add now
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={pending}
+                  onClick={save}
+                >
+                  Save anyway
+                </Button>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
 
         {result?.error ? <ErrorNote>{result.error}</ErrorNote> : null}
         {result && !result.error ? (

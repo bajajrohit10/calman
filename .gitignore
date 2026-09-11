@@ -49,3 +49,6 @@ yarn-error.log*
 
 # Source spreadsheets and other client reference material — never commit
 /docs/reference/
+
+# Playwright MCP session artefacts
+.playwright-mcp/

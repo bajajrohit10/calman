@@ -258,7 +258,7 @@ export function QuickAdd({
 
           <StudentHistoryView
             student={stage.student}
-            masters={{ terms: masters.terms, sources: masters.sources }}
+            masters={masters}
             counsellorName={counsellorName}
             onEdited={() => setLookup(null)}
           />
@@ -287,7 +287,7 @@ export function QuickAdd({
           {stage.student ? (
             <StudentHistoryView
               student={stage.student}
-              masters={{ terms: masters.terms, sources: masters.sources }}
+              masters={masters}
             counsellorName={counsellorName}
               onEdited={() => setLookup(null)}
             />

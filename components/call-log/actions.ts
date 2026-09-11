@@ -199,6 +199,23 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
     return { error: "A purchase needs an order ID." };
   }
 
+  // A competitor loss is only worth recording if it says who we lost to.
+  // Enforced here and not only in the panel, because the panel is one caller
+  // of this and the report is built on what lands in the table.
+  if (outcome === "competitor") {
+    const { count, error: countError } = await supabase
+      .from("enquiry_items")
+      .select("*", { count: "exact", head: true })
+      .eq("enquiry_id", input.enquiryId);
+    if (countError) return { error: countError.message };
+    if ((count ?? 0) === 0 && input.newItems.length === 0) {
+      return {
+        error:
+          "Add the teacher that lost this student — a competitor loss with no teacher against it tells the teacher-wise report nothing.",
+      };
+    }
+  }
+
   const orderId = input.orderId?.trim() || null;
 
   // ---- 1. New interest lines from "Edit interests" -------------------------
@@ -368,4 +385,64 @@ export async function updateEnquiryDetails(input: {
   revalidatePath("/enquiries");
 
   return { error: null, ok: "Details saved." };
+}
+
+/**
+ * Add interest lines without logging a call (§5.2).
+ *
+ * The student history page can now record a teacher the moment it is learned,
+ * rather than making the counsellor open a call panel to do it. Items added
+ * this way are always `open`: a purchase is settled by the call that records
+ * it, and nothing here may mark one won.
+ */
+export async function addEnquiryItems(input: {
+  enquiryId: number;
+  lines: {
+    teacherId: string;
+    courseId: string;
+    subjectId: string | null;
+    contentId: string | null;
+  }[];
+}): Promise<LogCallResult> {
+  const viewer = await requireUser();
+  if (!viewer.profile) return { error: "Your account is not active." };
+
+  const lines = input.lines.filter((l) => l.teacherId && l.courseId);
+  if (!lines.length) {
+    return { error: "Every interest line needs at least a teacher and a course." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: enquiry, error: findError } = await supabase
+    .from("enquiries")
+    .select("id, students ( mobile )")
+    .eq("id", input.enquiryId)
+    .maybeSingle();
+
+  if (findError) return { error: findError.message };
+  if (!enquiry) return { error: "That enquiry no longer exists." };
+
+  const { error } = await supabase.from("enquiry_items").insert(
+    lines.map((l) => ({
+      enquiry_id: input.enquiryId,
+      teacher_id: l.teacherId,
+      course_id: l.courseId,
+      subject_id: l.subjectId || null,
+      content_id: l.contentId || null,
+      created_by: viewer.userId,
+      status: "open" as const,
+    })),
+  );
+
+  if (error) return { error: `Could not save the interests: ${error.message}` };
+
+  const mobile = (enquiry.students as { mobile: string } | null)?.mobile;
+  if (mobile) revalidatePath(`/students/${mobile}`);
+  revalidatePath("/enquiries");
+
+  return {
+    error: null,
+    ok: `Added ${lines.length} interest${lines.length === 1 ? "" : "s"}.`,
+  };
 }

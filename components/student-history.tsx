@@ -1,6 +1,8 @@
 import Link from "next/link";
 
 import { EnquiryDetailsEditor, type DetailMasters } from "@/components/enquiry-details";
+import { EnquiryInterests } from "@/components/enquiry-interests";
+import type { ItemMasters } from "@/components/interest-lines";
 import { Badge, cx } from "@/components/ui";
 import { WhatsAppButton } from "@/components/whatsapp/button";
 import { stageOf } from "@/lib/whatsapp-text";
@@ -11,7 +13,6 @@ import {
   ENQUIRY_TYPE_LABELS,
   IMPORTANCE_LABELS,
   ISSUE_CATEGORY_LABELS,
-  ITEM_STATUS_LABELS,
   LEAD_VERIFICATION_LABELS,
   LOST_REASON_LABELS,
   OUTCOME_SHORT,
@@ -37,28 +38,18 @@ function Meta({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ItemLine({ item }: { item: HistoryEnquiry["enquiry_items"][number] }) {
-  const parts = [
-    item.teacher?.name,
-    item.course?.name,
-    item.subject?.name,
-    item.content?.name,
-  ].filter(Boolean);
-
-  return (
-    <li className="flex flex-wrap items-center gap-2 py-1">
-      <span className="text-ink">{parts.join(" · ") || "—"}</span>
-      <Badge tone={item.status === "won" ? "ok" : item.status === "open" ? "info" : "neutral"}>
-        {ITEM_STATUS_LABELS[item.status]}
-      </Badge>
-      {item.order_id ? (
-        <span className="text-[11.5px] text-ink-3">order {item.order_id}</span>
-      ) : null}
-      {item.amount != null ? (
-        <span className="text-[11.5px] tabular-nums text-ink-3">₹{item.amount}</span>
-      ) : null}
-    </li>
-  );
+/** The history row shape, flattened for the shared Interests block. */
+function toInterestItem(item: HistoryEnquiry["enquiry_items"][number]) {
+  return {
+    id: item.id,
+    status: item.status,
+    label:
+      [item.teacher?.name, item.course?.name, item.subject?.name, item.content?.name]
+        .filter(Boolean)
+        .join(" · ") || "—",
+    orderId: item.order_id,
+    amount: item.amount,
+  };
 }
 
 function CallLine({ call }: { call: HistoryEnquiry["calls"][number] }) {
@@ -111,7 +102,7 @@ export function EnquiryCard({
   studentName?: string | null;
   counsellorName?: string | null;
   /** Omit to render the card read-only. */
-  masters?: DetailMasters;
+  masters?: DetailMasters & ItemMasters;
   onEdited?: () => void;
 }) {
   const resolution =
@@ -206,22 +197,16 @@ export function EnquiryCard({
         </p>
       ) : null}
 
-      <section className="border-t border-line px-4 py-2.5">
-        <h4 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
-          Interests ({enquiry.enquiry_items.length})
-        </h4>
-        {enquiry.enquiry_items.length ? (
-          <ul className="mt-1 text-[12.5px]">
-            {enquiry.enquiry_items.map((item) => (
-              <ItemLine key={item.id} item={item} />
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-1 text-[12.5px] italic text-ink-3">
-            No teacher or subject recorded yet.
-          </p>
-        )}
-      </section>
+      {/* Open by default, with a line ready to type into, whenever the card is
+          editable — an enquiry with no teacher against it is invisible to §7,
+          and the fix has to be one keystroke away. An after-sale enquiry is
+          about an order that already exists, so it stays read-only. */}
+      <EnquiryInterests
+        enquiryId={enquiry.id}
+        items={enquiry.enquiry_items.map(toInterestItem)}
+        masters={masters && enquiry.type === "purchase" ? masters : undefined}
+        onSaved={onEdited}
+      />
 
       {enquiry.assignments.length ? (
         <section className="border-t border-line px-4 py-2.5">
@@ -288,7 +273,7 @@ export function StudentHistoryView({
   student: StudentHistory;
   className?: string;
   showHeader?: boolean;
-  masters?: DetailMasters;
+  masters?: DetailMasters & ItemMasters;
   counsellorName?: string | null;
   onEdited?: () => void;
 }) {
