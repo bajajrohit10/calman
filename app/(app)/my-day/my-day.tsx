@@ -18,14 +18,11 @@ import {
   Select,
   cx,
 } from "@/components/ui";
-import {
-  ENQUIRY_STATUS_LABELS,
-  OUTCOME_SHORT,
-  type AssignmentBucket,
-} from "@/lib/enquiry-labels";
+import { ENQUIRY_STATUS_LABELS, OUTCOME_SHORT } from "@/lib/enquiry-labels";
 import { formatDate, formatTime } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
 import type { MyDayData, MyDayRow, MyDayTicket } from "@/lib/my-day";
+import { MY_DAY_TABS, type MyDayTabKey } from "@/lib/my-day-tabs";
 import type { RecommendedRow } from "@/lib/recommended";
 
 import { dismissOverdue } from "../assign/actions";
@@ -44,15 +41,10 @@ import { refreshMyDay } from "./actions";
  * mean the same thing to a counsellor: a follow-up and a call back are both
  * "the desk gave me this", which is what Assigned Calls says.
  */
-type TabKey = "new" | "offer" | "assigned" | "custom" | "tickets";
-
-const TABS: { key: TabKey; label: string; buckets: AssignmentBucket[] }[] = [
-  { key: "new", label: "New Calls", buckets: ["fresh"] },
-  { key: "offer", label: "Offer Calls", buckets: ["offer"] },
-  { key: "assigned", label: "Assigned Calls", buckets: ["follow_up", "call_back"] },
-  { key: "custom", label: "Customised", buckets: ["campaign"] },
-  { key: "tickets", label: "Tickets", buckets: [] },
-];
+// The tab table lives in lib/my-day-tabs so the export can mean the same thing
+// by "Assigned Calls" that this screen does.
+type TabKey = MyDayTabKey;
+const TABS = MY_DAY_TABS;
 
 /** Newest call first — the Done list reads as a log of the day. */
 const byCallTimeDesc = <T extends { last_call_at: string | null }>(a: T, b: T) =>
@@ -196,10 +188,9 @@ export function MyDay({
             Show
           </Button>
         </form>
-        <span className="pb-1 text-[12px] text-ink-3">
+        <span className="ml-auto pb-1 text-[12px] text-ink-3">
           {tabsTotal} assigned for {formatDate(date)}
         </span>
-        <ExportButton source="myday" date={date} counsellorId={counsellorId} className="ml-auto" />
       </div>
 
       {data.error ? <ErrorNote>{data.error}</ErrorNote> : null}
@@ -280,6 +271,17 @@ export function MyDay({
             : "Called today, most recent first."}
         </span>
         {pending ? <span className="text-[11.5px] text-ink-3">working…</span> : null}
+        {/* Beside the toggle, not up in the date bar: it exports this tab and
+            this half of it, and the control should sit where that is legible. */}
+        <span className="ml-auto">
+          <ExportButton
+            source="myday"
+            date={date}
+            counsellorId={counsellorId}
+            tab={tab}
+            view={view}
+          />
+        </span>
       </div>
 
       <div className="flex flex-col gap-4 lg:flex-row">

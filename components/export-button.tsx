@@ -4,11 +4,18 @@ import { useState, useTransition } from "react";
 
 import { Button, ErrorNote, Select } from "@/components/ui";
 import { exportCurrentView } from "@/lib/export-actions";
+import type { MyDayTabKey, MyDayView } from "@/lib/my-day-tabs";
 
 type Source =
   | { source: "enquiries" }
   | { source: "desk" }
-  | { source: "myday"; date: string; counsellorId: string | null }
+  | {
+      source: "myday";
+      date: string;
+      counsellorId: string | null;
+      tab: MyDayTabKey;
+      view: MyDayView;
+    }
   | { source: "report"; from: string; to: string; counsellorId: string | null }
   | { source: "stage"; from: string; to: string; counsellorId: string | null };
 
@@ -42,7 +49,13 @@ export function ExportButton(props: Source & { className?: string }) {
     start(async () => {
       const payload =
         props.source === "myday"
-          ? { source: "myday" as const, date: props.date, counsellorId: props.counsellorId }
+          ? {
+              source: "myday" as const,
+              date: props.date,
+              counsellorId: props.counsellorId,
+              tab: props.tab,
+              view: props.view,
+            }
           : props.source === "report" || props.source === "stage"
             ? {
                 source: props.source,

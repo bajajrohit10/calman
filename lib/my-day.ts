@@ -9,6 +9,11 @@ import type {
   IssueCategory,
 } from "@/lib/enquiry-labels";
 import { istDateOf, istToday } from "@/lib/format";
+import {
+  MY_DAY_TABS,
+  type MyDayTabKey,
+  type MyDayView,
+} from "@/lib/my-day-tabs";
 import { fetchAllRows } from "@/lib/paged";
 import { createClient } from "@/lib/supabase/server";
 
@@ -130,26 +135,44 @@ export async function loadMyDay(input: {
 }
 
 /**
- * The enquiry ids on one counsellor's day, for the export.
+ * The enquiry ids behind one tab and toggle, for the export.
  *
- * The export used to re-derive the day from recommended_calls(), which is the
- * open-only list — so the moment My Day started counting closed rows in its
- * totals, "export my day" would have quietly left them out. One definition of
- * the day, read twice.
+ * Two things were wrong with reading recommended_calls() here. It is the
+ * open-only list, so the moment My Day started counting closed rows in its
+ * totals "export my day" would have quietly left them out — the Done rows,
+ * which are the ones worth exporting. And it knows nothing about the tabs, so
+ * every export was the whole day whatever the counsellor was looking at,
+ * against this project's one rule for Export: what you see is what you get.
+ *
+ * The caller names the view; the rows are still built here, so a tampered
+ * request can ask for a different tab but never for somebody else's day.
  */
 export async function loadMyDayIds(input: {
   date: string;
   counsellorId: string;
+  tab: MyDayTabKey;
+  view: MyDayView;
 }): Promise<{ ids: number[]; error: string | null }> {
-  const supabase = await createClient();
-  const { rows, error } = await fetchAllRows<{ enquiry_id: number }>((from, to) =>
-    supabase
-      .rpc("my_day", {
-        p_date: input.date,
-        p_counsellor_id: input.counsellorId,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any)
-      .range(from, to) as never,
-  );
-  return { ids: rows.map((r) => r.enquiry_id), error };
+  const { rows, tickets, error } = await loadMyDay({
+    date: input.date,
+    counsellorId: input.counsellorId,
+  });
+  if (error) return { ids: [], error };
+
+  const done = input.view === "done";
+
+  if (input.tab === "tickets") {
+    return {
+      ids: tickets.filter((t) => t.called_today === done).map((t) => t.enquiry_id),
+      error: null,
+    };
+  }
+
+  const buckets = MY_DAY_TABS.find((t) => t.key === input.tab)?.buckets ?? [];
+  return {
+    ids: rows
+      .filter((r) => buckets.includes(r.bucket) && r.called_today === done)
+      .map((r) => r.enquiry_id),
+    error: null,
+  };
 }
