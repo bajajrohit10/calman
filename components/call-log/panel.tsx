@@ -26,7 +26,7 @@ import {
   type LeadVerification,
 } from "@/lib/enquiry-labels";
 import { EnquiryDetailsEditor } from "@/components/enquiry-details";
-import { istDatePlus, istNextMonday, istToday } from "@/lib/format";
+import { istDatePlus, istNextMonday } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
 import { WhatsAppButton } from "@/components/whatsapp/button";
 import { stageOf } from "@/lib/whatsapp-text";
@@ -66,6 +66,8 @@ export type PanelEnquiry = {
   sourceId: string | null;
   importance: Importance | null;
   leadVerification: LeadVerification | null;
+  /** What the follow-up field opens on; decided by the database (§20.2). */
+  defaultFollowUpDate: string | null;
   items: PanelItem[];
 };
 
@@ -166,9 +168,14 @@ export function CallLogPanel({
     setResult(null);
     // A fresh outcome is a fresh decision: re-ask if the new one wants items.
     setAskedAboutItems(false);
-    if (next === "call_back") {
-      // §6 bucket 5: call backs are re-tried the same evening.
-      setFollowUpDate(istToday());
+    // Both outcomes that carry a lead forward open on the next working day
+    // (§20.2). Call backs used to default to today — "re-tried the same
+    // evening" — which was right when the evening was the plan and wrong every
+    // time the call came late in the day, because the trigger then pushed the
+    // saved date to a working day anyway and the counsellor never saw where it
+    // landed. The chips are still there to say otherwise.
+    if (next === "call_back" || next === "follow_up") {
+      setFollowUpDate(enquiry.defaultFollowUpDate ?? "");
     } else {
       setFollowUpDate("");
     }

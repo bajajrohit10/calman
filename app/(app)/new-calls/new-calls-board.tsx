@@ -12,7 +12,12 @@ import { IMPORTANCE_LABELS, type Importance } from "@/lib/enquiry-labels";
 import { formatDate } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
 
-import { takeEnquiries, takeNext, type TakeResult } from "./actions";
+import {
+  selectAllPool,
+  takeEnquiries,
+  takeNext,
+  type TakeResult,
+} from "./actions";
 
 export type PoolRow = {
   enquiry_id: number;
@@ -81,15 +86,46 @@ export function NewCallsBoard({
   // Rows this session has claimed, hidden immediately so the list does not
   // still offer something already on your My Day.
   const [claimed, setClaimed] = useState<Set<number>>(new Set());
+  // Ticked rows. Held as a Set of ids rather than a flag on the row, so a
+  // cross-page selection survives the list re-rendering under it.
+  const [picked, setPicked] = useState<Set<number>>(new Set());
 
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const visible = rows.filter((r) => !claimed.has(r.enquiry_id));
+  const allOnPage = visible.length > 0 && visible.every((r) => picked.has(r.enquiry_id));
+  const pickedIds = [...picked];
+  const allMatchingSelected = total > 0 && picked.size === total;
+
+  function toggle(id: number) {
+    setPicked((p) => {
+      const next = new Set(p);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  /** Every row the filter matches, not just the ones on screen. */
+  function selectAll() {
+    setResult(null);
+    start(async () => {
+      const res = await selectAllPool(window.location.search);
+      if (res.error) {
+        setResult({ error: res.error });
+        return;
+      }
+      setPicked(new Set(res.ids ?? []));
+    });
+  }
 
   function run(ids: number[], fn: () => Promise<TakeResult>) {
     setResult(null);
     start(async () => {
       const res = await fn();
       setResult(res);
+      // Whatever was taken is gone from the pool, and whatever was lost to a
+      // colleague is gone too — neither should stay ticked.
+      setPicked(new Set());
       // Anything not reported lost was taken; anything lost is gone from the
       // pool either way, so both drop off.
       setClaimed((c) => new Set([...c, ...ids, ...(res.lost ?? []).map((l) => l.enquiryId)]));
@@ -207,8 +243,17 @@ export function NewCallsBoard({
           <span className="text-[12px] text-ink-3">{total} waiting</span>
 
           <span className="ml-auto flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="primary"
+              disabled={pending || !pickedIds.length}
+              onClick={() => run(pickedIds, () => takeEnquiries(pickedIds))}
+            >
+              Take selected{pickedIds.length ? ` (${pickedIds.length})` : ""}
+            </Button>
             <span className="text-[11.5px] text-ink-3">Take the next</span>
-            {[10, 25].map((n) => (
+            {[5, 10, 25].map((n) => (
               <Button
                 key={n}
                 type="button"
@@ -240,10 +285,60 @@ export function NewCallsBoard({
         </p>
       ) : null}
 
+      {/* Cross-page selection. The header checkbox stays "this page only";
+          this is the only way to act on rows that are not on screen. */}
+      {total > visible.length ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-line bg-sunk px-3 py-1.5 text-[12px]">
+          {allMatchingSelected ? (
+            <>
+              <span className="text-ink">
+                All {picked.size} matching leads selected, including ones on other
+                pages.
+              </span>
+              <button
+                type="button"
+                onClick={() => setPicked(new Set())}
+                className="text-ink-2 underline underline-offset-2 hover:text-ink"
+              >
+                Clear selection
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="text-ink-2">
+                {picked.size
+                  ? `${picked.size} selected on this page.`
+                  : `Showing ${visible.length} of ${total}.`}
+              </span>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={selectAll}
+                className="text-accent underline underline-offset-2 disabled:opacity-60"
+              >
+                Select all {total} matching
+              </button>
+            </>
+          )}
+        </div>
+      ) : null}
+
       <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
         <table className="w-full min-w-[900px] border-collapse text-[12.5px]">
           <thead>
             <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+              <th className="w-8 px-2 py-[7px]">
+                <input
+                  type="checkbox"
+                  aria-label="Select all on this page"
+                  checked={allOnPage}
+                  onChange={() =>
+                    setPicked(
+                      allOnPage ? new Set() : new Set(visible.map((r) => r.enquiry_id)),
+                    )
+                  }
+                />
+              </th>
               <th className="px-2 py-[7px]">Student</th>
               <th className="px-2 py-[7px]">Imp</th>
               <th className="px-2 py-[7px]">Source</th>
@@ -256,7 +351,22 @@ export function NewCallsBoard({
           </thead>
           <tbody>
             {visible.map((r) => (
-              <tr key={r.enquiry_id} className="border-b border-line last:border-b-0">
+              <tr
+                key={r.enquiry_id}
+                className={cx(
+                  "border-b border-line last:border-b-0",
+                  picked.has(r.enquiry_id) &&
+                    "bg-accent-pick shadow-[inset_3px_0_0_var(--accent)]",
+                )}
+              >
+                <td className="px-2 py-[5px]">
+                  <input
+                    type="checkbox"
+                    aria-label={`Select enquiry ${r.enquiry_id}`}
+                    checked={picked.has(r.enquiry_id)}
+                    onChange={() => toggle(r.enquiry_id)}
+                  />
+                </td>
                 <td className="px-2 py-[5px]">
                   <span className="text-ink">{r.student_name || "No name"}</span>
                   <Link
@@ -312,7 +422,7 @@ export function NewCallsBoard({
             ))}
             {visible.length === 0 ? (
               <tr>
-                <td colSpan={8} className={cx("px-3 py-8 text-center text-ink-3")}>
+                <td colSpan={9} className={cx("px-3 py-8 text-center text-ink-3")}>
                   Nothing waiting with these filters.
                 </td>
               </tr>

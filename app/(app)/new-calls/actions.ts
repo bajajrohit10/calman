@@ -123,3 +123,54 @@ export async function takeNext(search: string, count: number): Promise<TakeResul
 
   return takeEnquiries(ids);
 }
+
+/** Selecting more than this at once is a mistake, not an intention. */
+const MAX_SELECT = 2000;
+
+export type SelectAllPoolResult = {
+  error: string | null;
+  ids?: number[];
+  total?: number;
+};
+
+/**
+ * Every lead the current New Calls filter matches, across all pages (§20.1).
+ *
+ * Takes the query string rather than a filter object for the same reason the
+ * Assignment Desk does: the selection is parsed by exactly the code that
+ * produced the page on screen, so "select all 240 matching" cannot quietly
+ * mean a different 240.
+ *
+ * Paged, because the pool RPC is subject to PostgREST's row cap like anything
+ * else and a short array here would be a silent under-selection.
+ */
+export async function selectAllPool(search: string): Promise<SelectAllPoolResult> {
+  await requireUser();
+
+  const params = new URLSearchParams(search);
+  const { filters } = parseNewCallsParams((k) => params.get(k));
+
+  const supabase = await createClient();
+  const PAGE = 500;
+  const ids: number[] = [];
+
+  for (let offset = 0; offset < MAX_SELECT; offset += PAGE) {
+    const { data, error } = await supabase.rpc("new_calls_pool", {
+      ...filters,
+      p_limit: PAGE,
+      p_offset: offset,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    if (error) return { error: error.message };
+
+    const rows = (data ?? []) as { enquiry_id: number }[];
+    ids.push(...rows.map((r) => r.enquiry_id));
+    if (rows.length < PAGE) return { error: null, ids, total: ids.length };
+  }
+
+  return {
+    error:
+      `That is more than ${MAX_SELECT} leads. Narrow the filter — taking them ` +
+      `all would put a day's work on one person.`,
+  };
+}

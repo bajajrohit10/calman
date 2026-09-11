@@ -67,6 +67,12 @@ export type PanelPayload = {
   sourceId: string | null;
   importance: Importance | null;
   leadVerification: LeadVerification | null;
+  /**
+   * What the follow-up field opens on for the outcomes that take a date
+   * (§20.2). Decided by the database so it agrees with the trigger that will
+   * snap the saved value — Sundays and the holidays table, one implementation.
+   */
+  defaultFollowUpDate: string | null;
   items: {
     id: string;
     status: string;
@@ -111,6 +117,10 @@ export async function loadPanelEnquiry(
 
   const student = data.students as { name: string | null; mobile: string } | null;
 
+  const { data: nextDay } = await supabase.rpc("next_working_day", {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any);
+
   return {
     error: null,
     enquiry: {
@@ -125,6 +135,7 @@ export async function loadPanelEnquiry(
       sourceId: data.source_id,
       importance: data.importance as Importance | null,
       leadVerification: data.lead_verification as LeadVerification | null,
+      defaultFollowUpDate: (nextDay as string | null) ?? null,
       items: (data.enquiry_items ?? []).map((i) => ({
         id: i.id,
         status: i.status,

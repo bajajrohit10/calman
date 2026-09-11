@@ -1704,6 +1704,7 @@ export type Database = {
           total_count: number
         }[]
       }
+      next_working_day: { Args: { p_from?: string }; Returns: string }
       purge_archived: {
         Args: { p_expected_count: number; p_ids: number[] }
         Returns: {

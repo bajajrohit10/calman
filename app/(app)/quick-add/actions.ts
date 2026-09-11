@@ -61,6 +61,7 @@ export type NewEnquiryResult = {
     sourceId: string | null;
     importance: Importance | null;
     leadVerification: LeadVerification | null;
+    defaultFollowUpDate: string | null;
     items: never[];
   };
 };
@@ -152,6 +153,10 @@ export async function createEnquiry(
   // Not fatal: the enquiry exists, and the counsellor has a call to log.
   if (sourceLogError) console.error("enquiry_sources insert failed", sourceLogError.message);
 
+  const { data: nextDay } = await supabase.rpc("next_working_day", {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any);
+
   revalidatePath(`/students/${mobile}`);
   revalidatePath("/quick-add");
 
@@ -170,6 +175,7 @@ export async function createEnquiry(
       sourceId: input.sourceId || null,
       importance: (input.importance || null) as Importance | null,
       leadVerification: (input.leadVerification || null) as LeadVerification | null,
+      defaultFollowUpDate: (nextDay as string | null) ?? null,
       items: [],
     },
   };

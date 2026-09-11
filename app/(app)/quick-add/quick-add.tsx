@@ -40,9 +40,16 @@ type Stage =
 export function QuickAdd({
   masters,
   counsellorName,
+  defaultFollowUpDate,
 }: {
   masters: QuickAddMasters;
   counsellorName: string | null;
+  /**
+   * The next working day, decided by the database when this page rendered
+   * (§20.2). Passed in rather than fetched per lookup: the lookup runs on
+   * every settled keystroke and this changes once a day.
+   */
+  defaultFollowUpDate: string | null;
 }) {
   const [raw, setRaw] = useState("");
   const mobile = normaliseMobile(raw);
@@ -289,6 +296,7 @@ export function QuickAdd({
                         sourceId: null,
                         importance: openEnquiryRow.importance,
                         leadVerification: openEnquiryRow.lead_verification,
+                        defaultFollowUpDate,
                         items: openEnquiryRow.enquiry_items.map((i) => ({
                           id: i.id,
                           status: i.status,
