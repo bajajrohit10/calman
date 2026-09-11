@@ -112,7 +112,7 @@ export function BatchReport({
               <th className="px-3 py-[7px]">Row</th>
               <th className="px-2 py-[7px]">Mobile</th>
               <th className="px-2 py-[7px]">Outcome</th>
-              <th className="px-2 py-[7px]">Reason</th>
+              <th className="px-2 py-[7px]">What happened</th>
               <th className="px-2 py-[7px]">Enquiry</th>
               <th className="px-3 py-[7px] text-right">Resolve</th>
             </tr>

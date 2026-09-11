@@ -327,6 +327,14 @@ export function MyDay({
                   {r.is_overdue && !r.called_today ? (
                     <Badge tone="danger">Overdue</Badge>
                   ) : null}
+                  {/* The lead came in again today and is still yours. Without
+                      this the only record is the import report, which the
+                      person holding the lead has no reason to open. */}
+                  {r.re_enquired_today ? (
+                    <Badge tone="warn" dot>
+                      Re-enquired
+                    </Badge>
+                  ) : null}
                   {r.status !== "open" ? (
                     <Badge
                       dot

@@ -1280,6 +1280,7 @@ export type Database = {
           lost_reason: Database["public"]["Enums"]["lost_reason"] | null
           next_follow_up_date: string | null
           product_text: string | null
+          re_enquired_at: string | null
           source_id: string | null
           status: Database["public"]["Enums"]["enquiry_status"] | null
           student_id: string | null
@@ -1306,6 +1307,7 @@ export type Database = {
           lost_reason?: Database["public"]["Enums"]["lost_reason"] | null
           next_follow_up_date?: string | null
           product_text?: string | null
+          re_enquired_at?: string | null
           source_id?: string | null
           status?: Database["public"]["Enums"]["enquiry_status"] | null
           student_id?: string | null
@@ -1332,6 +1334,7 @@ export type Database = {
           lost_reason?: Database["public"]["Enums"]["lost_reason"] | null
           next_follow_up_date?: string | null
           product_text?: string | null
+          re_enquired_at?: string | null
           source_id?: string | null
           status?: Database["public"]["Enums"]["enquiry_status"] | null
           student_id?: string | null
@@ -1627,6 +1630,7 @@ export type Database = {
           mobile: string
           next_follow_up_date: string
           product_text: string
+          re_enquired_today: boolean
           status: Database["public"]["Enums"]["enquiry_status"]
           student_id: string
           student_name: string

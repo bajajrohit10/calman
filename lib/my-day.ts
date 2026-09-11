@@ -49,6 +49,8 @@ export type MyDayRow = {
   called_today: boolean;
   last_call_at: string | null;
   last_outcome: CallOutcome | null;
+  /** The number arrived again on the day being viewed (§10.1). */
+  re_enquired_today: boolean;
 };
 
 /** A ticket, plus the one thing the Tickets screen does not need to know. */
