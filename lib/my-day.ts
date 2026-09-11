@@ -52,6 +52,8 @@ export type MyDayRow = {
   last_outcome: CallOutcome | null;
   /** The number arrived again on the day being viewed (§10.1). */
   re_enquired_today: boolean;
+  /** What a campaign assignment was handed out as (§19.2). */
+  assignment_label: string | null;
 };
 
 /** A ticket, plus the one thing the Tickets screen does not need to know. */

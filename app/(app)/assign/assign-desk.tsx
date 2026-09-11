@@ -37,10 +37,11 @@ export type RosterEntry = {
   id: string;
   name: string;
   role: string;
-  /** Assigned to them on this date, across the whole day. */
-  count: number;
   /** Leads in the list currently on screen whose last call was theirs. */
   lastCalled: number;
+  /** Of this date's assignments: still to call, and already called. */
+  pending: number;
+  done: number;
 };
 
 const STATUS_OPTIONS = Object.entries(ENQUIRY_STATUS_LABELS).map(([id, name]) => ({
@@ -53,13 +54,18 @@ const STATUS_OPTIONS = Object.entries(ENQUIRY_STATUS_LABELS).map(([id, name]) =>
  * (§17.2). Each is just a URL, so it can be shared, bookmarked and backed out
  * of; nothing about them is special to this component.
  */
-const PRESETS: { label: string; query: (date: string) => string }[] = [
+export const PRESETS: { id: string; label: string; query: (date: string) => string }[] = [
   {
+    id: "evening",
     label: "Evening call backs",
     query: (date) =>
       new URLSearchParams({
         date,
-        assignment: "any",
+        // Needs assignment, not Any: the point of the list is what is still
+        // to be handed out, and a lead vanishes from it the moment somebody
+        // is given it — reappearing only once they have made the call.
+        assignment: "needs",
+        preset: "evening",
         lastOutcome: "call_back",
         lastCalledFrom: date,
         lastCalledTo: date,
@@ -73,11 +79,15 @@ const PRESETS: { label: string; query: (date: string) => string }[] = [
   {
     // Importance A, re-graded today: §5.8 counts exactly that as a price list
     // issued, and "who did I promise a price list to today" is the follow-up.
+    id: "pli",
     label: "PLI issued today",
     query: (date) =>
       new URLSearchParams({
         date,
-        assignment: "any",
+        assignment: "needs",
+        preset: "pli",
+        // A only to begin with; the multi-select lets the manager add B or C
+        // before applying (§19.3).
         importance: "a",
         lastCalledFrom: date,
         lastCalledTo: date,
@@ -137,6 +147,7 @@ export function AssignDesk({
   search,
   assignment,
   showMore,
+  preset,
 }: {
   rows: RecommendedRow[];
   total: number;
@@ -158,6 +169,8 @@ export function AssignDesk({
   assignment: string;
   /** Whether the More filters panel is open, carried in the URL (§17.1). */
   showMore: boolean;
+  /** Which preset built this view, if any — it names the campaign (§19.2). */
+  preset: string;
 }) {
   const router = useRouter();
   const [picked, setPicked] = useState<Map<number, AssignmentBucket>>(new Map());
@@ -167,6 +180,18 @@ export function AssignDesk({
 
   const [fromId, setFromId] = useState("");
   const [toId, setToId] = useState("");
+
+  // A campaign assignment is handed out *as* something. When a preset built
+  // this view its name is the obvious answer, so it is filled in; otherwise the
+  // admin names it. Keyed on the preset so switching preset re-seeds it rather
+  // than leaving yesterday's name in the box.
+  const presetLabel = PRESETS.find((x) => x.id === preset)?.label ?? "";
+  const [label, setLabel] = useState(presetLabel);
+  const [labelKey, setLabelKey] = useState(preset);
+  if (labelKey !== preset) {
+    setLabelKey(preset);
+    setLabel(presetLabel);
+  }
 
   // The panel toggle is a link to this same page with `more` flipped, so the
   // open/closed state rides in the URL rather than in storage the server
@@ -269,8 +294,9 @@ export function AssignDesk({
             </Labelled>
             <Labelled label="Assignment">
               <Select name="assignment" defaultValue={assignment}>
-                <option value="unassigned">Unassigned</option>
-                <option value="assigned">Assigned</option>
+                <option value="needs">Needs assignment</option>
+                <option value="pending">Pending</option>
+                <option value="done">Done</option>
                 <option value="any">Any</option>
               </Select>
             </Labelled>
@@ -523,8 +549,8 @@ export function AssignDesk({
               Counsellors · {formatDate(date)}
             </h2>
             <p className="text-[11px] text-ink-3">
-              &ldquo;Last called&rdquo; counts the list on screen; &ldquo;assigned
-              today&rdquo; is their whole day.
+              &ldquo;Last called&rdquo; counts the list on screen; pending and done
+              are this date&rsquo;s assignments.
             </p>
           </header>
           <ul className="px-3 py-2 text-[12.5px]">
@@ -536,9 +562,13 @@ export function AssignDesk({
                   <span className={cx("font-medium", r.lastCalled ? "text-ink" : "")}>
                     {r.lastCalled}
                   </span>{" "}
-                  · assigned today{" "}
-                  <span className={cx("font-medium", r.count ? "text-ink" : "")}>
-                    {r.count}
+                  · pending{" "}
+                  <span className={cx("font-medium", r.pending ? "text-ink" : "")}>
+                    {r.pending}
+                  </span>{" "}
+                  · done{" "}
+                  <span className={cx("font-medium", r.done ? "text-ink" : "")}>
+                    {r.done}
                   </span>
                 </span>
               </li>
@@ -573,6 +603,22 @@ export function AssignDesk({
                 <>Each row keeps its own bucket, for {formatDate(date)}.</>
               )}
             </p>
+
+            {/* Campaign only: the ordinary buckets are named by the bucket, and
+                a label on one of those would show up in My Day as a heading
+                competing with the bucket it already has. */}
+            {includeNotDue ? (
+              <label className="flex flex-col gap-1">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+                  Campaign label
+                </span>
+                <Input
+                  value={label}
+                  onChange={(e) => setLabel(e.target.value)}
+                  placeholder="What is this batch? e.g. Evening call backs"
+                />
+              </label>
+            ) : null}
             <div className="flex gap-2">
               <Button
                 variant="primary"
@@ -584,6 +630,7 @@ export function AssignDesk({
                       rows: toAssign,
                       counsellorId: counsellor,
                       date,
+                      label: includeNotDue ? label.trim() || null : null,
                     }),
                   )
                 }
@@ -612,7 +659,7 @@ export function AssignDesk({
               <option value="">From…</option>
               {roster.map((r) => (
                 <option key={r.id} value={r.id}>
-                  {r.name} ({r.count})
+                  {r.name} ({r.pending + r.done})
                 </option>
               ))}
             </Select>

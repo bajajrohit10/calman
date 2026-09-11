@@ -75,24 +75,21 @@ export default async function Page({
   // desk's default Unassigned view — true, and useless for deciding who has
   // room. The facet pass also returns assigned_today if the filtered reading is
   // ever wanted.
+  // Three numbers per counsellor, all from the facet pass so they describe the
+  // list on screen rather than a second, differently-filtered reading of the
+  // day. "last called" is who touched these leads last; pending and done split
+  // this date's assignments by whether the call has happened since it was made.
   const lastCalledCounts = facetResult.facets?.byFacet.last_called_by ?? {};
-  const roster = await Promise.all(
-    (staff.data ?? []).map(async (p) => {
-      const { count } = await supabase
-        .from("assignments")
-        .select("*", { count: "exact", head: true })
-        .eq("date", date)
-        .eq("counsellor_id", p.id);
-      return {
-        id: p.id,
-        name: p.full_name ?? "(no name)",
-        role: p.role,
-        count: count ?? 0,
-        lastCalled: lastCalledCounts[p.id]?.numbers ?? 0,
-      };
-    }),
-  );
-
+  const pendingCounts = facetResult.facets?.byFacet.assigned_pending ?? {};
+  const doneCounts = facetResult.facets?.byFacet.assigned_done ?? {};
+  const roster = (staff.data ?? []).map((p) => ({
+    id: p.id,
+    name: p.full_name ?? "(no name)",
+    role: p.role,
+    lastCalled: lastCalledCounts[p.id]?.numbers ?? 0,
+    pending: pendingCounts[p.id]?.numbers ?? 0,
+    done: doneCounts[p.id]?.numbers ?? 0,
+  }));
 
   // One line per render, so the phase breakdown is in the server log.
   logServerTiming("/assign");
@@ -116,6 +113,7 @@ export default async function Page({
         date={date}
         assignment={assignment}
         showMore={showMore}
+        preset={one(sp.preset) ?? ""}
         page={page}
         pageSize={PAGE_SIZE}
         includeNotDue={includeNotDue}
@@ -136,6 +134,7 @@ export default async function Page({
           stage: filters.stages ?? [],
           lastCalledBy: filters.lastCalledBy ?? [],
           lastOutcome: filters.lastOutcomes ?? [],
+          importance: filters.importance ?? [],
         }}
         selected={{
           counsellor: one(sp.counsellor) ?? "",

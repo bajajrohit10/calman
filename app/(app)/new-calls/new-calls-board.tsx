@@ -46,6 +46,7 @@ export function NewCallsBoard({
   sourceIds,
   teacherIds,
   contentIds,
+  importanceIds,
   masters,
   selected,
   facets,
@@ -60,6 +61,7 @@ export function NewCallsBoard({
   sourceIds: string[];
   teacherIds: string[];
   contentIds: string[];
+  importanceIds: string[];
   masters: {
     teachers: Master[];
     institutes: Master[];
@@ -149,11 +151,12 @@ export function NewCallsBoard({
           </Labelled>
 
           <Labelled label="Importance">
-            <FacetSelect
+            {/* Multi-select since Brief 19, as on the Desk and Enquiries. */}
+            <MultiSelect
               name="importance"
               facet="importance"
               options={IMPORTANCE_OPTIONS}
-              value={selected.importance}
+              values={importanceIds}
               facets={facets}
             />
           </Labelled>

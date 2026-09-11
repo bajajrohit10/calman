@@ -53,7 +53,7 @@ export type EnquiryFilters = {
   contentIds?: string[] | null;
   termId?: string | null;
   sourceId?: string | null;
-  importance?: Importance | null;
+  importance?: string[] | null;
   createdFrom?: string | null;
   createdTo?: string | null;
   followUpFrom?: string | null;
@@ -88,7 +88,7 @@ export async function loadEnquiries(
     p_content_ids: f.contentIds?.length ? f.contentIds : undefined,
     p_term_id: clean(f.termId),
     p_source_id: clean(f.sourceId),
-    p_importance: clean(f.importance),
+    p_importance: f.importance?.length ? f.importance : undefined,
     p_created_from: clean(f.createdFrom),
     p_created_to: clean(f.createdTo),
     p_follow_up_from: clean(f.followUpFrom),

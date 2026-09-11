@@ -35,6 +35,7 @@ export const EXPORT_COLUMNS = [
   { key: "last_discussion", label: "Last note" },
   { key: "assigned_to_name", label: "Assigned to" },
   { key: "assigned_date", label: "Assigned for" },
+  { key: "assignment_label", label: "Campaign label" },
   { key: "created_at", label: "Created" },
   { key: "closed_at", label: "Closed" },
 ] as const;

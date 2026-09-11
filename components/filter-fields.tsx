@@ -229,13 +229,15 @@ export function CommonFilterFields({
       </Labelled>
 
       <Labelled label="Importance">
-        <FacetSelect
+        {/* Multi-select since Brief 19: "A" is the price-list question, "A and
+            B" is the who-is-worth-an-hour question, and a single select could
+            not ask the second one. */}
+        <MultiSelect
           name="importance"
           facet="importance"
-          options={IMPORTANCE_OPTIONS}
-          value={selected.importance ?? ""}
+          options={noDetail ? withNoDetail(IMPORTANCE_OPTIONS) : IMPORTANCE_OPTIONS}
+          values={multi?.importance ?? []}
           facets={facets}
-          noDetail={noDetail}
         />
       </Labelled>
 

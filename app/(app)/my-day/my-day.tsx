@@ -117,6 +117,29 @@ export function MyDay({
 
   const current = groups[tab];
 
+  // The Customised tab is a pile of campaigns, not one list: a counsellor with
+  // "Evening call backs" and "PLI issued today" on the same day needs to know
+  // which is which and how much of each is left. Unlabelled work sorts last —
+  // it is the residue, not a campaign.
+  const labelGroups = useMemo(() => {
+    if (tab !== "custom") return [];
+    const by = new Map<string, MyDayRow[]>();
+    for (const r of current.rows) {
+      const key = r.assignment_label?.trim() || "";
+      (by.get(key) ?? by.set(key, []).get(key)!).push(r);
+    }
+    return [...by.entries()]
+      .sort((a, b) =>
+        a[0] === "" ? 1 : b[0] === "" ? -1 : a[0].localeCompare(b[0]),
+      )
+      .map(([label, rows]) => ({
+        label,
+        rows,
+        pending: rows.filter((r) => !r.called_today).length,
+        total: rows.length,
+      }));
+  }, [tab, current.rows]);
+
   const visibleRows = useMemo(() => {
     const rows = current.rows.filter((r) => (view === "done" ? r.called_today : !r.called_today));
     return view === "done" ? [...rows].sort(byCallTimeDesc) : rows;
@@ -156,6 +179,89 @@ export function MyDay({
         (list[next] ?? list[list.length - 1])?.focus();
       }, 60);
     });
+  }
+
+
+  /** One row of the day. Shared by the flat list and the labelled groups. */
+  function rowFor(r: MyDayRow, i: number) {
+    return (
+                <li
+                  key={r.enquiry_id}
+                  className={cx(
+                    "flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line px-3 py-2 last:border-b-0",
+                    open?.id === r.enquiry_id &&
+                      "bg-accent-pick shadow-[inset_3px_0_0_var(--accent)]",
+                  )}
+                >
+                  <Link
+                    href={`/students/${r.mobile}`}
+                    className="text-[13px] font-medium text-ink underline-offset-2 hover:underline"
+                  >
+                    {r.student_name || "No name"}
+                  </Link>
+                  <span className="text-[12.5px] tabular-nums text-ink-2">
+                    {formatMobile(r.mobile)}
+                  </span>
+                  {r.importance ? <ImportanceMark grade={r.importance} /> : null}
+                  {r.is_overdue && !r.called_today ? (
+                    <Badge tone="danger">Overdue</Badge>
+                  ) : null}
+                  {/* The lead came in again today and is still yours. Without
+                      this the only record is the import report, which the
+                      person holding the lead has no reason to open. */}
+                  {r.re_enquired_today ? (
+                    <Badge tone="warn" dot>
+                      Re-enquired
+                    </Badge>
+                  ) : null}
+                  {r.status !== "open" ? (
+                    <Badge
+                      dot
+                      tone={r.status === "won" ? "ok" : "neutral"}
+                    >
+                      {ENQUIRY_STATUS_LABELS[r.status]}
+                    </Badge>
+                  ) : null}
+                  <span className="text-[12px] text-ink-3">
+                    {r.teacher_names?.join(", ") || "no interests yet"}
+                  </span>
+
+                  {r.called_today ? (
+                    <span className="text-[12px] text-ink-2">
+                      {r.last_outcome ? OUTCOME_SHORT[r.last_outcome] : "Called"}{" "}
+                      <span className="tabular-nums text-ink-3">
+                        {formatTime(r.last_call_at)}
+                      </span>
+                    </span>
+                  ) : (
+                    <span
+                      className={cx(
+                        "text-[12px] tabular-nums",
+                        r.is_overdue ? "text-danger" : "text-ink-3",
+                      )}
+                    >
+                      {r.next_follow_up_date ? formatDate(r.next_follow_up_date) : "—"}
+                    </span>
+                  )}
+
+                  <span className="text-[12px] tabular-nums text-ink-3">
+                    {r.follow_up_slots_used}/3
+                  </span>
+                  <span className="ml-auto">
+                    <Button
+                      ref={(el) => {
+                        buttons.current[i] = el;
+                      }}
+                      size="sm"
+                      variant={r.called_today ? "secondary" : "primary"}
+                      disabled={pending}
+                      onClick={() => openEnquiry(r.enquiry_id, i)}
+                    >
+                      {r.called_today ? "Log another" : "Log call"}
+                    </Button>
+                  </span>
+                </li>
+    );
   }
 
   const tabsTotal = TABS.reduce((n, t) => n + groups[t.key].total, 0);
@@ -303,86 +409,33 @@ export function MyDay({
                   : "No ticket has been called today."
               }
             />
+          ) : tab === "custom" && labelGroups.length > 1 ? (
+            // More than one campaign on the day, so the headings earn their
+            // room. A single campaign is just "the list" and gets none.
+            <div className="flex flex-col gap-3">
+              {labelGroups.map((group) => {
+                const shown = group.rows.filter((r) =>
+                  view === "done" ? r.called_today : !r.called_today,
+                );
+                if (!shown.length) return null;
+                return (
+                  <section key={group.label || "_none"}>
+                    <h3 className="mb-1 flex items-baseline gap-2 text-[11px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+                      {group.label || "No label"}
+                      <span className="tabular-nums text-ink-2">
+                        {group.pending} / {group.total}
+                      </span>
+                    </h3>
+                    <ul className="overflow-hidden rounded-lg border border-line bg-surface shadow-card">
+                      {shown.map((r) => rowFor(r, visibleRows.indexOf(r)))}
+                    </ul>
+                  </section>
+                );
+              })}
+            </div>
           ) : visibleRows.length ? (
             <ul className="overflow-hidden rounded-lg border border-line bg-surface shadow-card">
-              {visibleRows.map((r, i) => (
-                <li
-                  key={r.enquiry_id}
-                  className={cx(
-                    "flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line px-3 py-2 last:border-b-0",
-                    open?.id === r.enquiry_id &&
-                      "bg-accent-pick shadow-[inset_3px_0_0_var(--accent)]",
-                  )}
-                >
-                  <Link
-                    href={`/students/${r.mobile}`}
-                    className="text-[13px] font-medium text-ink underline-offset-2 hover:underline"
-                  >
-                    {r.student_name || "No name"}
-                  </Link>
-                  <span className="text-[12.5px] tabular-nums text-ink-2">
-                    {formatMobile(r.mobile)}
-                  </span>
-                  {r.importance ? <ImportanceMark grade={r.importance} /> : null}
-                  {r.is_overdue && !r.called_today ? (
-                    <Badge tone="danger">Overdue</Badge>
-                  ) : null}
-                  {/* The lead came in again today and is still yours. Without
-                      this the only record is the import report, which the
-                      person holding the lead has no reason to open. */}
-                  {r.re_enquired_today ? (
-                    <Badge tone="warn" dot>
-                      Re-enquired
-                    </Badge>
-                  ) : null}
-                  {r.status !== "open" ? (
-                    <Badge
-                      dot
-                      tone={r.status === "won" ? "ok" : "neutral"}
-                    >
-                      {ENQUIRY_STATUS_LABELS[r.status]}
-                    </Badge>
-                  ) : null}
-                  <span className="text-[12px] text-ink-3">
-                    {r.teacher_names?.join(", ") || "no interests yet"}
-                  </span>
-
-                  {r.called_today ? (
-                    <span className="text-[12px] text-ink-2">
-                      {r.last_outcome ? OUTCOME_SHORT[r.last_outcome] : "Called"}{" "}
-                      <span className="tabular-nums text-ink-3">
-                        {formatTime(r.last_call_at)}
-                      </span>
-                    </span>
-                  ) : (
-                    <span
-                      className={cx(
-                        "text-[12px] tabular-nums",
-                        r.is_overdue ? "text-danger" : "text-ink-3",
-                      )}
-                    >
-                      {r.next_follow_up_date ? formatDate(r.next_follow_up_date) : "—"}
-                    </span>
-                  )}
-
-                  <span className="text-[12px] tabular-nums text-ink-3">
-                    {r.follow_up_slots_used}/3
-                  </span>
-                  <span className="ml-auto">
-                    <Button
-                      ref={(el) => {
-                        buttons.current[i] = el;
-                      }}
-                      size="sm"
-                      variant={r.called_today ? "secondary" : "primary"}
-                      disabled={pending}
-                      onClick={() => openEnquiry(r.enquiry_id, i)}
-                    >
-                      {r.called_today ? "Log another" : "Log call"}
-                    </Button>
-                  </span>
-                </li>
-              ))}
+              {visibleRows.map((r, i) => rowFor(r, i))}
             </ul>
           ) : (
             <p className="rounded-lg border border-dashed border-line-2 px-4 py-8 text-center text-[13px] text-ink-3">

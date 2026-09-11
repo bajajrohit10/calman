@@ -71,6 +71,8 @@ export async function assignEnquiries(input: {
   rows: { enquiryId: number; bucket: AssignmentBucket }[];
   counsellorId: string;
   date: string;
+  /** Campaign assignments only; null for the ordinary buckets (§19.2). */
+  label?: string | null;
 }): Promise<AssignResult> {
   const auth = await authorise();
   if (auth.error) return { error: auth.error };
@@ -93,6 +95,7 @@ export async function assignEnquiries(input: {
     bucket: r.bucket,
     assigned_by: auth.userId!,
     assigned_at: now,
+    label: r.bucket === "campaign" ? (input.label ?? null) : null,
   }));
 
   const { error } = await supabase

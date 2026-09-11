@@ -14,14 +14,20 @@ type Item = {
   icon: string;
   adminOnly?: boolean;
   /** Key into the counts prop, for a live badge. */
-  badge?: "newCalls";
+  badge?: "newCalls" | "myDay";
 };
 
 // Spec §2. Every item except Settings is available to all four roles; Settings
 // is Super Admin and Manager only. The server also enforces this — hiding a
 // link is presentation, not permission.
 const ITEMS: Item[] = [
-  { href: "/my-day", label: "My Day", hint: "Today's assigned calls", icon: "▣" },
+  {
+    href: "/my-day",
+    label: "My Day",
+    hint: "Today's assigned calls",
+    icon: "▣",
+    badge: "myDay",
+  },
   {
     href: "/new-calls",
     label: "New Calls",
@@ -29,6 +35,10 @@ const ITEMS: Item[] = [
     icon: "◈",
     badge: "newCalls",
   },
+  { href: "/quick-add", label: "Quick Add", hint: "Log a ringing phone", icon: "✎" },
+  { href: "/import", label: "Import", hint: "Bulk import with review", icon: "↑" },
+  { href: "/tickets", label: "Tickets", hint: "After-sale queue", icon: "✱" },
+  { href: "/enquiries", label: "Enquiries", hint: "Every enquiry, filterable", icon: "≡" },
   {
     href: "/assign",
     label: "Assign",
@@ -36,11 +46,7 @@ const ITEMS: Item[] = [
     icon: "▤",
     adminOnly: true,
   },
-  { href: "/enquiries", label: "Enquiries", hint: "Every enquiry, filterable", icon: "≡" },
-  { href: "/quick-add", label: "Quick Add", hint: "Log a ringing phone", icon: "✎" },
-  { href: "/import", label: "Import", hint: "Bulk import with review", icon: "↑" },
   { href: "/reports", label: "Reports", hint: "Daily and team reports", icon: "◔" },
-  { href: "/tickets", label: "Tickets", hint: "After-sale queue", icon: "✱" },
 ];
 
 const SETTINGS: Item = {
@@ -64,18 +70,18 @@ export function Sidebar({
   showSettings,
   fullName,
   roleLabel,
-  badge,
+  badges,
   signOut,
 }: {
   showSettings: boolean;
   fullName: string;
   roleLabel: string;
   /**
-   * The New Calls count, as a streamed server component rather than a number.
-   * It arrives after the rest of the rail, so nothing here can wait on it —
-   * which is the point: see the Suspense boundary in the layout.
+   * The two counts, as streamed server components rather than numbers. They
+   * arrive after the rest of the rail, so nothing here can wait on them —
+   * which is the point: see the Suspense boundaries in the layout.
    */
-  badge: ReactNode;
+  badges: Partial<Record<"newCalls" | "myDay", ReactNode>>;
   signOut: () => Promise<void>;
 }) {
   const pathname = usePathname();
@@ -139,7 +145,7 @@ export function Sidebar({
                         : "bg-accent text-accent-ink",
                     )}
                   >
-                    {badge}
+                    {badges[item.badge]}
                   </span>
                 ) : null}
               </Link>

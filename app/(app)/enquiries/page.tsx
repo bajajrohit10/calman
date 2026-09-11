@@ -86,6 +86,7 @@ export default async function Page({
           teacher: filters.teacherIds ?? [],
           content: filters.contentIds ?? [],
           stage: filters.stages ?? [],
+          importance: filters.importance ?? [],
         }}
         masters={{
           teachers: masters.teachers,

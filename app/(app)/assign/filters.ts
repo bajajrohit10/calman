@@ -2,7 +2,6 @@ import type {
   CloseReason,
   EnquiryStatus,
   EnquiryType,
-  Importance,
   LostReason,
 } from "@/lib/enquiry-labels";
 import type { EnquiryFilters } from "@/lib/enquiries";
@@ -83,13 +82,15 @@ export function parseDeskParams(get: ParamReader): {
   const split = splitNoDetail(get, [
     { param: "teacher", facet: "teacher" },
     { param: "content", facet: "content" },
+    { param: "importance", facet: "importance" },
   ]);
   const noDetail = new Set(split.noDetail);
 
-  // The desk exists to hand out work nobody owns, so that is what it opens on.
-  // "any" is spelled explicitly rather than by an absent parameter, so a
-  // cleared filter is distinguishable from a first visit.
-  const assignment = str(get, "assignment") ?? "unassigned";
+  // What still needs handing out (§19.1): nobody has it, or whoever had it has
+  // already made the call, which puts it back in play. "any" is spelled
+  // explicitly rather than by an absent parameter, so a cleared filter is
+  // distinguishable from a first visit.
+  const assignment = str(get, "assignment") ?? "needs";
 
   return {
     date,
@@ -112,7 +113,7 @@ export function parseDeskParams(get: ParamReader): {
       lastCalledTo: str(get, "lastCalledTo"),
       termId: oneOrNone(get, "term", "term", noDetail),
       sourceId: str(get, "source"),
-      importance: oneOrNone(get, "importance", "importance", noDetail) as Importance | null,
+      importance: split.values.importance,
       type: str(get, "type") as EnquiryType | null,
       status: str(get, "status") as EnquiryStatus | null,
       createdFrom: str(get, "createdFrom"),
@@ -159,7 +160,7 @@ export function parseEnquiriesParams(get: ParamReader): {
       contentIds: many(get, "content"),
       termId: str(get, "term"),
       sourceId: str(get, "source"),
-      importance: str(get, "importance") as Importance | null,
+      importance: many(get, "importance"),
       createdFrom: str(get, "createdFrom"),
       createdTo: str(get, "createdTo"),
       followUpFrom: str(get, "followUpFrom"),

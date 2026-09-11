@@ -1,4 +1,3 @@
-import type { Importance } from "@/lib/enquiry-labels";
 
 /**
  * The New Calls filter bar, parsed once for the page and again for "take next
@@ -24,7 +23,7 @@ export type NewCallsArgs = {
   p_teacher_ids: string[] | undefined;
   p_content_ids: string[] | undefined;
   p_institute_id: string | undefined;
-  p_importance: Importance | undefined;
+  p_importance: string[] | undefined;
   p_term_id: string | undefined;
   p_created_from: string | undefined;
   p_created_to: string | undefined;
@@ -64,7 +63,7 @@ export function parseNewCallsParams(get: ParamReader): {
       p_teacher_ids: teacherIds.length ? teacherIds : undefined,
       p_content_ids: contentIds.length ? contentIds : undefined,
       p_institute_id: opt(str(get, "institute")),
-      p_importance: opt(str(get, "importance")) as Importance | undefined,
+      p_importance: many("importance").length ? many("importance") : undefined,
       p_term_id: opt(str(get, "term")),
       p_created_from: opt(str(get, "createdFrom")),
       p_created_to: opt(str(get, "createdTo")),

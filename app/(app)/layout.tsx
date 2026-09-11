@@ -30,6 +30,22 @@ async function NewCallsCount() {
   return n > 0 ? <>{n}</> : null;
 }
 
+/**
+ * Everything still to call on this counsellor's day (§19.4) — the sum of the
+ * five My Day tabs' pending counts, as one number from one round trip. Server
+ * -rendered like the New Calls badge, so it is current on every navigation
+ * without polling, and streamed so nothing waits for it.
+ */
+async function MyDayPendingCount() {
+  const supabase = await createClient();
+  const { data } = await timed("badge-myday", () =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    supabase.rpc("my_day_pending_count", {} as any),
+  );
+  const n = Number(data ?? 0);
+  return n > 0 ? <>{n}</> : null;
+}
+
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const { email, profile } = await requireUser();
 
@@ -70,11 +86,18 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         // for it before rendering a single row — a whole round trip spent
         // numbering a badge. Inside Suspense it arrives when it arrives, and
         // the page no longer knows it exists.
-        badge={
-          <Suspense fallback={null}>
-            <NewCallsCount />
-          </Suspense>
-        }
+        badges={{
+          newCalls: (
+            <Suspense fallback={null}>
+              <NewCallsCount />
+            </Suspense>
+          ),
+          myDay: (
+            <Suspense fallback={null}>
+              <MyDayPendingCount />
+            </Suspense>
+          ),
+        }}
         showSettings={isAdmin(profile.role)}
         fullName={profile.full_name}
         roleLabel={ROLE_LABELS[profile.role]}

@@ -84,6 +84,7 @@ export default async function Page({
         search={search}
         sourceIds={sourceIds}
         teacherIds={teacherIds}
+        importanceIds={filters.p_importance ?? []}
         contentIds={contentIds}
         masters={{
           teachers: masters.teachers,

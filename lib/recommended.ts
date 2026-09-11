@@ -47,6 +47,9 @@ export type RecommendedRow = {
   last_called_by: string | null;
   last_called_by_name: string | null;
   assigned_at: string | null;
+  /** Brief 19: what a campaign assignment was handed out as, and whether it is done. */
+  assignment_label: string | null;
+  called_since: boolean;
   total_count: number;
 };
 
@@ -64,7 +67,7 @@ export type RecommendedFilters = {
   lastCalledTo?: string | null;
   termId?: string | null;
   sourceId?: string | null;
-  importance?: Importance | null;
+  importance?: string[] | null;
   type?: EnquiryType | null;
   status?: EnquiryStatus | null;
   createdFrom?: string | null;
@@ -104,7 +107,7 @@ function args(f: RecommendedFilters): Args {
     p_last_called_to: clean(f.lastCalledTo),
     p_term_id: clean(f.termId),
     p_source_id: clean(f.sourceId),
-    p_importance: clean(f.importance),
+    p_importance: list(f.importance),
     p_type: clean(f.type),
     p_status: clean(f.status),
     p_created_from: clean(f.createdFrom),
