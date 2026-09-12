@@ -27,6 +27,7 @@ import {
   type Importance,
   type IssueCategory,
   type LeadVerification,
+  ENQUIRY_STATUS_LABELS,
 } from "@/lib/enquiry-labels";
 import { EnquiryDetailsEditor } from "@/components/enquiry-details";
 import { EnquiryGlanceLine, InterestChips } from "@/components/enquiry-glance";
@@ -466,9 +467,13 @@ export function CallLogPanel({
               </span>
               {toAfterSale ? (
                 <span className="text-[11.5px] text-ink-3">
-                  {enquiry.slotsUsed > 0 || enquiry.timeline.some((c) => c.sameEnquiry)
-                    ? "This enquiry has calls on it, so saving closes it and opens a ticket for the student."
-                    : "Saving turns this enquiry into a ticket and drops its interests."}
+                  {/* Three outcomes, and the counsellor should know which one
+                      they are about to get before they save it. */}
+                  {enquiry.status !== "open"
+                    ? `This enquiry is ${ENQUIRY_STATUS_LABELS[enquiry.status].toLowerCase()} and stays exactly as it is; saving opens a separate ticket for the student.`
+                    : enquiry.slotsUsed > 0 || enquiry.timeline.some((c) => c.sameEnquiry)
+                      ? "This enquiry has calls on it, so saving closes it and opens a ticket for the student."
+                      : "Saving turns this enquiry into a ticket and drops its interests."}
                 </span>
               ) : null}
             </label>
