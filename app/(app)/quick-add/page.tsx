@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
+import { isAdmin, requireUser } from "@/lib/auth";
 import { loadMasters } from "@/lib/masters";
 import { createClient } from "@/lib/supabase/server";
 
@@ -26,6 +26,8 @@ export default async function Page() {
       <QuickAdd
         masters={masters}
         counsellorName={viewer.profile?.full_name ?? null}
+        viewerId={viewer.userId ?? null}
+        viewerIsAdmin={isAdmin(viewer.profile?.role ?? "counsellor")}
         defaultFollowUpDate={nextWorkingDay}
       />
     </div>

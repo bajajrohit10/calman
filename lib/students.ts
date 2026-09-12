@@ -34,6 +34,8 @@ export type HistoryCall = {
   whatsapp_sent: boolean;
   issue_category: IssueCategory | null;
   order_id: string | null;
+  /** §29.4: who logged it, so a row knows whether you may correct it. */
+  called_by: string;
   caller: { full_name: string | null } | null;
 };
 
@@ -119,7 +121,7 @@ const SELECT = `
     ),
     calls!calls_enquiry_id_fkey (
       id, called_at, call_date, outcome, discussion, next_follow_up_date,
-      whatsapp_sent, issue_category, order_id,
+      whatsapp_sent, issue_category, order_id, called_by,
       caller:profiles!calls_called_by_fkey ( full_name )
     ),
     enquiry_items (

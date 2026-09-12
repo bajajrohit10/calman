@@ -7,6 +7,8 @@ import { useUnsavedClaim } from "@/components/unsaved-guard";
 
 import { CallLogPanel, type PanelEnquiry, type PanelMasters } from "@/components/call-log/panel";
 import { StudentHistoryView } from "@/components/student-history";
+
+import { AddMany } from "./add-many";
 import { Badge, Button, ErrorNote, Input, Select, Textarea, cx } from "@/components/ui";
 import {
   IMPORTANCE_LABELS,
@@ -42,10 +44,15 @@ type Stage =
 export function QuickAdd({
   masters,
   counsellorName,
+  viewerId,
+  viewerIsAdmin,
   defaultFollowUpDate,
 }: {
   masters: QuickAddMasters;
   counsellorName: string | null;
+  /** §29.4: who is looking, so a call row knows whether it is theirs. */
+  viewerId: string | null;
+  viewerIsAdmin: boolean;
   /**
    * The next working day, decided by the database when this page rendered
    * (§20.2). Passed in rather than fetched per lookup: the lookup runs on
@@ -75,6 +82,7 @@ export function QuickAdd({
   // counsellor sees it happened — the screen resets to empty either way.
   const [pooled, setPooled] = useState<string | null>(null);
   const [creating, startCreate] = useTransition();
+  const [many, setMany] = useState(false);
 
   const boxRef = useRef<HTMLInputElement | null>(null);
   // Guards against an older lookup landing after a newer one.
@@ -202,13 +210,30 @@ export function QuickAdd({
       ? stage.student.enquiries.find((e) => e.status === "open" && !e.archived_at)
       : null;
 
+  if (many) {
+    return (
+      <AddMany
+        sources={masters.sources}
+        onDone={() => setMany(false)}
+      />
+    );
+  }
+
   return (
     <div className="flex flex-col gap-5">
       {/* ---- the one box ---- */}
       <div>
-        <label htmlFor="quick-add-mobile" className="sr-only">
-          Mobile number
-        </label>
+        <div className="mb-1.5 flex items-center gap-2">
+          <label htmlFor="quick-add-mobile" className="text-[12.5px] text-ink-3">
+            Mobile number
+          </label>
+          {/* §29.3. Beside the box rather than in a menu: somebody with a list
+              in front of them should not have to know the mode exists to find
+              it. */}
+          <Button size="sm" variant="ghost" onClick={() => setMany(true)}>
+            Add many
+          </Button>
+        </div>
         <Input
           id="quick-add-mobile"
           ref={boxRef}
@@ -326,8 +351,11 @@ export function QuickAdd({
                             discussion: c.discussion,
                             nextFollowUpDate: c.next_follow_up_date,
                             callerName: c.caller?.full_name ?? null,
+                            calledBy: c.called_by,
                           })),
                         ),
+                        viewerId,
+                        viewerIsAdmin,
                         items: openEnquiryRow.enquiry_items.map((i) => ({
                           id: i.id,
                           status: i.status,
@@ -362,6 +390,8 @@ export function QuickAdd({
             student={stage.student}
             masters={masters}
             counsellorName={counsellorName}
+            viewerId={viewerId}
+            viewerIsAdmin={viewerIsAdmin}
             onEdited={() => setLookup(null)}
           />
         </div>
@@ -391,6 +421,8 @@ export function QuickAdd({
               student={stage.student}
               masters={masters}
             counsellorName={counsellorName}
+            viewerId={viewerId}
+            viewerIsAdmin={viewerIsAdmin}
               onEdited={() => setLookup(null)}
             />
           ) : null}

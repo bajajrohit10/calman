@@ -3,6 +3,8 @@ import { Suspense, type ReactNode } from "react";
 import { signOut } from "@/app/actions/sign-out";
 import { Button } from "@/components/ui";
 import { UnsavedProvider } from "@/components/unsaved-guard";
+
+import { NewCallsAlert } from "./new-calls-alert";
 import { ROLE_LABELS, isAdmin, requireUser } from "@/lib/auth";
 import { timed } from "@/lib/server-timing";
 import { createClient } from "@/lib/supabase/server";
@@ -16,6 +18,19 @@ import { Sidebar } from "./sidebar";
  * it is still current on every navigation without polling, but off the path
  * everything else is waiting on.
  */
+async function NewCallsPill() {
+  const supabase = await createClient();
+  const { data } = await timed("pill", () =>
+    supabase.rpc("new_calls_pool", {
+      p_limit: 1,
+      p_offset: 0,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any),
+  );
+  const n = Number((data as { total_count: number }[] | null)?.[0]?.total_count ?? 0);
+  return <NewCallsAlert initial={n} />;
+}
+
 async function NewCallsCount() {
   const supabase = await createClient();
   const { data } = await timed("badge", () =>
@@ -106,7 +121,16 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           signOut={signOut}
         />
         <main className="min-w-0 flex-1 px-5 pt-4 pb-7">
-          <div className="mx-auto max-w-[1400px]">{children}</div>
+          <div className="mx-auto flex max-w-[1400px] flex-col gap-3">
+            {/* §29.1. Above the page, on every route: the sidebar badge is a
+                number in a rail, and after an hour nobody looks at the rail. */}
+            <div className="flex justify-end empty:hidden">
+              <Suspense fallback={null}>
+                <NewCallsPill />
+              </Suspense>
+            </div>
+            {children}
+          </div>
         </main>
       </div>
     </UnsavedProvider>

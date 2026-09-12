@@ -38,6 +38,7 @@ import { WhatsAppButton } from "@/components/whatsapp/button";
 import { stageOf } from "@/lib/whatsapp-text";
 
 import { logCall, type LogCallResult, type PanelCall } from "./actions";
+import { EditCallForm, canEditCall } from "./edit-call";
 
 export type Master = ItemMaster;
 export type { SubjectMaster };
@@ -65,6 +66,9 @@ export type PanelEnquiry = {
   type: EnquiryType;
   /** What this ticket is already about (§26.1); null on a purchase enquiry. */
   issueCategory?: IssueCategory | null;
+  /** §29.4: who is looking, and whether they may correct anybody's call. */
+  viewerId?: string | null;
+  viewerIsAdmin?: boolean;
   studentName: string | null;
   mobile: string;
   term: string | null;
@@ -106,14 +110,30 @@ function itemLabel(item: PanelItem) {
  */
 function PanelDrawer({
   summary,
+  open,
+  warn,
   children,
 }: {
   summary: string;
+  /** §29.2: open on arrival, for the one case that cannot wait. */
+  open?: boolean;
+  warn?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <details className="group border-t border-line">
-      <summary className="cursor-pointer list-none px-4 py-2 text-[12px] text-ink-2 hover:text-ink">
+    <details
+      open={open}
+      className={cx(
+        "group border-t",
+        warn ? "border-warn/50 bg-warn-soft/30" : "border-line",
+      )}
+    >
+      <summary
+        className={cx(
+          "cursor-pointer list-none px-4 py-2 text-[12px]",
+          warn ? "font-medium text-warn" : "text-ink-2 hover:text-ink",
+        )}
+      >
         <span className="inline-block w-3 text-ink-3 group-open:rotate-90">›</span>
         {summary}
       </summary>
@@ -131,8 +151,25 @@ const TIMELINE_PREVIEW = 10;
  * is more than anybody reads before dialling; the rest is one click away for
  * the cases where somebody is genuinely reconstructing a story.
  */
-function PanelTimeline({ calls }: { calls: PanelCall[] }) {
+function PanelTimeline({
+  calls,
+  type,
+  importance,
+  leadVerification,
+  viewerId,
+  viewerIsAdmin,
+  onEdited,
+}: {
+  calls: PanelCall[];
+  type: EnquiryType;
+  importance: Importance | null;
+  leadVerification: LeadVerification | null;
+  viewerId?: string | null;
+  viewerIsAdmin?: boolean;
+  onEdited?: () => void;
+}) {
   const [showAll, setShowAll] = useState(false);
+  const [editing, setEditing] = useState<number | null>(null);
 
   if (!calls.length) {
     return (
@@ -175,9 +212,39 @@ function PanelTimeline({ calls }: { calls: PanelCall[] }) {
                 next {formatDate(c.nextFollowUpDate)}
               </span>
             ) : null}
+            {/* §29.4. Offered only where the database would allow it, so the
+                button is not a promise the write has to break. */}
+            {canEditCall(c, viewerId, viewerIsAdmin) && editing !== c.id ? (
+              <button
+                type="button"
+                onClick={() => setEditing(c.id)}
+                className="text-[11px] text-ink-3 underline-offset-2 hover:text-ink hover:underline"
+              >
+                Edit
+              </button>
+            ) : null}
             <span className="w-full whitespace-pre-wrap text-[12.5px] leading-relaxed text-ink-2">
               {c.discussion || <span className="italic text-ink-3">No note</span>}
             </span>
+            {editing === c.id ? (
+              <div className="w-full pt-1">
+                <EditCallForm
+                  call={{
+                    id: c.id,
+                    outcome: c.outcome,
+                    discussion: c.discussion,
+                    nextFollowUpDate: c.nextFollowUpDate,
+                  }}
+                  type={type}
+                  importance={importance}
+                  leadVerification={leadVerification}
+                  onDone={(changed: boolean) => {
+                    setEditing(null);
+                    if (changed) onEdited?.();
+                  }}
+                />
+              </div>
+            ) : null}
           </li>
         ))}
       </ul>
@@ -255,6 +322,9 @@ export function CallLogPanel({
    * at and everything to fill in.
    */
   const isFirstCall = !enquiry.timeline.some((c) => c.sameEnquiry);
+  /** A follow-up on a purchase lead that still has nothing recorded (§29.2). */
+  const needsInterests =
+    !isFirstCall && enquiry.type === "purchase" && enquiry.items.length === 0;
   const [studentName, setStudentName] = useState(enquiry.studentName ?? "");
   const [termId, setTermId] = useState(enquiry.termId ?? "");
   const [sourceId, setSourceId] = useState(enquiry.sourceId ?? "");
@@ -882,12 +952,36 @@ export function CallLogPanel({
           other they have had. A re-enquired number carries its history on the
           rows that came before it, so keying this to the enquiry would show an
           empty list on exactly the leads with the most to read. */}
-      {isFirstCall ? null : <PanelTimeline calls={enquiry.timeline} />}
+      {isFirstCall ? null : (
+        <PanelTimeline
+          calls={enquiry.timeline}
+          type={enquiry.type}
+          importance={enquiry.importance}
+          leadVerification={enquiry.leadVerification}
+          viewerId={enquiry.viewerId}
+          viewerIsAdmin={enquiry.viewerIsAdmin}
+          onEdited={onSaved}
+        />
+      )}
 
       {/* Below the fold: correcting the record is a different job from making
           the call, and it was taking up the middle of the panel. */}
+      {/* §29.2. A purchase lead with no teacher on it is the one thing that
+          cannot be corrected later from the reports — teacher-wise analytics
+          simply never see it. So the drawer is open on arrival and says why,
+          rather than sitting closed behind a count of zero. Focus stays in the
+          note: the counsellor is listening to somebody, and the interests are
+          filled in from what they say. */}
       {isFirstCall ? null : (
-      <PanelDrawer summary={`Edit interests (${enquiry.items.length})`}>
+      <PanelDrawer
+        summary={
+          needsInterests
+            ? "No teacher/course recorded — add before saving"
+            : `Edit interests (${enquiry.items.length})`
+        }
+        open={needsInterests}
+        warn={needsInterests}
+      >
         <div className="pt-1">
         {/* Interests are a purchase concept: an after-sale enquiry is about an
             order that already exists, so there is nothing to record here.

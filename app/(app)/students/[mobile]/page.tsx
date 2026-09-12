@@ -64,6 +64,8 @@ export default async function Page({
         }}
         counsellorName={viewer.profile?.full_name ?? null}
         canUnarchive={isAdmin(viewer.profile?.role ?? "counsellor")}
+        viewerId={viewer.userId ?? null}
+        viewerIsAdmin={isAdmin(viewer.profile?.role ?? "counsellor")}
       />
     </div>
   );

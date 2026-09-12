@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireUser } from "@/lib/auth";
+import { isAdmin, requireUser } from "@/lib/auth";
 import { istToday } from "@/lib/format";
 import {
   outcomesFor,
@@ -95,6 +95,8 @@ export type PanelCall = {
   discussion: string | null;
   nextFollowUpDate: string | null;
   callerName: string | null;
+  /** §29.4: who logged it, so the row knows whether you may correct it. */
+  calledBy: string;
 };
 
 export type PanelPayload = {
@@ -128,6 +130,9 @@ export type PanelPayload = {
    * matter to the counsellor are mostly not on the row in front of them.
    */
   timeline: PanelCall[];
+  /** §29.4: who is looking, and whether they may correct anybody's call. */
+  viewerId: string | null;
+  viewerIsAdmin: boolean;
   /**
    * The issue this ticket is already about (§26.1).
    *
@@ -156,7 +161,7 @@ export type PanelPayload = {
 export async function loadPanelEnquiry(
   enquiryId: number,
 ): Promise<{ error: string | null; enquiry?: PanelPayload }> {
-  await requireUser();
+  const viewer = await requireUser();
   const supabase = await createClient();
 
   const { data, error } = await supabase
@@ -201,7 +206,7 @@ export async function loadPanelEnquiry(
     .from("calls")
     .select(
       `id, enquiry_id, called_at, call_date, outcome, discussion, next_follow_up_date,
-       issue_category,
+       issue_category, called_by,
        caller:profiles!calls_called_by_fkey ( full_name ),
        enquiry:enquiries!calls_enquiry_id_fkey!inner ( student_id )`,
     )
@@ -218,6 +223,7 @@ export async function loadPanelEnquiry(
     discussion: string | null;
     next_follow_up_date: string | null;
     issue_category: IssueCategory | null;
+    called_by: string;
     caller: { full_name: string | null } | null;
   }[]).map((c) => ({
     id: c.id,
@@ -229,6 +235,7 @@ export async function loadPanelEnquiry(
     discussion: c.discussion,
     nextFollowUpDate: c.next_follow_up_date,
     callerName: c.caller?.full_name ?? null,
+    calledBy: c.called_by,
   }));
 
   const sourceNames = [
@@ -261,6 +268,8 @@ export async function loadPanelEnquiry(
       reEnquiredAt: data.re_enquired_at,
       createdAt: data.created_at,
       timeline,
+      viewerId: viewer.userId ?? null,
+      viewerIsAdmin: isAdmin(viewer.profile?.role ?? "counsellor"),
       // The most recent category recorded on this ticket, which is what the
       // ticket is about until somebody says otherwise.
       issueCategory:
@@ -881,4 +890,97 @@ export async function addEnquiryItems(input: {
     error: null,
     ok: `Added ${lines.length} interest${lines.length === 1 ? "" : "s"}.`,
   };
+}
+
+export type EditCallInput = {
+  callId: number;
+  outcome: CallOutcome;
+  discussion: string;
+  nextFollowUpDate: string | null;
+  importance: Importance | "" | null;
+  leadVerification: LeadVerification | "" | null;
+};
+
+/**
+ * Correct a call that was logged wrongly (§29.4).
+ *
+ * The permission is the database's, not this function's: calls_update already
+ * says an admin may change any call and everybody else only their own, only on
+ * the day they made it. So this does not re-implement that rule — it writes,
+ * and a refusal comes back as a refusal. Re-checking here would be a second
+ * copy of a rule that can only disagree with the first.
+ *
+ * The audit trigger records the change and the recompute trigger settles the
+ * enquiry afterwards, so an outcome corrected from follow-up to call back
+ * moves the lead's status and next date without anything here saying so.
+ */
+export async function editCall(input: EditCallInput): Promise<LogCallResult> {
+  const viewer = await requireUser();
+  if (!viewer.profile) return { error: "Your account is not active." };
+
+  if (!input.discussion.trim() && input.outcome === "follow_up" && !input.nextFollowUpDate) {
+    return { error: "A follow-up needs a next follow-up date." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: call, error: readError } = await supabase
+    .from("calls")
+    // Named FK: calls reaches enquiries twice — by id and by the composite
+    // (enquiry_id, enquiry_type) — and PostgREST will not guess.
+    .select(
+      "id, enquiry_id, enquiry_type, enquiry:enquiries!calls_enquiry_id_fkey ( student_id, students ( mobile ) )",
+    )
+    .eq("id", input.callId)
+    .maybeSingle();
+
+  if (readError) return { error: readError.message };
+  if (!call) return { error: "That call no longer exists." };
+
+  const type = call.enquiry_type as EnquiryType;
+  if (!outcomesFor(type).includes(input.outcome)) {
+    return { error: "That outcome does not apply to this kind of enquiry." };
+  }
+  if (input.outcome === "follow_up" && !input.nextFollowUpDate) {
+    return { error: "A follow-up needs a next follow-up date." };
+  }
+
+  const { error, count } = await supabase
+    .from("calls")
+    .update(
+      {
+        outcome: input.outcome,
+        discussion: input.discussion.trim() || null,
+        next_follow_up_date: input.nextFollowUpDate || null,
+      },
+      { count: "exact" },
+    )
+    .eq("id", input.callId);
+
+  if (error) return { error: `Could not save the change: ${error.message}` };
+  if (!count) {
+    // RLS matched nothing: somebody else's call, or not today's.
+    return {
+      error:
+        "You can only edit your own calls, and only on the day you made them. Ask an admin to correct an older one.",
+    };
+  }
+
+  // The grading belongs to the enquiry rather than the call, and is corrected
+  // alongside it because that is where the counsellor sees it.
+  const nextImportance = (input.importance || null) as Importance | null;
+  const nextLead = (input.leadVerification || null) as LeadVerification | null;
+  const { error: gradeError } = await supabase
+    .from("enquiries")
+    .update({ importance: nextImportance, lead_verification: nextLead })
+    .eq("id", call.enquiry_id);
+  if (gradeError) console.error("Could not save the grading:", gradeError.message);
+
+  const mobile = (call.enquiry as { students?: { mobile?: string } } | null)?.students?.mobile;
+  if (mobile) revalidatePath(`/students/${mobile}`);
+  revalidatePath("/my-day");
+  revalidatePath("/quick-add");
+  revalidatePath("/tickets");
+
+  return { error: null, ok: "Call updated." };
 }

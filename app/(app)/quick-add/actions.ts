@@ -208,3 +208,122 @@ export async function createEnquiry(
     },
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Add many (§29.3)                                                           */
+/* -------------------------------------------------------------------------- */
+
+export type BulkRowInput = {
+  mobile: string;
+  name: string | null;
+  sourceId: string | null;
+  /**
+   * What to do about a number Calman already knows, using the §10.1 rules the
+   * bulk import uses: update the open enquiry, open a second one beside it, or
+   * leave the number alone.
+   */
+  decision: "new" | "update" | "dismiss";
+  /** The open enquiry the decision is about, when there is one. */
+  enquiryId: number | null;
+};
+
+export type BulkResult = {
+  error: string | null;
+  created?: number;
+  updated?: number;
+  dismissed?: number;
+  failed?: { mobile: string; reason: string }[];
+};
+
+/**
+ * Create a screenful of numbers in one action (§29.3).
+ *
+ * A counsellor with a list on a WhatsApp message types them in one at a time
+ * today, and the lookup, the decision and the save are three interactions per
+ * number. The grid is the same three, done once for the whole list.
+ *
+ * Rows are written one at a time rather than in one insert: each may take a
+ * different branch — a new student, an existing one gaining a second enquiry,
+ * an open enquiry taking a new source — and a single statement that has to
+ * express all three is a statement nobody can read. A failure is reported
+ * against its number and the rest still go in, which is what somebody halfway
+ * through a list wants.
+ */
+export async function createManyEnquiries(
+  rows: BulkRowInput[],
+): Promise<BulkResult> {
+  const viewer = await requireUser();
+  if (!viewer.profile) return { error: "Your account is not active." };
+  if (!rows.length) return { error: "Nothing to save." };
+  if (rows.length > 100) return { error: "That is more than 100 rows. Save in batches." };
+
+  const supabase = await createClient();
+  let created = 0;
+  let updated = 0;
+  let dismissed = 0;
+  const failed: { mobile: string; reason: string }[] = [];
+
+  for (const row of rows) {
+    const mobile = normaliseMobile(row.mobile);
+    if (!isValidMobile(mobile)) {
+      failed.push({ mobile: row.mobile, reason: "not a valid Indian mobile number" });
+      continue;
+    }
+
+    if (row.decision === "dismiss") {
+      dismissed += 1;
+      continue;
+    }
+
+    // Rule (a)/(b): the number is already here and somebody said update. The
+    // source is logged either way — §10.1 keeps every arrival — and the
+    // enquiry's own source is only filled in when it was blank, so a re-upload
+    // never overwrites what a counsellor established on the phone.
+    if (row.decision === "update" && row.enquiryId) {
+      const { error } = await supabase.from("enquiry_sources").insert({
+        enquiry_id: row.enquiryId,
+        source_id: row.sourceId,
+        note: "Added again in Quick Add (Add many).",
+      });
+      if (error) {
+        failed.push({ mobile, reason: error.message });
+        continue;
+      }
+      if (row.sourceId) {
+        await supabase
+          .from("enquiries")
+          .update({ source_id: row.sourceId })
+          .eq("id", row.enquiryId)
+          .is("source_id", null);
+      }
+      updated += 1;
+      continue;
+    }
+
+    const res = await createEnquiry({
+      mobile,
+      name: row.name,
+      type: "purchase",
+      sourceId: row.sourceId,
+      productText: null,
+      termId: null,
+      importance: null,
+      leadVerification: null,
+      supersedeEnquiryId: null,
+    });
+
+    if (res.error) {
+      failed.push({ mobile, reason: res.error });
+      continue;
+    }
+    created += 1;
+  }
+
+  // Everything lands unassigned, which is what puts it in New Calls: the pool
+  // is "open, never called, nobody holding it today" and none of these has a
+  // call or an assignment.
+  revalidatePath("/new-calls");
+  revalidatePath("/quick-add");
+
+  return { error: null, created, updated, dismissed, failed };
+}

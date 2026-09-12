@@ -3,6 +3,7 @@ import Link from "next/link";
 import { EnquiryDetailsEditor, type DetailMasters } from "@/components/enquiry-details";
 import { EnquiryInterests } from "@/components/enquiry-interests";
 import { UnarchiveButton } from "@/components/unarchive-button";
+import { EditCallRow } from "@/components/call-log/edit-call-row";
 import type { ItemMasters } from "@/components/interest-lines";
 import { Collapsed } from "@/components/enquiry-glance";
 import { Badge, cx } from "@/components/ui";
@@ -79,6 +80,8 @@ export function StudentHistoryView({
   masters,
   counsellorName,
   canUnarchive,
+  viewerId,
+  viewerIsAdmin,
   onEdited,
 }: {
   student: StudentHistory;
@@ -87,6 +90,9 @@ export function StudentHistoryView({
   masters?: DetailMasters & ItemMasters;
   counsellorName?: string | null;
   canUnarchive?: boolean;
+  /** §29.4: who is looking, so a call row knows whether it is theirs. */
+  viewerId?: string | null;
+  viewerIsAdmin?: boolean;
   onEdited?: () => void;
 }) {
   const today = istToday();
@@ -186,7 +192,21 @@ export function StudentHistoryView({
               </span>
             ))
           ) : (
-            <span className="text-[12px] italic text-ink-3">No open interests.</span>
+            /* §29.2: amber, not grey. A purchase lead with nothing recorded is
+               invisible to the teacher-wise reports, which is a fact about the
+               record rather than an absence of decoration. */
+            <span
+              className={cx(
+                "rounded-full border px-2 py-0.5 text-[11.5px]",
+                current.type === "purchase"
+                  ? "border-warn/50 bg-warn-soft/40 font-medium text-warn"
+                  : "border-line-2 bg-surface-2 italic text-ink-3",
+              )}
+            >
+              {current.type === "purchase"
+                ? "No interests recorded"
+                : "No interests — after-sale"}
+            </span>
           )}
           {/* Messaging somebody is a thing you do during the glance, not after
               reading the history. */}
@@ -268,7 +288,19 @@ export function StudentHistoryView({
                   <td className="px-2 py-[5px] whitespace-nowrap text-ink-3">
                     {r.followUp}
                   </td>
-                  <td className="px-2 py-[5px] text-ink-2">{r.remarks || "—"}</td>
+                  <td className="px-2 py-[5px] text-ink-2">
+                    {r.remarks || "—"}
+                    {r.call ? (
+                      <EditCallRow
+                        call={r.call}
+                        type={r.type}
+                        importance={r.importance}
+                        leadVerification={r.leadVerification}
+                        viewerId={viewerId}
+                        viewerIsAdmin={viewerIsAdmin}
+                      />
+                    ) : null}
+                  </td>
                 </tr>
               ))}
               {rows.length === 0 ? (
@@ -378,6 +410,18 @@ type UnifiedRow = {
   key: string;
   at: string;
   kind: "call" | "send" | "event";
+  /** Present on call rows only: what §29.4's editor needs to correct it. */
+  call?: {
+    id: number;
+    calledBy: string;
+    callDate: string;
+    outcome: HistoryEnquiry["calls"][number]["outcome"];
+    discussion: string | null;
+    nextFollowUpDate: string | null;
+  };
+  type: HistoryEnquiry["type"];
+  importance: HistoryEnquiry["importance"];
+  leadVerification: HistoryEnquiry["lead_verification"];
   enquiryId: number;
   counsellor: string;
   stage: string;
@@ -409,6 +453,17 @@ function unifiedHistory(enquiries: HistoryEnquiry[]): UnifiedRow[] {
         outcome: OUTCOME_LABELS[c.outcome],
         followUp: c.next_follow_up_date ? formatDate(c.next_follow_up_date) : "—",
         remarks: c.discussion ?? "",
+        call: {
+          id: c.id,
+          calledBy: c.called_by,
+          callDate: c.call_date,
+          outcome: c.outcome,
+          discussion: c.discussion,
+          nextFollowUpDate: c.next_follow_up_date,
+        },
+        type: e.type,
+        importance: e.importance,
+        leadVerification: e.lead_verification,
       });
     }
     for (const w of e.whatsapp_sends) {
@@ -422,6 +477,9 @@ function unifiedHistory(enquiries: HistoryEnquiry[]): UnifiedRow[] {
         outcome: "WhatsApp",
         followUp: "—",
         remarks: w.template?.name ?? w.message_text.slice(0, 90),
+        type: e.type,
+        importance: e.importance,
+        leadVerification: e.lead_verification,
       });
     }
     for (const src of e.enquiry_sources) {
@@ -435,6 +493,9 @@ function unifiedHistory(enquiries: HistoryEnquiry[]): UnifiedRow[] {
         outcome: src.source?.name ? `Source: ${src.source.name}` : "Source",
         followUp: "—",
         remarks: src.note ?? "",
+        type: e.type,
+        importance: e.importance,
+        leadVerification: e.lead_verification,
       });
     }
   }
