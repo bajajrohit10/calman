@@ -80,7 +80,8 @@ export function TicketsBoard({
   }
 
   function openRow(row: TicketRow) {
-    if (row.status === "closed") return;
+    // Closed tickets open too (§26.1). Reopening one is done from the panel,
+    // and a row you cannot click is a row you cannot reopen.
     setLoadError(null);
     start(async () => {
       const res = await loadPanelEnquiry(row.enquiry_id);

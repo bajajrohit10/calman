@@ -119,6 +119,16 @@ export type PanelPayload = {
    * matter to the counsellor are mostly not on the row in front of them.
    */
   timeline: PanelCall[];
+  /**
+   * The issue this ticket is already about (§26.1).
+   *
+   * logCall refuses an after-sale call without a category, and the field used
+   * to open empty on every call — so a counsellor opening an escalated ticket
+   * that already had one, typing a note and choosing Resolved was refused, and
+   * the ticket would not close. The category belongs to the ticket, not to the
+   * call, so it is carried in and pre-chosen.
+   */
+  issueCategory: IssueCategory | null;
   items: {
     id: string;
     status: string;
@@ -182,6 +192,7 @@ export async function loadPanelEnquiry(
     .from("calls")
     .select(
       `id, enquiry_id, called_at, call_date, outcome, discussion, next_follow_up_date,
+       issue_category,
        caller:profiles!calls_called_by_fkey ( full_name ),
        enquiry:enquiries!calls_enquiry_id_fkey!inner ( student_id )`,
     )
@@ -197,6 +208,7 @@ export async function loadPanelEnquiry(
     outcome: CallOutcome;
     discussion: string | null;
     next_follow_up_date: string | null;
+    issue_category: IssueCategory | null;
     caller: { full_name: string | null } | null;
   }[]).map((c) => ({
     id: c.id,
@@ -240,6 +252,14 @@ export async function loadPanelEnquiry(
       reEnquiredAt: data.re_enquired_at,
       createdAt: data.created_at,
       timeline,
+      // The most recent category recorded on this ticket, which is what the
+      // ticket is about until somebody says otherwise.
+      issueCategory:
+        ((callRows ?? []) as unknown as {
+          enquiry_id: number;
+          issue_category: IssueCategory | null;
+        }[]).find((c) => c.enquiry_id === data.id && c.issue_category)
+          ?.issue_category ?? null,
       items: (data.enquiry_items ?? []).map((i) => ({
         id: i.id,
         status: i.status,

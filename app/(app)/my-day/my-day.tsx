@@ -586,7 +586,7 @@ export function MyDay({
               rows={visibleTickets}
               openId={open?.id ?? null}
               onOpen={(row) => {
-                if (row.status === "closed") return;
+                // Closed tickets open too — Reopen lives in the panel (§26.1).
                 openEnquiry(
                   row.enquiry_id,
                   visibleTickets.findIndex((t) => t.enquiry_id === row.enquiry_id),

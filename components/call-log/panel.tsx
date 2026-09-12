@@ -62,6 +62,8 @@ export type PanelItem = {
 export type PanelEnquiry = {
   id: number;
   type: EnquiryType;
+  /** What this ticket is already about (§26.1); null on a purchase enquiry. */
+  issueCategory?: IssueCategory | null;
   studentName: string | null;
   mobile: string;
   term: string | null;
@@ -222,9 +224,15 @@ export function CallLogPanel({
   const [leadVerification, setLeadVerification] = useState<LeadVerification | "">(
     enquiry.leadVerification ?? "",
   );
-  const [outcome, setOutcome] = useState<CallOutcome | "">("");
+  const [outcomeState, setOutcome] = useState<CallOutcome | "">("");
+  const outcome = outcomeState;
   const [followUpDate, setFollowUpDate] = useState("");
-  const [issueCategory, setIssueCategory] = useState<IssueCategory | "">("");
+  // Pre-chosen from the ticket (§26.1): the category is a property of the
+  // problem, not of each call about it, and asking again every time was what
+  // stopped tickets being closed.
+  const [issueCategory, setIssueCategory] = useState<IssueCategory | "">(
+    enquiry.issueCategory ?? "",
+  );
   /**
    * §25. The counsellor rang expecting a sales call and found somebody whose
    * videos will not play. Flipping this makes the rest of the panel behave as
@@ -311,7 +319,8 @@ export function CallLogPanel({
     }
   }
 
-  function save() {
+  function save(forced?: CallOutcome) {
+    const outcome = forced ?? outcomeState;
     if (pending) return;
     if (blocksSave) {
       focusInterests();
@@ -693,10 +702,34 @@ export function CallLogPanel({
           </p>
         ) : null}
 
-        <div className="flex items-center gap-2 border-t border-line pt-3">
+        <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
           <Button type="submit" variant="primary" disabled={pending}>
             {pending ? "Saving…" : "Save call"}
           </Button>
+          {/* §26.1. A ticket's status is derived from its last outcome, so
+              these are ordinary calls with the outcome chosen for you — not a
+              second way of setting status that could disagree with the first.
+              The note still goes with them. */}
+          {asAfterSale && enquiry.status !== "closed" ? (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={pending}
+              onClick={() => save("resolved")}
+            >
+              Close ticket
+            </Button>
+          ) : null}
+          {asAfterSale && enquiry.status === "closed" ? (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={pending}
+              onClick={() => save("noted")}
+            >
+              Reopen ticket
+            </Button>
+          ) : null}
           <span className="text-[11.5px] text-ink-3">
             Enter saves · Shift+Enter for a new line
           </span>
@@ -779,7 +812,7 @@ export function CallLogPanel({
                   size="sm"
                   variant="ghost"
                   disabled={pending}
-                  onClick={save}
+                  onClick={() => save()}
                 >
                   Save anyway
                 </Button>

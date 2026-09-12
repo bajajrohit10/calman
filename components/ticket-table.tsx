@@ -108,7 +108,7 @@ export function TicketTable({
               onClick={() => onOpen(r)}
               className={cx(
                 "border-b border-line last:border-b-0",
-                r.status !== "closed" && "cursor-pointer",
+                "cursor-pointer",
                 // Escalated means somebody outside this screen is waiting.
                 r.status === "escalated" && "bg-accent-soft/40",
                 openId === r.enquiry_id &&
