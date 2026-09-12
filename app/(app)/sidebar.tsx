@@ -4,8 +4,11 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { syncBlink } from "@/components/blink";
 import { Button, cx } from "@/components/ui";
 import { useConfirmLeave } from "@/components/unsaved-guard";
+
+import { useNewCallsCount } from "./new-calls-count";
 
 type Item = {
   href: string;
@@ -88,6 +91,8 @@ export function Sidebar({
   const pathname = usePathname();
   const router = useRouter();
   const confirmLeave = useConfirmLeave();
+  // The pill's polled figure, once it has one. Until then the server's.
+  const newCalls = useNewCallsCount();
   const items = showSettings
     ? [...ITEMS, SETTINGS]
     : ITEMS.filter((item) => !item.adminOnly);
@@ -148,16 +153,30 @@ export function Sidebar({
                   // empty:hidden is what lets the count stream in. While the
                   // boundary is still pending — and when the count is zero,
                   // which renders nothing — this span has no children and CSS
-                  // removes it, so there is never an empty coloured pill.
+                  // removes it, so there is never an empty coloured pill. It
+                  // is also what makes the blink below self-limiting: an
+                  // animation on a display:none element shows nobody anything,
+                  // so the badge blinks exactly while there is something to
+                  // blink about, without the rail needing to know the count.
                   <span
+                    ref={item.badge === "newCalls" ? syncBlink : undefined}
                     className={cx(
                       "ml-auto rounded-[9px] px-1.5 text-[10.5px]/[16px] font-semibold empty:hidden",
                       active
                         ? "bg-accent-ink/20 text-accent-ink"
                         : "bg-accent text-accent-ink",
+                      // §29.1 follow-up: in step with the pill over the page,
+                      // so the two read as one alert rather than two faults —
+                      // including the faster beat while the pill is flashing.
+                      item.badge === "newCalls" &&
+                        (newCalls.added > 0 ? "animate-blink-fast" : "animate-blink"),
                     )}
                   >
-                    {badges[item.badge]}
+                    {item.badge === "newCalls" && newCalls.count !== null
+                      ? newCalls.count > 0
+                        ? newCalls.count
+                        : null
+                      : badges[item.badge]}
                   </span>
                 ) : null}
               </Link>

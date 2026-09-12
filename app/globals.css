@@ -135,6 +135,12 @@
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-mono-stack), ui-monospace, monospace;
+
+  /* The New Calls beat (§29.1). Kept here so `animate-blink` is a utility
+     like any other; the keyframes themselves are below, at the top level,
+     where they are emitted whether or not Tailwind sees the class. */
+  --animate-blink: calman-blink 2.4s ease-in-out infinite;
+  --animate-blink-fast: calman-blink-fast 0.75s ease-in-out infinite;
 }
 
 body {
@@ -175,5 +181,31 @@ body {
 
   tbody tr:hover {
     background-color: var(--accent-soft);
+  }
+}
+
+/* §29.1. The New Calls alert blinks for as long as leads are waiting, rather
+   than nudging once and going quiet: an unclaimed lead is a person holding a
+   phone, and the cost of a pill that keeps asking is far below the cost of a
+   lead nobody picks up. Two speeds — the slow beat while the queue stands,
+   a faster one for six seconds when it grows. Both are pure opacity, so they
+   cost no layout and no paint beyond the element itself. */
+@keyframes calman-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.42; }
+}
+
+@keyframes calman-blink-fast {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* Somebody who has asked the machine to stop moving things has asked for
+   this too. The pill keeps its filled accent and stays perfectly readable —
+   it just stops flashing. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-blink,
+  .animate-blink-fast {
+    animation: none;
   }
 }
