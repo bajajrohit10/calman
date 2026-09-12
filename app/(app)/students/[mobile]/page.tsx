@@ -2,9 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { StudentHistoryView } from "@/components/student-history";
-import { PageHeader } from "@/components/ui";
 import { isAdmin, requireUser } from "@/lib/auth";
-import { formatDateTime } from "@/lib/format";
 import { isValidMobile, normaliseMobile } from "@/lib/mobile";
 import { loadStudentByMobile } from "@/lib/students";
 import { loadMasters } from "@/lib/masters";
@@ -41,11 +39,10 @@ export default async function Page({
 
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader
-        title={student.name || "Student"}
-        description={`Every enquiry and every call on this number. First seen ${formatDateTime(student.created_at)}.`}
-      />
-
+      {/* §28.4: no page header. The Now card below is the header — it carries
+          the name, the number and when the number was first seen, and having
+          both meant reading the same three facts twice before reaching the
+          one thing the page is for. */}
       <div>
         <Link
           href="/quick-add"

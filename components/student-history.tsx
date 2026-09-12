@@ -4,23 +4,22 @@ import { EnquiryDetailsEditor, type DetailMasters } from "@/components/enquiry-d
 import { EnquiryInterests } from "@/components/enquiry-interests";
 import { UnarchiveButton } from "@/components/unarchive-button";
 import type { ItemMasters } from "@/components/interest-lines";
-import {
-  Collapsed,
-  EnquiryGlanceLine,
-  InterestChips,
-} from "@/components/enquiry-glance";
+import { Collapsed } from "@/components/enquiry-glance";
 import { Badge, cx } from "@/components/ui";
 import { WhatsAppButton } from "@/components/whatsapp/button";
 import { stageOf } from "@/lib/whatsapp-text";
 import {
   BUCKET_LABELS,
   CLOSE_REASON_LABELS,
-  ISSUE_CATEGORY_LABELS,
+  ENQUIRY_STATUS_LABELS,
+  ENQUIRY_TYPE_LABELS,
+  IMPORTANCE_LABELS,
+  LEAD_VERIFICATION_LABELS,
   LOST_REASON_LABELS,
-  OUTCOME_SHORT,
-  outcomeTone,
+  OUTCOME_LABELS,
+  statusTone,
 } from "@/lib/enquiry-labels";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { formatDate, formatDateTime, istToday } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
 import type { HistoryEnquiry, StudentHistory } from "@/lib/students";
 
@@ -32,17 +31,6 @@ import type { HistoryEnquiry, StudentHistory } from "@/lib/students";
  */
 
 
-/** The history row shape, flattened for the shared chips. */
-function toGlanceItem(item: HistoryEnquiry["enquiry_items"][number]) {
-  return {
-    id: item.id,
-    status: item.status,
-    teacher: item.teacher?.name ?? null,
-    course: item.course?.name ?? null,
-    subject: item.subject?.name ?? null,
-    content: item.content?.name ?? null,
-  };
-}
 
 /** The history row shape, flattened for the shared Interests block. */
 function toInterestItem(item: HistoryEnquiry["enquiry_items"][number]) {
@@ -57,6 +45,7 @@ function toInterestItem(item: HistoryEnquiry["enquiry_items"][number]) {
     amount: item.amount,
   };
 }
+
 
 /**
  * The stage a call was made at (§4.3).
@@ -74,343 +63,13 @@ function stagesByCall(calls: HistoryEnquiry["calls"]): Map<number, number> {
   return new Map(calls.map((c) => [c.id, rank.get(c.call_date) ?? 0]));
 }
 
+
+/** §4.3's ladder, named. Anything past the third rung reads as the third. */
 const STAGE_LABELS = ["Fresh", "1st follow-up", "2nd follow-up", "3rd follow-up"];
 
 function stageLabel(type: HistoryEnquiry["type"], slot: number): string {
   if (type === "after_sale") return "After-sale";
   return STAGE_LABELS[Math.min(slot, STAGE_LABELS.length - 1)];
-}
-
-/** Everything that happened on one enquiry, in one ordered list. */
-type Event =
-  | { at: string; kind: "call"; call: HistoryEnquiry["calls"][number] }
-  | { at: string; kind: "whatsapp"; send: HistoryEnquiry["whatsapp_sends"][number] }
-  | { at: string; kind: "source"; entry: HistoryEnquiry["enquiry_sources"][number] };
-
-function timelineOf(enquiry: HistoryEnquiry): Event[] {
-  const events: Event[] = [
-    ...enquiry.calls.map((call) => ({ at: call.called_at, kind: "call" as const, call })),
-    ...enquiry.whatsapp_sends.map((send) => ({
-      at: send.sent_at,
-      kind: "whatsapp" as const,
-      send,
-    })),
-    ...(enquiry.enquiry_sources ?? []).map((entry) => ({
-      at: entry.occurred_at,
-      kind: "source" as const,
-      entry,
-    })),
-  ];
-  return events.sort((a, b) => b.at.localeCompare(a.at));
-}
-
-/**
- * The enquiry's timeline as a table (Brief 16).
- *
- * This replaced a stack of prose blocks per call. A counsellor opening a
- * history is answering "what has been said to this person and when", and that
- * is a question about columns: the same five facts in the same five places
- * down the page, with the remark given the room to be read.
- *
- * WhatsApp sends and source-log entries share the timeline because they
- * happened in it, but they are not calls and are not drawn like them — one
- * quiet full-width line each, so scanning the call rows is undisturbed.
- */
-function Timeline({ enquiry }: { enquiry: HistoryEnquiry }) {
-  const events = timelineOf(enquiry);
-  const stages = stagesByCall(enquiry.calls);
-
-  if (!events.length) {
-    return (
-      <p className="px-4 py-3 text-[12.5px] italic text-ink-3">
-        Nothing recorded on this enquiry yet.
-      </p>
-    );
-  }
-
-  // Shading alternates over the calls, not over every event: the secondary
-  // lines sit between them, and striping those too would make the pattern
-  // meaningless. Precomputed rather than counted during render — calls are
-  // already newest-first, so their position in the list is the stripe.
-  const stripe = new Map(enquiry.calls.map((c, i) => [c.id, i % 2 === 1]));
-
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[760px] border-collapse text-[12.5px]">
-        <thead>
-          <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-            <th className="whitespace-nowrap px-3 py-[7px]">Date / time</th>
-            <th className="whitespace-nowrap px-2 py-[7px]">Counsellor</th>
-            <th className="whitespace-nowrap px-2 py-[7px]">Stage</th>
-            <th className="whitespace-nowrap px-2 py-[7px]">Outcome</th>
-            <th className="whitespace-nowrap px-2 py-[7px]">Follow-up</th>
-            <th className="w-full px-2 py-[7px]">Remarks</th>
-          </tr>
-        </thead>
-        <tbody>
-          {events.map((event) => {
-            if (event.kind === "call") {
-              const call = event.call;
-              return (
-                <tr
-                  key={`c${call.id}`}
-                  className={cx(
-                    "border-b border-line align-top last:border-b-0",
-                    stripe.get(call.id) && "bg-row-alt",
-                  )}
-                >
-                  <td className="whitespace-nowrap px-3 py-2 font-semibold text-ink">
-                    {formatDateTime(call.called_at)}
-                  </td>
-                  <td className="whitespace-nowrap px-2 py-2 font-semibold text-ink">
-                    {call.caller?.full_name ?? "unknown"}
-                  </td>
-                  <td className="whitespace-nowrap px-2 py-2 text-ink-2">
-                    {stageLabel(enquiry.type, stages.get(call.id) ?? 0)}
-                  </td>
-                  <td className="whitespace-nowrap px-2 py-2">
-                    <Badge dot tone={outcomeTone(call.outcome)}>
-                      {OUTCOME_SHORT[call.outcome]}
-                    </Badge>
-                  </td>
-                  <td className="whitespace-nowrap px-2 py-2 tabular-nums text-ink-2">
-                    {call.next_follow_up_date ? formatDate(call.next_follow_up_date) : "—"}
-                  </td>
-                  <td className="px-2 py-2">
-                    {call.discussion ? (
-                      <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink">
-                        {call.discussion}
-                      </p>
-                    ) : (
-                      <p className="text-[12.5px] italic text-ink-3">No note</p>
-                    )}
-                    {call.issue_category || call.order_id ? (
-                      <p className="mt-1 flex flex-wrap items-center gap-2 text-[11.5px] text-ink-3">
-                        {call.issue_category ? (
-                          <Badge tone="neutral">
-                            {ISSUE_CATEGORY_LABELS[call.issue_category]}
-                          </Badge>
-                        ) : null}
-                        {call.order_id ? <span>order {call.order_id}</span> : null}
-                      </p>
-                    ) : null}
-                  </td>
-                </tr>
-              );
-            }
-
-            if (event.kind === "whatsapp") {
-              const w = event.send;
-              return (
-                <tr key={`w${w.id}`} className="border-b border-line last:border-b-0">
-                  <td colSpan={6} className="px-3 py-1.5">
-                    <div className="flex flex-wrap items-baseline gap-2 text-[11.5px] text-ink-3">
-                      <span aria-hidden className="text-ok">
-                        ✓
-                      </span>
-                      <span className="font-medium text-ink-2">WhatsApp sent</span>
-                      <span>{formatDateTime(w.sent_at)}</span>
-                      <span>by {w.sender?.full_name ?? "unknown"}</span>
-                      {w.template?.name ? <span>· {w.template.name}</span> : null}
-                    </div>
-                    <p className="mt-0.5 whitespace-pre-wrap pl-4 text-[12px] text-ink-3">
-                      {w.message_text}
-                    </p>
-                  </td>
-                </tr>
-              );
-            }
-
-            const e = event.entry;
-            return (
-              <tr key={`s${e.id}`} className="border-b border-line last:border-b-0">
-                <td colSpan={6} className="px-3 py-1.5">
-                  <div className="flex flex-wrap items-baseline gap-2 text-[11.5px] text-ink-3">
-                    <span aria-hidden>↳</span>
-                    <span className="font-medium text-ink-2">
-                      Source: {e.source?.name ?? "none recorded"}
-                    </span>
-                    <span>{formatDateTime(e.occurred_at)}</span>
-                    {e.note ? <span className="italic">{e.note}</span> : null}
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-export function EnquiryCard({
-  enquiry,
-  mobile,
-  studentName,
-  counsellorName,
-  masters,
-  canUnarchive,
-  onEdited,
-}: {
-  enquiry: HistoryEnquiry;
-  mobile?: string;
-  studentName?: string | null;
-  counsellorName?: string | null;
-  /** Omit to render the card read-only. */
-  masters?: DetailMasters & ItemMasters;
-  /** §9: only an admin may put an archived enquiry back. */
-  canUnarchive?: boolean;
-  onEdited?: () => void;
-}) {
-  const resolution =
-    enquiry.status === "lost" && enquiry.lost_reason
-      ? LOST_REASON_LABELS[enquiry.lost_reason]
-      : enquiry.status === "closed" && enquiry.close_reason
-        ? CLOSE_REASON_LABELS[enquiry.close_reason]
-        : null;
-
-  const archived = Boolean(enquiry.archived_at);
-
-  // Every source this number has arrived through, newest first, de-duplicated.
-  // An import overrides the enquiry's current source, so the log is the only
-  // place the earlier ones survive (§10.1).
-  const sourceNames = [
-    ...new Set(
-      [...(enquiry.enquiry_sources ?? [])]
-        .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
-        .map((entry) => entry.source?.name)
-        .filter((n): n is string => Boolean(n)),
-    ),
-  ];
-
-  return (
-    <article
-      className={cx(
-        "rounded-lg border bg-surface",
-        // §9: archived enquiries stay on the history page — this is the one
-        // screen that must still show them — but they are visibly out of play.
-        archived ? "border-dashed border-line-2 opacity-70" : "border-line",
-      )}
-    >
-      {/* Line 1 and line 2: every fact about the enquiry, then what it is
-          for. Everything editable is below the timeline now (§21.1) — a
-          history is read far more often than it is corrected. */}
-      <div className="flex flex-col gap-2 border-b border-line px-4 py-2.5">
-        <EnquiryGlanceLine
-          glance={{
-            id: enquiry.id,
-            type: enquiry.type,
-            status: enquiry.status,
-            termName: enquiry.term?.name ?? null,
-            sourceNames,
-            importance: enquiry.importance,
-            leadVerification: enquiry.lead_verification,
-            slotsUsed: enquiry.follow_up_slots_used,
-            nextFollowUpDate: enquiry.next_follow_up_date,
-            reEnquiredAt: enquiry.re_enquired_at,
-            createdAt: enquiry.created_at,
-            archived,
-            resolution,
-          }}
-        />
-        <InterestChips items={enquiry.enquiry_items.map(toGlanceItem)} />
-        {enquiry.product_text ? (
-          <p className="text-[12px] text-ink-3">
-            <span className="text-ink-3">Product: </span>
-            <span className="text-ink-2">{enquiry.product_text}</span>
-          </p>
-        ) : null}
-      </div>
-
-      {archived ? (
-        <div className="flex flex-wrap items-center gap-2 border-b border-line bg-sunk/40 px-4 py-2">
-          <span className="text-[12px] text-ink-2">
-            Archived {formatDateTime(enquiry.archived_at!)}. It is out of every list,
-            count and report, and still counts as a duplicate on this number.
-          </span>
-          {canUnarchive ? (
-            <span className="ml-auto">
-              <UnarchiveButton enquiryId={enquiry.id} onDone={onEdited} />
-            </span>
-          ) : null}
-        </div>
-      ) : null}
-
-      {/* Stays above the fold: messaging somebody is a thing you do *during*
-          the glance, not after reading the history. */}
-      {enquiry.status === "open" && mobile ? (
-        <div className="border-b border-line px-4 py-2">
-          <WhatsAppButton
-            enquiryId={enquiry.id}
-            mobile={mobile}
-            studentName={studentName ?? null}
-            items={enquiry.enquiry_items.map((i) => ({
-              teacher: i.teacher?.name ?? null,
-              course: i.course?.name ?? null,
-              subject: i.subject?.name ?? null,
-              content: i.content?.name ?? null,
-            }))}
-            term={enquiry.term?.name ?? null}
-            productText={enquiry.product_text}
-            counsellorName={counsellorName ?? null}
-            stage={stageOf(enquiry.type, enquiry.follow_up_slots_used)}
-          />
-        </div>
-      ) : null}
-
-      <section className="border-t border-line">
-        <h4 className="px-4 pb-1 pt-2.5 text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-          Timeline ({enquiry.calls.length} call{enquiry.calls.length === 1 ? "" : "s"})
-        </h4>
-        <Timeline enquiry={enquiry} />
-      </section>
-
-      {/* Below the fold: the three things somebody opens a history to change
-          rather than to read. */}
-      {masters && enquiry.type === "purchase" ? (
-        <Collapsed summary="Edit interests">
-          <EnquiryInterests
-            enquiryId={enquiry.id}
-            items={enquiry.enquiry_items.map(toInterestItem)}
-            masters={masters}
-            onSaved={onEdited}
-            bare
-          />
-        </Collapsed>
-      ) : null}
-
-      {masters ? (
-        <Collapsed summary="Edit enquiry details">
-          <EnquiryDetailsEditor
-            enquiryId={enquiry.id}
-            masters={masters}
-            initial={{
-              studentName: studentName ?? null,
-              importance: enquiry.importance,
-              termId: enquiry.term_id,
-              sourceId: enquiry.source_id,
-              leadVerification: enquiry.lead_verification,
-            }}
-            onSaved={onEdited}
-          />
-        </Collapsed>
-      ) : null}
-
-      {enquiry.assignments.length ? (
-        <Collapsed summary={`Assignments (${enquiry.assignments.length})`}>
-          <ul className="text-[12.5px] text-ink-2">
-            {enquiry.assignments.map((a) => (
-              <li key={a.id} className="py-0.5">
-                {formatDate(a.date)} · {BUCKET_LABELS[a.bucket]} ·{" "}
-                {a.counsellor?.full_name ?? "unknown"}
-              </li>
-            ))}
-          </ul>
-        </Collapsed>
-      ) : null}
-
-    </article>
-  );
 }
 
 export function StudentHistoryView({
@@ -430,42 +89,354 @@ export function StudentHistoryView({
   canUnarchive?: boolean;
   onEdited?: () => void;
 }) {
+  const today = istToday();
+  const enquiries = [...student.enquiries].sort((a, b) => b.id - a.id);
+  // What "this number" means: the open enquiry, or the most recent when none
+  // is open. Two open at once should not happen; the newer wins if it does.
+  const current = enquiries.find((e) => e.status === "open") ?? enquiries[0] ?? null;
+  const previous = enquiries.filter((e) => e.id !== current?.id);
+
+  const rows = unifiedHistory(enquiries);
+  const callCount = rows.filter((r) => r.kind === "call").length;
+  const lastCall = rows.find((r) => r.kind === "call");
+  const openItems = current?.enquiry_items.filter((i) => i.status === "open") ?? [];
+  const todays = current?.assignments.find((a) => a.date === today);
+  const resolution =
+    current?.status === "lost" && current.lost_reason
+      ? LOST_REASON_LABELS[current.lost_reason]
+      : current?.status === "closed" && current.close_reason
+        ? CLOSE_REASON_LABELS[current.close_reason]
+        : null;
+
+  if (!current) {
+    return <p className={cx("text-[13px] text-ink-3", className)}>No enquiries yet.</p>;
+  }
+
   return (
     <div className={cx("flex flex-col gap-3", className)}>
-      {showHeader ? (
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h2 className="text-[15px] font-semibold text-ink">
-            {student.name || "No name recorded"}
-          </h2>
-          <Link
-            href={`/students/${student.mobile}`}
-            className="text-[13px] tabular-nums text-ink-2 underline-offset-2 hover:underline"
-          >
-            {formatMobile(student.mobile)}
-          </Link>
-          <span className="text-[11.5px] text-ink-3">
-            {student.enquiries.length} enquir
-            {student.enquiries.length === 1 ? "y" : "ies"}
+      {/* ---- (a) Now ---- */}
+      <section className="rounded-lg border border-line bg-surface shadow-card">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-line px-4 py-2.5">
+          {showHeader ? (
+            <>
+              <span className="text-[15px] font-semibold text-ink">
+                {student.name || "No name recorded"}
+              </span>
+              <Link
+                href={`/students/${student.mobile}`}
+                className="text-[13px] tabular-nums text-ink-2 underline-offset-2 hover:underline"
+              >
+                {formatMobile(student.mobile)}
+              </Link>
+            </>
+          ) : null}
+          <Badge dot tone={statusTone(current.status)}>
+            {ENQUIRY_STATUS_LABELS[current.status]}
+          </Badge>
+          {resolution ? (
+            <span className="text-[11.5px] text-ink-3">({resolution})</span>
+          ) : null}
+          <Badge tone="neutral">#{current.id}</Badge>
+          <Badge tone="neutral">{ENQUIRY_TYPE_LABELS[current.type]}</Badge>
+          {current.archived_at ? <Badge tone="neutral">Archived</Badge> : null}
+          {current.re_enquired_at ? (
+            <Badge dot tone="warn">Re-enquired {formatDate(current.re_enquired_at)}</Badge>
+          ) : null}
+          <span className="ml-auto text-[11.5px] text-ink-3">
+            First seen {formatDate(student.created_at)}
           </span>
+          {canUnarchive && current.archived_at ? (
+            <UnarchiveButton enquiryId={current.id} onDone={onEdited} />
+          ) : null}
         </div>
+
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 px-4 py-3 sm:grid-cols-3 xl:grid-cols-6">
+          <Fact label="Stage">
+            {/* stageOf() returns the machine key the WhatsApp templates key
+                off; this is the human sentence. */}
+            {current.type === "after_sale"
+              ? "After-sale"
+              : `${current.follow_up_slots_used} of 3 follow-ups`}
+          </Fact>
+          <Fact label="Importance">
+            {current.importance ? IMPORTANCE_LABELS[current.importance] : "—"}
+          </Fact>
+          <Fact label="Lead">
+            {current.lead_verification
+              ? LEAD_VERIFICATION_LABELS[current.lead_verification]
+              : "—"}
+          </Fact>
+          <Fact label="Next follow-up">
+            {current.next_follow_up_date ? formatDate(current.next_follow_up_date) : "—"}
+          </Fact>
+          <Fact label="Assigned today">{todays?.counsellor?.full_name ?? "nobody"}</Fact>
+          <Fact label="Term">{current.term?.name ?? "—"}</Fact>
+        </dl>
+
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-line px-4 py-2.5">
+          {openItems.length ? (
+            openItems.map((i) => (
+              <span
+                key={i.id}
+                className="rounded-full border border-line-2 bg-surface-2 px-2 py-0.5 text-[11.5px] text-ink-2"
+              >
+                {[i.teacher?.name, i.course?.name, i.subject?.name, i.content?.name]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            ))
+          ) : (
+            <span className="text-[12px] italic text-ink-3">No open interests.</span>
+          )}
+          {/* Messaging somebody is a thing you do during the glance, not after
+              reading the history. */}
+          {current.status === "open" ? (
+            <span className="ml-auto">
+              <WhatsAppButton
+                enquiryId={current.id}
+                mobile={student.mobile}
+                studentName={student.name}
+                items={current.enquiry_items.map((i) => ({
+                  teacher: i.teacher?.name ?? null,
+                  course: i.course?.name ?? null,
+                  subject: i.subject?.name ?? null,
+                  content: i.content?.name ?? null,
+                }))}
+                term={current.term?.name ?? null}
+                productText={current.product_text}
+                counsellorName={counsellorName ?? null}
+                stage={stageOf(current.type, current.follow_up_slots_used)}
+              />
+            </span>
+          ) : null}
+        </div>
+
+        {lastCall ? (
+          <div className="border-t border-line bg-sunk/40 px-4 py-2.5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+              Last note — {formatDateTime(lastCall.at)} · {lastCall.counsellor} ·{" "}
+              {lastCall.outcome}
+            </p>
+            {/* In full, never truncated: it is the one sentence somebody reads
+                before dialling. */}
+            <p className="mt-1 whitespace-pre-wrap text-[12.5px] text-ink">
+              {lastCall.remarks || <span className="italic text-ink-3">no note</span>}
+            </p>
+          </div>
+        ) : null}
+      </section>
+
+      {/* ---- (b) one call history, across every enquiry ---- */}
+      <section>
+        <h3 className="mb-1.5 text-[12.5px] font-semibold text-ink">
+          Call history — every enquiry on this number ({callCount} call
+          {callCount === 1 ? "" : "s"})
+        </h3>
+        <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
+          <table className="w-full min-w-[860px] border-collapse text-[12.5px]">
+            <thead>
+              <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+                <th className="px-2 py-[7px]">Date</th>
+                <th className="px-2 py-[7px]">Counsellor</th>
+                <th className="px-2 py-[7px]">Enquiry</th>
+                <th className="px-2 py-[7px]">Stage</th>
+                <th className="px-2 py-[7px]">Outcome</th>
+                <th className="px-2 py-[7px]">Follow-up</th>
+                <th className="px-2 py-[7px]">Remarks</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr
+                  key={r.key}
+                  className={cx(
+                    "border-b border-line last:border-b-0",
+                    // Sends and source events are context, not calls: muted, so
+                    // the eye runs down the calls and takes these in passing.
+                    r.kind !== "call" && "bg-sunk/30 text-ink-3",
+                  )}
+                >
+                  <td className="px-2 py-[5px] whitespace-nowrap text-ink-2">
+                    {formatDateTime(r.at)}
+                  </td>
+                  <td className="px-2 py-[5px] text-ink-2">{r.counsellor}</td>
+                  <td className="px-2 py-[5px] tabular-nums text-ink-3">#{r.enquiryId}</td>
+                  <td className="px-2 py-[5px] text-ink-3">{r.stage || "—"}</td>
+                  <td className={cx("px-2 py-[5px]", r.kind === "call" && "text-ink")}>
+                    {r.outcome}
+                  </td>
+                  <td className="px-2 py-[5px] whitespace-nowrap text-ink-3">
+                    {r.followUp}
+                  </td>
+                  <td className="px-2 py-[5px] text-ink-2">{r.remarks || "—"}</td>
+                </tr>
+              ))}
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-3 py-8 text-center text-ink-3">
+                    Nothing has happened on this number yet.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* ---- (c) the ones that are over ---- */}
+      {previous.length ? (
+        <details className="rounded-lg border border-line bg-surface shadow-card">
+          <summary className="cursor-pointer list-none px-4 py-2.5 text-[12.5px] text-ink-2 hover:text-ink">
+            <span className="inline-block w-3 text-ink-3">›</span>
+            Previous enquiries ({previous.length})
+          </summary>
+          <div className="flex flex-col gap-1.5 border-t border-line px-4 py-2.5">
+            {previous.map((e) => (
+              <div
+                key={e.id}
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]"
+              >
+                <Badge tone="neutral">#{e.id}</Badge>
+                <Badge dot tone={statusTone(e.status)}>
+                  {ENQUIRY_STATUS_LABELS[e.status]}
+                </Badge>
+                <span className="text-ink-3">opened {formatDate(e.created_at)}</span>
+                <span className="text-ink-3">
+                  {e.calls.length} call{e.calls.length === 1 ? "" : "s"}
+                </span>
+                <span className="text-ink-2">
+                  {e.enquiry_items.map((i) => i.teacher?.name).filter(Boolean).join(", ") ||
+                    "no interests"}
+                </span>
+                {canUnarchive && e.archived_at ? (
+                  <UnarchiveButton enquiryId={e.id} onDone={onEdited} />
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </details>
       ) : null}
 
-      {student.enquiries.length ? (
-        student.enquiries.map((enquiry) => (
-          <EnquiryCard
-            key={enquiry.id}
-            enquiry={enquiry}
-            mobile={student.mobile}
-            studentName={student.name}
-            masters={masters}
-            counsellorName={counsellorName}
-            canUnarchive={canUnarchive}
-            onEdited={onEdited}
-          />
-        ))
-      ) : (
-        <p className="text-[13px] text-ink-3">No enquiries yet.</p>
-      )}
+      {/* ---- (d) the things somebody opens a history to change ---- */}
+      {masters ? (
+        <div className="flex flex-col gap-1.5">
+          {current.type === "purchase" ? (
+            <Collapsed summary="Edit interests">
+              <EnquiryInterests
+                enquiryId={current.id}
+                items={current.enquiry_items.map(toInterestItem)}
+                masters={masters}
+                onSaved={onEdited}
+                bare
+              />
+            </Collapsed>
+          ) : null}
+          <Collapsed summary="Edit enquiry details">
+            <EnquiryDetailsEditor
+              enquiryId={current.id}
+              masters={masters}
+              initial={{
+                studentName: student.name,
+                importance: current.importance,
+                termId: current.term_id,
+                sourceId: current.source_id,
+                leadVerification: current.lead_verification,
+              }}
+              onSaved={onEdited}
+            />
+          </Collapsed>
+          {current.assignments.length ? (
+            <Collapsed summary={`Assignments (${current.assignments.length})`}>
+              <ul className="text-[12.5px] text-ink-2">
+                {current.assignments.map((a) => (
+                  <li key={a.id} className="py-0.5">
+                    {formatDate(a.date)} · {BUCKET_LABELS[a.bucket]} ·{" "}
+                    {a.counsellor?.full_name ?? "unknown"}
+                  </li>
+                ))}
+              </ul>
+            </Collapsed>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
+}
+
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+        {label}
+      </dt>
+      <dd className="mt-0.5 text-[12.5px] text-ink">{children}</dd>
+    </div>
+  );
+}
+
+type UnifiedRow = {
+  key: string;
+  at: string;
+  kind: "call" | "send" | "event";
+  enquiryId: number;
+  counsellor: string;
+  stage: string;
+  outcome: string;
+  followUp: string;
+  remarks: string;
+};
+
+/**
+ * Every call, send and source event on the number, newest first (§28.4b).
+ *
+ * One stream rather than one per enquiry, because a re-enquired number carries
+ * its story on the rows that came before — splitting by enquiry is precisely
+ * what hides it. The stage is the one the call was at when it happened, not
+ * the enquiry's slot count now.
+ */
+function unifiedHistory(enquiries: HistoryEnquiry[]): UnifiedRow[] {
+  const rows: UnifiedRow[] = [];
+  for (const e of enquiries) {
+    const stages = stagesByCall(e.calls);
+    for (const c of e.calls) {
+      rows.push({
+        key: `c${c.id}`,
+        at: c.called_at,
+        kind: "call",
+        enquiryId: e.id,
+        counsellor: c.caller?.full_name ?? "—",
+        stage: stageLabel(e.type, stages.get(c.id) ?? 0),
+        outcome: OUTCOME_LABELS[c.outcome],
+        followUp: c.next_follow_up_date ? formatDate(c.next_follow_up_date) : "—",
+        remarks: c.discussion ?? "",
+      });
+    }
+    for (const w of e.whatsapp_sends) {
+      rows.push({
+        key: `w${w.id}`,
+        at: w.sent_at,
+        kind: "send",
+        enquiryId: e.id,
+        counsellor: w.sender?.full_name ?? "—",
+        stage: "",
+        outcome: "WhatsApp",
+        followUp: "—",
+        remarks: w.template?.name ?? w.message_text.slice(0, 90),
+      });
+    }
+    for (const src of e.enquiry_sources) {
+      rows.push({
+        key: `s${src.id}`,
+        at: src.occurred_at,
+        kind: "event",
+        enquiryId: e.id,
+        counsellor: "—",
+        stage: "",
+        outcome: src.source?.name ? `Source: ${src.source.name}` : "Source",
+        followUp: "—",
+        remarks: src.note ?? "",
+      });
+    }
+  }
+  return rows.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
 }
