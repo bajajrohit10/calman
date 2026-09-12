@@ -8,6 +8,8 @@ import { EXPORT_COLUMNS, loadExportRows, MAX_EXPORT, type ExportRow } from "@/li
 import { loadMyDayIds } from "@/lib/my-day";
 import {
   myDayTabSlug,
+  parseSubTab,
+  subTabSlug,
   type MyDayTabKey,
   type MyDayView,
 } from "@/lib/my-day-tabs";
@@ -58,6 +60,10 @@ export async function exportCurrentView(
         counsellorId: string | null;
         tab: MyDayTabKey;
         view: MyDayView;
+        /** §24: which sub-tab, as "all" | "slot:N" | "offer:<id>". */
+        subTab?: string;
+        /** The offer's name, for the filename only. */
+        subTabName?: string | null;
       }
     | { source: "report"; from: string; to: string; counsellorId: string | null }
     | { source: "offers" },
@@ -194,15 +200,18 @@ export async function exportCurrentView(
     // The same source the screen renders: the day's assignments, including the
     // ones whose enquiry has since closed. Reading recommended_calls() here
     // instead would export the tabs minus everything in Done.
+    const sub = parseSubTab(input.subTab);
     const all = await loadMyDayIds({
       date: input.date,
       counsellorId,
       tab: input.tab,
       view: input.view,
+      subTab: sub,
     });
     if (all.error) return { error: all.error };
     ids = all.ids;
-    stem = `calman-my-day-${myDayTabSlug(input.tab)}-${input.view}`;
+    const slug = subTabSlug(sub, input.subTabName);
+    stem = `calman-my-day-${myDayTabSlug(input.tab)}${slug ? `-${slug}` : ""}-${input.view}`;
   }
 
   if (!ids.length) return { error: "Nothing matches the current filter." };

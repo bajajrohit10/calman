@@ -24,7 +24,7 @@ export async function refreshMyDay(input: {
 }): Promise<MyDayData> {
   const viewer = await requireUser();
   if (!viewer.profile) {
-    return { rows: [], tickets: [], error: "Your account is not active." };
+    return { rows: [], tickets: [], offerTabs: [], error: "Your account is not active." };
   }
 
   const admin = isAdmin(viewer.profile.role);

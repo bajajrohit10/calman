@@ -1836,6 +1836,14 @@ export type Database = {
           won_amount: number
         }[]
       }
+      offer_tab_labels: {
+        Args: { p_ids: string[] }
+        Returns: {
+          name: string
+          offer_id: string
+          target_label: string
+        }[]
+      }
       purge_archived: {
         Args: { p_expected_count: number; p_ids: number[] }
         Returns: {

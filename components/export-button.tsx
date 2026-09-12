@@ -15,6 +15,8 @@ type Source =
       counsellorId: string | null;
       tab: MyDayTabKey;
       view: MyDayView;
+      subTab?: string;
+      subTabName?: string | null;
     }
   | { source: "report"; from: string; to: string; counsellorId: string | null }
   | { source: "offers" };
@@ -55,6 +57,8 @@ export function ExportButton(props: Source & { className?: string }) {
               counsellorId: props.counsellorId,
               tab: props.tab,
               view: props.view,
+              subTab: props.subTab,
+              subTabName: props.subTabName,
             }
           : props.source === "report"
             ? {

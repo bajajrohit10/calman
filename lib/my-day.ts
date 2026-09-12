@@ -10,7 +10,9 @@ import type {
 } from "@/lib/enquiry-labels";
 import { istDateOf, istToday } from "@/lib/format";
 import {
+  matchesSubTab,
   MY_DAY_TABS,
+  type MyDaySubTab,
   type MyDayTabKey,
   type MyDayView,
 } from "@/lib/my-day-tabs";
@@ -78,9 +80,14 @@ export type MyDayTicket = {
   called_today: boolean;
 };
 
+/** One offer sub-tab: the offer, and what it is aimed at (§24.2). */
+export type OfferTab = { id: string; name: string; label: string | null };
+
 export type MyDayData = {
   rows: MyDayRow[];
   tickets: MyDayTicket[];
+  /** The offers behind today's offer rows, named for their sub-tabs. */
+  offerTabs: OfferTab[];
   error: string | null;
 };
 
@@ -130,8 +137,26 @@ export async function loadMyDay(input: {
     last_caller_name: string | null;
   }[];
 
+  // The offers actually on this day, named. Asked only when there are offer
+  // rows, so an ordinary day pays nothing for a feature it is not using.
+  const offerIds = [...new Set(day.rows.flatMap((r) => r.offer_ids ?? []))];
+  const offerTabs = offerIds.length
+    ? await (async () => {
+        const { data } = await supabase.rpc("offer_tab_labels", {
+          p_ids: offerIds,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any);
+        return ((data ?? []) as unknown as {
+          offer_id: string;
+          name: string;
+          target_label: string | null;
+        }[]).map((o) => ({ id: o.offer_id, name: o.name, label: o.target_label }));
+      })()
+    : [];
+
   return {
     rows: day.rows,
+    offerTabs,
     // "Done" for a ticket means it was called today, so it is the viewed day
     // that decides — and on any day but today, nothing counts as done, which
     // is the honest answer: tickets_list only carries the *latest* call.
@@ -162,6 +187,8 @@ export async function loadMyDayIds(input: {
   counsellorId: string;
   tab: MyDayTabKey;
   view: MyDayView;
+  /** §24: the export is of the sub-tab on screen, not of the whole tab. */
+  subTab?: MyDaySubTab;
 }): Promise<{ ids: number[]; error: string | null }> {
   const { rows, tickets, error } = await loadMyDay({
     date: input.date,
@@ -170,6 +197,7 @@ export async function loadMyDayIds(input: {
   if (error) return { ids: [], error };
 
   const done = input.view === "done";
+  const sub = input.subTab ?? { kind: "all" as const };
 
   if (input.tab === "tickets") {
     return {
@@ -181,7 +209,12 @@ export async function loadMyDayIds(input: {
   const buckets = MY_DAY_TABS.find((t) => t.key === input.tab)?.buckets ?? [];
   return {
     ids: rows
-      .filter((r) => buckets.includes(r.bucket) && r.called_today === done)
+      .filter(
+        (r) =>
+          buckets.includes(r.bucket) &&
+          r.called_today === done &&
+          matchesSubTab(r, sub),
+      )
       .map((r) => r.enquiry_id),
     error: null,
   };

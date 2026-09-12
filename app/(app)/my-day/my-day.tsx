@@ -28,6 +28,14 @@ import {
 import { formatDate, formatTime } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
 import type { MyDayData, MyDayRow, MyDayTicket } from "@/lib/my-day";
+import {
+  ALL_SUB_TAB,
+  formatSubTab,
+  matchesSubTab,
+  SLOT_SUB_TABS,
+  SLOT_TABS,
+  type MyDaySubTab,
+} from "@/lib/my-day-tabs";
 import { MY_DAY_TABS, type MyDayTabKey } from "@/lib/my-day-tabs";
 import type { RecommendedRow } from "@/lib/recommended";
 
@@ -92,6 +100,10 @@ export function MyDay({
   const [offerStatuses, setOfferStatuses] = useState<string[]>(
     OFFER_STATUS_FILTER.map((o) => o.id),
   );
+  // §24. Kept across a save on purpose: a counsellor working the 2/3 rung
+  // logs a call and expects to still be on 2/3 with one fewer to do, not
+  // thrown back to the whole list to find their place again.
+  const [subTab, setSubTab] = useState<MyDaySubTab>(ALL_SUB_TAB);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -134,6 +146,72 @@ export function MyDay({
 
   const current = groups[tab];
 
+  /**
+   * The sub-tabs for the tab in view, each counted over that tab's own rows
+   * (§24). Counted before the sub-tab filter, or every tab but the selected
+   * one would read zero.
+   */
+  const subTabs = useMemo((): {
+    key: string;
+    label: string;
+    sub: MyDaySubTab;
+    pending: number;
+    total: number;
+  }[] => {
+    const count = (sub: MyDaySubTab) => {
+      const rows = current.rows.filter((r) => matchesSubTab(r, sub));
+      return { total: rows.length, pending: rows.filter((r) => !r.called_today).length };
+    };
+    const all = { key: "all", label: "All", sub: ALL_SUB_TAB, ...count(ALL_SUB_TAB) };
+
+    if (SLOT_TABS.includes(tab)) {
+      return [
+        all,
+        ...SLOT_SUB_TABS.map((slot) => ({
+          key: `slot:${slot}`,
+          label: `${slot}/3`,
+          sub: { kind: "slot" as const, slot },
+          ...count({ kind: "slot", slot }),
+        })),
+      ];
+    }
+
+    if (tab === "offer") {
+      // Only the offers this counsellor actually has leads for today — a tab
+      // per offer in the database would be a row of empty tabs.
+      const present = new Set(current.rows.flatMap((r) => r.offer_ids ?? []));
+      const tabs = data.offerTabs
+        .filter((o) => present.has(o.id))
+        .map((o) => ({
+          key: `offer:${o.id}`,
+          label: o.label ? `${o.name} (${o.label})` : o.name,
+          sub: { kind: "offer" as const, offerId: o.id },
+          ...count({ kind: "offer", offerId: o.id }),
+        }));
+      return tabs.length ? [all, ...tabs] : [];
+    }
+
+    return [];
+  }, [tab, current.rows, data.offerTabs]);
+
+  // An offer can close, or its last lead can be called, between renders. A
+  // sub-tab that is no longer offered falls back to All rather than showing an
+  // empty list with nothing selected.
+  const subTabKey = formatSubTab(subTab);
+  const activeSub =
+    subTabs.length && !subTabs.some((t) => t.key === subTabKey) ? ALL_SUB_TAB : subTab;
+  // What the Pending/Done toggle is counting: the sub-tab in view, not the
+  // whole tab, or the toggle would promise rows the list is filtering out.
+  const subCounts = useMemo(() => {
+    const rows = current.rows.filter((r) => matchesSubTab(r, activeSub));
+    return { total: rows.length, pending: rows.filter((r) => !r.called_today).length };
+  }, [current.rows, activeSub]);
+
+  const activeSubName =
+    activeSub.kind === "offer"
+      ? (data.offerTabs.find((o) => o.id === activeSub.offerId)?.name ?? null)
+      : null;
+
   // The Customised tab is a pile of campaigns, not one list: a counsellor with
   // "Evening call backs" and "PLI issued today" on the same day needs to know
   // which is which and how much of each is left. Unlabelled work sorts last —
@@ -158,9 +236,13 @@ export function MyDay({
   }, [tab, current.rows]);
 
   const visibleRows = useMemo(() => {
-    const rows = current.rows.filter((r) => (view === "done" ? r.called_today : !r.called_today));
+    const rows = current.rows.filter(
+      (r) =>
+        (view === "done" ? r.called_today : !r.called_today) &&
+        matchesSubTab(r, activeSub),
+    );
     return view === "done" ? [...rows].sort(byCallTimeDesc) : rows;
-  }, [current.rows, view]);
+  }, [current.rows, view, activeSub]);
 
   const visibleTickets = useMemo(() => {
     const rows = current.tickets.filter((t) =>
@@ -358,6 +440,7 @@ export function MyDay({
               aria-pressed={active}
               onClick={() => {
                 setTab(t.key);
+                setSubTab(ALL_SUB_TAB);
                 // Landing on a tab with nothing left to call and showing an
                 // empty Pending list would look broken; the work is in Done.
                 setView(g.pending === 0 && g.total > 0 ? "done" : "pending");
@@ -390,6 +473,42 @@ export function MyDay({
         })}
       </div>
 
+      {/* ---- sub-tabs: the slot ladder, or one per offer (§24) ---- */}
+      {subTabs.length ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {subTabs.map((t) => {
+            const on = t.key === formatSubTab(activeSub);
+            return (
+              <button
+                key={t.key}
+                type="button"
+                aria-pressed={on}
+                onClick={() => setSubTab(t.sub)}
+                // An empty sub-tab is greyed rather than hidden: the slot
+                // ladder is a fixed shape and a rung vanishing when it empties
+                // would move every tab under the cursor.
+                className={cx(
+                  "rounded-full border px-2.5 py-[3px] text-[12px] transition-colors",
+                  on
+                    ? "border-accent bg-accent-soft font-medium text-accent"
+                    : t.total === 0
+                      ? "border-line-2 bg-surface text-ink-3"
+                      : "border-line-2 bg-surface-2 text-ink-2 hover:border-ink-3 hover:text-ink",
+                )}
+              >
+                {t.label}
+                <span className="ml-1.5 tabular-nums opacity-80">
+                  {t.pending}/{t.total}
+                </span>
+              </button>
+            );
+          })}
+          <span className="text-[11.5px] text-ink-3">
+            {tab === "offer" ? "pending / total per offer" : "pending / total by follow-ups used"}
+          </span>
+        </div>
+      ) : null}
+
       {/* ---- pending / done ---- */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="inline-flex overflow-hidden rounded-md border border-line-2">
@@ -408,9 +527,7 @@ export function MyDay({
             >
               {v}
               <span className="ml-1.5 tabular-nums opacity-80">
-                {v === "pending"
-                  ? current.pending
-                  : current.total - current.pending}
+                {v === "pending" ? subCounts.pending : subCounts.total - subCounts.pending}
               </span>
             </button>
           ))}
@@ -454,6 +571,8 @@ export function MyDay({
             counsellorId={counsellorId}
             tab={tab}
             view={view}
+            subTab={formatSubTab(activeSub)}
+            subTabName={activeSubName}
           />
         </span>
       </div>
