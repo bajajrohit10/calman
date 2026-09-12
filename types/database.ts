@@ -1744,6 +1744,7 @@ export type Database = {
           offer_names: string[]
           product_text: string
           re_enquired_today: boolean
+          slots_at_open: number
           status: Database["public"]["Enums"]["enquiry_status"]
           student_id: string
           student_name: string

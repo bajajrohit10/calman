@@ -86,11 +86,14 @@ export function parseSubTab(value: string | null | undefined): MyDaySubTab {
  * add up.
  */
 export function matchesSubTab(
-  row: { follow_up_slots_used: number; offer_ids: string[] | null },
+  row: { slots_at_open: number; offer_ids: string[] | null },
   sub: MyDaySubTab,
 ): boolean {
   if (sub.kind === "all") return true;
-  if (sub.kind === "slot") return Number(row.follow_up_slots_used ?? 0) === sub.slot;
+  // slots_at_open, not follow_up_slots_used: the rung is where the lead stood
+  // when the day started, so calling it moves the row from Pending to Done
+  // rather than out from under the counsellor working that rung (§24.1).
+  if (sub.kind === "slot") return Number(row.slots_at_open ?? 0) === sub.slot;
   return (row.offer_ids ?? []).includes(sub.offerId);
 }
 

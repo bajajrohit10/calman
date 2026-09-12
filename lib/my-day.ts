@@ -61,6 +61,13 @@ export type MyDayRow = {
   offer_ids: string[] | null;
   /** Brief 23: an offer lead may be lost; the Offer tab filters on which. */
   lost_reason: string | null;
+  /**
+   * The §4.3 slot count as it stood at the start of the viewed day (§24.1).
+   * The slot sub-tabs group on this rather than on follow_up_slots_used, so a
+   * lead stays on the rung the counsellor is working when they call it —
+   * follow_up_slots_used is where the lead is *now* and moves under them.
+   */
+  slots_at_open: number;
 };
 
 /** A ticket, plus the one thing the Tickets screen does not need to know. */

@@ -504,7 +504,9 @@ export function MyDay({
             );
           })}
           <span className="text-[11.5px] text-ink-3">
-            {tab === "offer" ? "pending / total per offer" : "pending / total by follow-ups used"}
+            {tab === "offer"
+              ? "pending / total per offer"
+              : "pending / total by follow-ups used at the start of the day"}
           </span>
         </div>
       ) : null}
