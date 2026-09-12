@@ -246,6 +246,46 @@ export function CallLogPanel({
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
   // Seeded with one blank row so the table always has something to type into.
   const [newLines, setNewLines] = useState<NewLine[]>(() => [blankLine()]);
+
+  /**
+   * §26.2. A first call is one where *this enquiry* has never been called. A
+   * re-enquired number with history keeps the compact panel, because there is
+   * history worth reading; this lead has none, so there is nothing to glance
+   * at and everything to fill in.
+   */
+  const isFirstCall = !enquiry.timeline.some((c) => c.sameEnquiry);
+  const [studentName, setStudentName] = useState(enquiry.studentName ?? "");
+  const [termId, setTermId] = useState(enquiry.termId ?? "");
+  const [teacherQuery, setTeacherQuery] = useState("");
+  // The defaults every teacher picked after them inherits. Changing one does
+  // not rewrite lines already added — a counsellor who adjusted a line meant
+  // it — so each chip can still be edited on its own below.
+  const [defCourse, setDefCourse] = useState("");
+  const [defSubject, setDefSubject] = useState("");
+  const [defContent, setDefContent] = useState("");
+
+  const teacherMatches = (() => {
+    const q = teacherQuery.trim().toLowerCase();
+    if (!q) return [];
+    const taken = new Set(newLines.map((l) => l.teacherId));
+    return masters.teachers
+      .filter((t) => t.name.toLowerCase().includes(q) && !taken.has(t.id))
+      .slice(0, 6);
+  })();
+
+  function addTeacher(id: string) {
+    setNewLines((lines) => [
+      ...lines.filter((l) => isComplete(l)),
+      {
+        ...blankLine(),
+        teacherId: id,
+        courseId: defCourse,
+        subjectId: defSubject,
+        contentId: defContent,
+      },
+    ]);
+    setTeacherQuery("");
+  }
   const [askedAboutItems, setAskedAboutItems] = useState(false);
   const [result, setResult] = useState<LogCallResult | null>(null);
   const [pending, startTransition] = useTransition();
@@ -342,6 +382,7 @@ export function CallLogPanel({
         nextFollowUpDate: outcomeTakesDate(outcome) ? followUpDate || null : null,
         issueCategory: asAfterSale ? issueCategory : null,
         convertToAfterSale: toAfterSale,
+        ...(isFirstCall ? { studentName, termId: termId || null } : {}),
         importance,
         leadVerification,
         orderId: purchased ? orderId : enquiry.type === "after_sale" ? orderId : null,
@@ -419,8 +460,10 @@ export function CallLogPanel({
 
       {/* The at-a-glance block (§21.2), read-only and identical to the one on
           the history card. A counsellor about to speak has three seconds to
-          take in who this is; the form below is for afterwards. */}
-      <div className="flex flex-col gap-2 border-b border-line px-4 py-2.5">
+          take in who this is; the form below is for afterwards. Skipped on a
+          first call, where every one of those facts is blank and the form
+          below is where they get filled in (§26.2). */}
+      <div className={cx("flex-col gap-2 border-b border-line px-4 py-2.5", isFirstCall ? "hidden" : "flex")}>
         <EnquiryGlanceLine
           glance={{
             id: enquiry.id,
@@ -439,6 +482,51 @@ export function CallLogPanel({
         <InterestChips items={enquiry.items} />
       </div>
 
+      {isFirstCall ? (
+        <FirstCallFields
+          masters={masters}
+          studentName={studentName}
+          setStudentName={setStudentName}
+          isPurchase={isPurchase}
+          toAfterSale={toAfterSale}
+          onType={(next) => {
+            setToAfterSale(next);
+            setOutcome("");
+          }}
+          defCourse={defCourse}
+          setDefCourse={setDefCourse}
+          defSubject={defSubject}
+          setDefSubject={setDefSubject}
+          defContent={defContent}
+          setDefContent={setDefContent}
+          teacherQuery={teacherQuery}
+          setTeacherQuery={setTeacherQuery}
+          teacherMatches={teacherMatches}
+          addTeacher={addTeacher}
+          lines={newLines.filter(isComplete)}
+          removeLine={(key) => setNewLines((l) => l.filter((x) => x.key !== key))}
+          termId={termId}
+          setTermId={setTermId}
+          importance={importance}
+          setImportance={setImportance}
+          leadVerification={leadVerification}
+          setLeadVerification={setLeadVerification}
+          discussion={discussion}
+          setDiscussion={setDiscussion}
+          noteRef={noteRef}
+          outcome={outcome}
+          chooseOutcome={chooseOutcome}
+          asAfterSale={asAfterSale}
+          issueCategory={issueCategory}
+          setIssueCategory={setIssueCategory}
+          followUpDate={followUpDate}
+          setFollowUpDate={setFollowUpDate}
+          pending={pending}
+          onCancel={onCancel}
+        />
+      ) : null}
+
+      {isFirstCall ? null : (
       <div className="flex flex-col gap-3 px-4 py-3">
         <label className="flex flex-col gap-1">
           <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
@@ -745,15 +833,17 @@ export function CallLogPanel({
           ) : null}
         </div>
       </div>
+      )}
 
       {/* What was said to this person before — on this enquiry and on any
           other they have had. A re-enquired number carries its history on the
           rows that came before it, so keying this to the enquiry would show an
           empty list on exactly the leads with the most to read. */}
-      <PanelTimeline calls={enquiry.timeline} />
+      {isFirstCall ? null : <PanelTimeline calls={enquiry.timeline} />}
 
       {/* Below the fold: correcting the record is a different job from making
           the call, and it was taking up the middle of the panel. */}
+      {isFirstCall ? null : (
       <PanelDrawer summary={`Edit interests (${enquiry.items.length})`}>
         <div className="pt-1">
         {/* Interests are a purchase concept: an after-sale enquiry is about an
@@ -822,7 +912,9 @@ export function CallLogPanel({
         ) : null}
         </div>
       </PanelDrawer>
+      )}
 
+      {isFirstCall ? null : (
       <PanelDrawer summary="Edit enquiry details">
         <EnquiryDetailsEditor
           enquiryId={enquiry.id}
@@ -836,6 +928,367 @@ export function CallLogPanel({
           }}
         />
       </PanelDrawer>
+      )}
     </form>
+  );
+}
+
+/**
+ * The first-call layout (§26.2).
+ *
+ * Everything on one screen, in the order the conversation goes: who they are,
+ * what they want, how good the lead is, what was said, what happens next. No
+ * drawers — a lead nobody has spoken to has nothing to hide behind one, and
+ * "Edit interests" being a click away is why leads used to reach the second
+ * call with no teacher on them.
+ *
+ * Three columns at ≥1280 and two at ≥768, which puts the whole form inside a
+ * 1440×900 window without scrolling; one column below that.
+ */
+function FirstCallFields({
+  masters,
+  studentName,
+  setStudentName,
+  isPurchase,
+  toAfterSale,
+  onType,
+  defCourse,
+  setDefCourse,
+  defSubject,
+  setDefSubject,
+  defContent,
+  setDefContent,
+  teacherQuery,
+  setTeacherQuery,
+  teacherMatches,
+  addTeacher,
+  lines,
+  removeLine,
+  termId,
+  setTermId,
+  importance,
+  setImportance,
+  leadVerification,
+  setLeadVerification,
+  discussion,
+  setDiscussion,
+  noteRef,
+  outcome,
+  chooseOutcome,
+  asAfterSale,
+  issueCategory,
+  setIssueCategory,
+  followUpDate,
+  setFollowUpDate,
+  pending,
+  onCancel,
+}: {
+  masters: PanelMasters;
+  studentName: string;
+  setStudentName: (v: string) => void;
+  isPurchase: boolean;
+  toAfterSale: boolean;
+  onType: (afterSale: boolean) => void;
+  defCourse: string;
+  setDefCourse: (v: string) => void;
+  defSubject: string;
+  setDefSubject: (v: string) => void;
+  defContent: string;
+  setDefContent: (v: string) => void;
+  teacherQuery: string;
+  setTeacherQuery: (v: string) => void;
+  teacherMatches: { id: string; name: string }[];
+  addTeacher: (id: string) => void;
+  lines: NewLine[];
+  removeLine: (key: string) => void;
+  termId: string;
+  setTermId: (v: string) => void;
+  importance: Importance | "";
+  setImportance: (v: Importance | "") => void;
+  leadVerification: LeadVerification | "";
+  setLeadVerification: (v: LeadVerification | "") => void;
+  discussion: string;
+  setDiscussion: (v: string) => void;
+  noteRef: React.RefObject<HTMLTextAreaElement | null>;
+  outcome: CallOutcome | "";
+  chooseOutcome: (v: CallOutcome | "") => void;
+  asAfterSale: boolean;
+  issueCategory: IssueCategory | "";
+  setIssueCategory: (v: IssueCategory | "") => void;
+  followUpDate: string;
+  setFollowUpDate: (v: string) => void;
+  pending: boolean;
+  onCancel?: () => void;
+}) {
+  const subjectsForCourse = defCourse
+    ? masters.subjects.filter((s) => s.course_id === defCourse)
+    : masters.subjects;
+  const nameOf = (list: { id: string; name: string }[], id: string) =>
+    list.find((x) => x.id === id)?.name;
+
+  return (
+    <div className="grid gap-x-3 gap-y-2.5 px-4 py-3 md:grid-cols-2 xl:grid-cols-3">
+      <FirstCallField label="Name">
+        <Input
+          autoFocus
+          value={studentName}
+          onChange={(e) => setStudentName(e.target.value)}
+          placeholder="Optional"
+        />
+      </FirstCallField>
+
+      <FirstCallField label="Type">
+        <div className="grid grid-cols-2 gap-1.5">
+          {[
+            { on: !toAfterSale, label: "Purchase", next: false },
+            { on: toAfterSale, label: "After Sale", next: true },
+          ].map((o) => (
+            <button
+              key={o.label}
+              type="button"
+              role="radio"
+              aria-checked={o.on}
+              disabled={!isPurchase}
+              onClick={() => onType(o.next)}
+              className={cx(
+                "rounded-md border px-2.5 py-1.5 text-left text-[12.5px] transition-colors",
+                o.on
+                  ? "border-accent bg-accent-soft font-medium text-accent"
+                  : "border-line-2 bg-surface text-ink-2 hover:border-ink-3",
+                !isPurchase && "opacity-60",
+              )}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      </FirstCallField>
+
+      <FirstCallField label="Course" hint="applies to every line">
+        <Select
+          value={defCourse}
+          onChange={(e) => {
+            setDefCourse(e.target.value);
+            setDefSubject("");
+          }}
+        >
+          <option value="">Choose…</option>
+          {masters.courses.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </Select>
+      </FirstCallField>
+
+      {/* The one control that is not a plain field: each teacher picked
+          becomes an interest line, and the chips below are those lines. */}
+      <FirstCallField
+        label="Teachers"
+        hint="type to search, Enter adds"
+        className="xl:col-span-2"
+      >
+        <div className="relative">
+          <Input
+            value={teacherQuery}
+            placeholder="Start typing a teacher's name…"
+            onChange={(e) => setTeacherQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && teacherMatches[0]) {
+                // Consumed here, or it would reach the form's save handler
+                // while the counsellor is still choosing.
+                e.preventDefault();
+                e.stopPropagation();
+                addTeacher(teacherMatches[0].id);
+              }
+            }}
+          />
+          {teacherMatches.length ? (
+            <div className="absolute z-20 mt-1 w-full rounded-md border border-line-2 bg-surface p-1 shadow-lg">
+              {teacherMatches.map((t, i) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => addTeacher(t.id)}
+                  className={cx(
+                    "block w-full rounded px-2 py-1 text-left text-[12.5px]",
+                    i === 0
+                      ? "bg-accent-soft text-accent"
+                      : "text-ink-2 hover:bg-surface-2",
+                  )}
+                >
+                  {t.name}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+        {lines.length ? (
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {lines.map((l) => (
+              <span
+                key={l.key}
+                className="inline-flex items-center gap-1.5 rounded-full border border-line-2 bg-surface-2 px-2 py-0.5 text-[11.5px] text-ink-2"
+              >
+                {[
+                  nameOf(masters.teachers, l.teacherId),
+                  nameOf(masters.courses, l.courseId),
+                  nameOf(masters.subjects, l.subjectId),
+                  nameOf(masters.contents, l.contentId),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+                <button
+                  type="button"
+                  aria-label={`Remove ${nameOf(masters.teachers, l.teacherId) ?? "line"}`}
+                  className="text-ink-3 hover:text-danger"
+                  onClick={() => removeLine(l.key)}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-1.5 text-[11.5px] italic text-ink-3">
+            No interest lines yet — each teacher you pick becomes one.
+          </p>
+        )}
+      </FirstCallField>
+
+      <FirstCallField label="Subject" hint="applies to every line">
+        <Select value={defSubject} onChange={(e) => setDefSubject(e.target.value)}>
+          <option value="">Choose…</option>
+          {subjectsForCourse.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </Select>
+      </FirstCallField>
+
+      <FirstCallField label="Content" hint="applies to every line">
+        <Select value={defContent} onChange={(e) => setDefContent(e.target.value)}>
+          <option value="">Choose…</option>
+          {masters.contents.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </Select>
+      </FirstCallField>
+
+      <FirstCallField label="Term">
+        <Select value={termId} onChange={(e) => setTermId(e.target.value)}>
+          <option value="">Choose…</option>
+          {masters.terms.map((t) => (
+            <option key={t.id} value={t.id}>{t.name}</option>
+          ))}
+        </Select>
+      </FirstCallField>
+
+      <FirstCallField label="Importance" className={asAfterSale ? "hidden" : undefined}>
+        <Select
+          aria-label="Importance"
+          value={importance}
+          onChange={(e) => setImportance(e.target.value as Importance | "")}
+        >
+          <option value="">Not graded</option>
+          {Object.entries(IMPORTANCE_LABELS).map(([v, l]) => (
+            <option key={v} value={v}>{l}</option>
+          ))}
+        </Select>
+      </FirstCallField>
+
+      <FirstCallField
+        label="Lead verification"
+        className={asAfterSale ? "hidden" : undefined}
+      >
+        <Select
+          aria-label="Lead verification"
+          value={leadVerification}
+          onChange={(e) => setLeadVerification(e.target.value as LeadVerification | "")}
+        >
+          <option value="">Not checked</option>
+          {Object.entries(LEAD_VERIFICATION_LABELS).map(([v, l]) => (
+            <option key={v} value={v}>{l}</option>
+          ))}
+        </Select>
+      </FirstCallField>
+
+      {asAfterSale ? (
+        <FirstCallField label="Issue category">
+          <Select
+            value={issueCategory}
+            onChange={(e) => setIssueCategory(e.target.value as IssueCategory | "")}
+          >
+            <option value="">Choose…</option>
+            {Object.entries(ISSUE_CATEGORY_LABELS).map(([v, l]) => (
+              <option key={v} value={v}>{l}</option>
+            ))}
+          </Select>
+        </FirstCallField>
+      ) : null}
+
+      <FirstCallField label="Note" className="md:col-span-2 xl:col-span-3">
+        <Textarea
+          ref={noteRef}
+          rows={2}
+          value={discussion}
+          onChange={(e) => setDiscussion(e.target.value)}
+          placeholder="What was said. Enter saves, Shift+Enter for a new line."
+        />
+      </FirstCallField>
+
+      <FirstCallField label="Outcome">
+        <Select
+          value={outcome}
+          onChange={(e) => chooseOutcome(e.target.value as CallOutcome | "")}
+        >
+          <option value="">Choose…</option>
+          {outcomesFor(asAfterSale ? "after_sale" : "purchase").map((o) => (
+            <option key={o} value={o}>{OUTCOME_LABELS[o]}</option>
+          ))}
+        </Select>
+      </FirstCallField>
+
+      <FirstCallField label="Follow-up date">
+        <Input
+          type="date"
+          value={followUpDate}
+          disabled={!outcomeTakesDate(outcome)}
+          onChange={(e) => setFollowUpDate(e.target.value)}
+        />
+      </FirstCallField>
+
+      <div className="flex items-end gap-2">
+        <Button type="submit" variant="primary" disabled={pending}>
+          {pending ? "Saving…" : "Save call"}
+        </Button>
+        {onCancel ? (
+          <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function FirstCallField({
+  label,
+  hint,
+  className,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className={cx("flex flex-col gap-1", className)}>
+      <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+        {label}
+        {hint ? (
+          <span className="ml-1.5 font-normal normal-case text-ink-3/80">{hint}</span>
+        ) : null}
+      </span>
+      {children}
+    </label>
   );
 }

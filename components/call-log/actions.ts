@@ -57,6 +57,14 @@ export type LogCallInput = {
    * logged against whichever enquiry the conversion decides on.
    */
   convertToAfterSale?: boolean;
+  /**
+   * §26.2. The first-call form has the student's name and the term on it,
+   * because on a first call there is nothing else to look at and hiding them
+   * behind a drawer is how leads reach the second call with neither. Both are
+   * only sent by that form, and only written when they actually change.
+   */
+  studentName?: string | null;
+  termId?: string | null;
 };
 
 export type LogCallResult = {
@@ -304,7 +312,7 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
   const { data: enquiry, error: enquiryError } = await supabase
     .from("enquiries")
     .select(
-      "id, type, status, student_id, archived_at, importance, lead_verification, students ( mobile )",
+      "id, type, status, student_id, archived_at, importance, lead_verification, term_id, students ( mobile, name )",
     )
     .eq("id", input.enquiryId)
     .maybeSingle();
@@ -609,6 +617,31 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
     type === "purchase" &&
     (nextImportance !== (enquiry.importance ?? null) ||
       nextLead !== (enquiry.lead_verification ?? null));
+
+  // §26.2. The name is the student's, the term is the enquiry's; both only
+  // when the first-call form sent them and the value is genuinely different.
+  if (input.studentName !== undefined) {
+    const next = input.studentName?.trim() || null;
+    const current = (enquiry.students as { name?: string | null } | null)?.name ?? null;
+    if (next !== current && enquiry.student_id) {
+      const { error } = await supabase
+        .from("students")
+        .update({ name: next })
+        .eq("id", enquiry.student_id);
+      if (error) console.error("Could not save the name:", error.message);
+    }
+  }
+
+  if (input.termId !== undefined) {
+    const next = input.termId || null;
+    if (next !== ((enquiry as { term_id?: string | null }).term_id ?? null)) {
+      const { error } = await supabase
+        .from("enquiries")
+        .update({ term_id: next })
+        .eq("id", targetEnquiryId);
+      if (error) console.error("Could not save the term:", error.message);
+    }
+  }
 
   if (gradingChanged) {
     const { error } = await supabase
