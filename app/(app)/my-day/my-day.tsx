@@ -100,6 +100,7 @@ export function MyDay({
   // §27.2. Where the list was scrolled when a first call took the screen, so
   // Back puts the counsellor where they left off rather than at the top.
   const scrollBeforeOpen = useRef(0);
+  const confirmLeave = useConfirmLeave();
   // §23.4. All three to begin with: an offer is aimed at people who have not
   // bought, and most of those were given up on long ago.
   const [offerStatuses, setOfferStatuses] = useState<string[]>(
@@ -256,7 +257,10 @@ export function MyDay({
     return view === "done" ? [...rows].sort(byCallTimeDesc) : rows;
   }, [current.tickets, view]);
 
-  function openEnquiry(enquiryId: number, index: number) {
+  async function openEnquiry(enquiryId: number, index: number) {
+    // §27.4. Swapping rows throws away whatever is typed in the panel just as
+    // surely as navigating away does, so it asks the same question first.
+    if (!(await confirmLeave())) return;
     setLoadError(null);
     openIndex.current = index;
     scrollBeforeOpen.current = window.scrollY;
@@ -278,7 +282,6 @@ export function MyDay({
    */
   const openIsFirstCall = Boolean(open && !open.timeline.some((c) => c.sameEnquiry));
 
-  const confirmLeave = useConfirmLeave();
 
   function closeOpen() {
     void confirmLeave().then((ok) => {

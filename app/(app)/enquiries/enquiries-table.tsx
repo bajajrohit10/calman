@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { loadPanelEnquiry, type PanelPayload } from "@/components/call-log/actions";
+import { useConfirmLeave } from "@/components/unsaved-guard";
 import { CallLogPanel, type PanelMasters } from "@/components/call-log/panel";
 import { ExportButton } from "@/components/export-button";
 import {
@@ -91,6 +92,7 @@ export function EnquiriesTable({
   const router = useRouter();
   const [open, setOpen] = useState<PanelPayload | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const confirmLeave = useConfirmLeave();
   const [pending, start] = useTransition();
 
   const pages = Math.max(1, Math.ceil(total / pageSize));
@@ -104,8 +106,11 @@ export function EnquiriesTable({
     return `?${params.toString()}`;
   }
 
-  function openRow(row: EnquiryRow) {
+  async function openRow(row: EnquiryRow) {
     if (row.status !== "open") return;
+    // §27.4. Swapping rows throws away whatever is typed in the panel just as
+    // surely as navigating away does, so it asks the same question first.
+    if (!(await confirmLeave())) return;
     setLoadError(null);
     start(async () => {
       const res = await loadPanelEnquiry(row.enquiry_id);

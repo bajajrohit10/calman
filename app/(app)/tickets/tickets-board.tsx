@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { loadPanelEnquiry, type PanelPayload } from "@/components/call-log/actions";
+import { useConfirmLeave } from "@/components/unsaved-guard";
 import { CallLogPanel, type PanelMasters } from "@/components/call-log/panel";
 import { TicketTable } from "@/components/ticket-table";
 import { Button, ErrorNote, Input, Select } from "@/components/ui";
@@ -66,6 +67,7 @@ export function TicketsBoard({
   const router = useRouter();
   const [open, setOpen] = useState<PanelPayload | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const confirmLeave = useConfirmLeave();
   const [pending, start] = useTransition();
 
   const pages = Math.max(1, Math.ceil(total / pageSize));
@@ -79,9 +81,12 @@ export function TicketsBoard({
     return `?${params.toString()}`;
   }
 
-  function openRow(row: TicketRow) {
+  async function openRow(row: TicketRow) {
     // Closed tickets open too (§26.1). Reopening one is done from the panel,
     // and a row you cannot click is a row you cannot reopen.
+    // §27.4. Swapping rows throws away whatever is typed in the panel just as
+    // surely as navigating away does, so it asks the same question first.
+    if (!(await confirmLeave())) return;
     setLoadError(null);
     start(async () => {
       const res = await loadPanelEnquiry(row.enquiry_id);
