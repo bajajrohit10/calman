@@ -25,15 +25,23 @@ export type LookupResult = {
  * the /students page already render.
  */
 export async function lookupMobile(raw: string): Promise<LookupResult> {
-  await requireUser();
-
   const mobile = normaliseMobile(raw);
   if (!isValidMobile(mobile)) {
     return { error: "That is not a valid Indian mobile number.", mobile, student: null };
   }
 
+  // Both at once (§28.2). The lookup used to await the session and only then
+  // ask for the history — two serial crossings on the one interaction where a
+  // counsellor is waiting with the phone already ringing. They do not depend
+  // on each other: RLS is what decides whether the history comes back at all,
+  // and requireUser is the redirect for somebody who is not signed in. So they
+  // race, and the authorisation is still checked before anything is returned.
   try {
-    return { error: null, mobile, student: await loadStudentByMobile(mobile) };
+    const [, student] = await Promise.all([
+      requireUser(),
+      loadStudentByMobile(mobile),
+    ]);
+    return { error: null, mobile, student };
   } catch (e) {
     return { error: (e as Error).message, mobile, student: null };
   }

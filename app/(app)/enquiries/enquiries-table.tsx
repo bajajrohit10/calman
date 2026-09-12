@@ -106,6 +106,12 @@ export function EnquiriesTable({
     return `?${params.toString()}`;
   }
 
+  function closeOpen() {
+    void confirmLeave().then((ok) => {
+      if (ok) setOpen(null);
+    });
+  }
+
   async function openRow(row: EnquiryRow) {
     if (row.status !== "open") return;
     // §27.4. Swapping rows throws away whatever is typed in the panel just as
@@ -213,7 +219,29 @@ export function EnquiriesTable({
       {error ? <ErrorNote>{error}</ErrorNote> : null}
       {loadError ? <ErrorNote>{loadError}</ErrorNote> : null}
 
-      <div className="flex flex-col gap-3 xl:flex-row">
+      {open ? (
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={closeOpen}
+            className="self-start text-[12.5px] text-ink-2 underline-offset-2 hover:underline"
+          >
+            ← Back to the list
+          </button>
+          <CallLogPanel
+            enquiry={open}
+            masters={panelMasters}
+            counsellorName={counsellorName}
+            onSaved={() => {
+              setOpen(null);
+              router.refresh();
+            }}
+            onCancel={closeOpen}
+          />
+        </div>
+      ) : null}
+
+      <div className={cx("gap-3 xl:flex-row", open ? "hidden" : "flex flex-col")}>
         <div className="min-w-0 flex-1 overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
           <table className="w-full min-w-[1000px] border-collapse text-[12.5px]">
             <thead>
@@ -321,22 +349,6 @@ export function EnquiriesTable({
           </table>
         </div>
 
-        {open ? (
-          <aside className="w-full shrink-0 xl:w-[520px]">
-            <div className="sticky top-4">
-              <CallLogPanel
-                enquiry={open}
-                masters={panelMasters}
-                counsellorName={counsellorName}
-                onSaved={() => {
-                  setOpen(null);
-                  router.refresh();
-                }}
-                onCancel={() => setOpen(null)}
-              />
-            </div>
-          </aside>
-        ) : null}
       </div>
 
       {pages > 1 ? (

@@ -280,8 +280,6 @@ export function MyDay({
    * whole job on a first call — a 520px drawer cannot hold twelve fields
    * without scrolling, which is the thing the layout exists to avoid.
    */
-  const openIsFirstCall = Boolean(open && !open.timeline.some((c) => c.sameEnquiry));
-
 
   function closeOpen() {
     void confirmLeave().then((ok) => {
@@ -608,7 +606,7 @@ export function MyDay({
         </span>
       </div>
 
-      {openIsFirstCall && open ? (
+      {open ? (
         <div className="flex flex-col gap-2">
           <button
             type="button"
@@ -627,7 +625,7 @@ export function MyDay({
         </div>
       ) : null}
 
-      <div className={cx("gap-4 lg:flex-row", openIsFirstCall ? "hidden" : "flex flex-col")}>
+      <div className={cx("gap-4 lg:flex-row", open ? "hidden" : "flex flex-col")}>
         <div className="flex min-w-0 flex-1 flex-col gap-4">
           {tab === "tickets" ? (
             <TicketTable
@@ -694,22 +692,7 @@ export function MyDay({
           ) : null}
         </div>
 
-        {/* Side drawer: the list stays put behind it (§5.4). Never while the
-            first-call form is up — two panels would both mount, both claim the
-            unsaved-changes guard, and the empty one would win. */}
-        {open && !openIsFirstCall ? (
-          <aside className="w-full shrink-0 lg:w-[520px]">
-            <div className="sticky top-4">
-              <CallLogPanel
-                enquiry={open}
-                masters={masters}
-                counsellorName={counsellorName}
-                onSaved={afterSave}
-                onCancel={() => setOpen(null)}
-              />
-            </div>
-          </aside>
-        ) : null}
+        {/* §28.3: no side drawer. Every call opens in the window above. */}
       </div>
     </div>
   );

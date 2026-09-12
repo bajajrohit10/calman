@@ -8,7 +8,7 @@ import { loadPanelEnquiry, type PanelPayload } from "@/components/call-log/actio
 import { useConfirmLeave } from "@/components/unsaved-guard";
 import { CallLogPanel, type PanelMasters } from "@/components/call-log/panel";
 import { TicketTable } from "@/components/ticket-table";
-import { Button, ErrorNote, Input, Select } from "@/components/ui";
+import { Button, ErrorNote, Input, Select, cx } from "@/components/ui";
 import {
   ISSUE_CATEGORY_LABELS,
   type CallOutcome,
@@ -79,6 +79,12 @@ export function TicketsBoard({
       else params.delete(k);
     }
     return `?${params.toString()}`;
+  }
+
+  function closeOpen() {
+    void confirmLeave().then((ok) => {
+      if (ok) setOpen(null);
+    });
   }
 
   async function openRow(row: TicketRow) {
@@ -188,7 +194,29 @@ export function TicketsBoard({
       {error ? <ErrorNote>{error}</ErrorNote> : null}
       {loadError ? <ErrorNote>{loadError}</ErrorNote> : null}
 
-      <div className="flex flex-col gap-3 xl:flex-row">
+      {open ? (
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={closeOpen}
+            className="self-start text-[12.5px] text-ink-2 underline-offset-2 hover:underline"
+          >
+            ← Back to the list
+          </button>
+          <CallLogPanel
+            enquiry={open}
+            masters={masters}
+            counsellorName={counsellorName}
+            onSaved={() => {
+              setOpen(null);
+              router.refresh();
+            }}
+            onCancel={closeOpen}
+          />
+        </div>
+      ) : null}
+
+      <div className={cx("gap-3 xl:flex-row", open ? "hidden" : "flex flex-col")}>
         <TicketTable
           rows={rows}
           openId={open?.id ?? null}
@@ -198,22 +226,6 @@ export function TicketsBoard({
           hrefFor={(col, nextDir) => withParam({ sort: col, dir: nextDir, page: "" })}
         />
 
-        {open ? (
-          <aside className="w-full shrink-0 xl:w-[520px]">
-            <div className="sticky top-4">
-              <CallLogPanel
-                enquiry={open}
-                masters={masters}
-                counsellorName={counsellorName}
-                onSaved={() => {
-                  setOpen(null);
-                  router.refresh();
-                }}
-                onCancel={() => setOpen(null)}
-              />
-            </div>
-          </aside>
-        ) : null}
       </div>
 
       {pages > 1 ? (

@@ -257,6 +257,7 @@ export function CallLogPanel({
   const isFirstCall = !enquiry.timeline.some((c) => c.sameEnquiry);
   const [studentName, setStudentName] = useState(enquiry.studentName ?? "");
   const [termId, setTermId] = useState(enquiry.termId ?? "");
+  const [sourceId, setSourceId] = useState(enquiry.sourceId ?? "");
   const [teacherQuery, setTeacherQuery] = useState("");
   // The defaults every teacher picked after them inherits. Changing one does
   // not rewrite lines already added — a counsellor who adjusted a line meant
@@ -373,6 +374,7 @@ export function CallLogPanel({
       (isFirstCall &&
         (studentName !== (enquiry.studentName ?? "") ||
           termId !== (enquiry.termId ?? "") ||
+          sourceId !== (enquiry.sourceId ?? "") ||
           importance !== (enquiry.importance ?? "") ||
           leadVerification !== (enquiry.leadVerification ?? ""))),
     save: async () => {
@@ -417,7 +419,9 @@ export function CallLogPanel({
         nextFollowUpDate: outcomeTakesDate(outcome) ? followUpDate || null : null,
         issueCategory: asAfterSale ? issueCategory : null,
         convertToAfterSale: toAfterSale,
-        ...(isFirstCall ? { studentName, termId: termId || null } : {}),
+        ...(isFirstCall
+          ? { studentName, termId: termId || null, sourceId: sourceId || null }
+          : {}),
         importance,
         leadVerification,
         orderId: purchased ? orderId : enquiry.type === "after_sale" ? orderId : null,
@@ -543,6 +547,9 @@ export function CallLogPanel({
           removeLine={(key) => setNewLines((l) => l.filter((x) => x.key !== key))}
           termId={termId}
           setTermId={setTermId}
+          sourceId={sourceId}
+          setSourceId={setSourceId}
+          dateChips={chips}
           importance={importance}
           setImportance={setImportance}
           leadVerification={leadVerification}
@@ -1002,6 +1009,9 @@ function FirstCallFields({
   removeLine,
   termId,
   setTermId,
+  sourceId,
+  setSourceId,
+  dateChips,
   importance,
   setImportance,
   leadVerification,
@@ -1039,6 +1049,9 @@ function FirstCallFields({
   removeLine: (key: string) => void;
   termId: string;
   setTermId: (v: string) => void;
+  sourceId: string;
+  setSourceId: (v: string) => void;
+  dateChips: { label: string; value: string }[];
   importance: Importance | "";
   setImportance: (v: Importance | "") => void;
   leadVerification: LeadVerification | "";
@@ -1098,6 +1111,15 @@ function FirstCallFields({
             </button>
           ))}
         </div>
+      </FirstCallField>
+
+      <FirstCallField label="Source">
+        <Select value={sourceId} onChange={(e) => setSourceId(e.target.value)}>
+          <option value="">Choose…</option>
+          {masters.sources.map((o) => (
+            <option key={o.id} value={o.id}>{o.name}</option>
+          ))}
+        </Select>
       </FirstCallField>
 
       <FirstCallField label="Course" hint="applies to every line">
@@ -1289,6 +1311,27 @@ function FirstCallFields({
           disabled={!outcomeTakesDate(outcome)}
           onChange={(e) => setFollowUpDate(e.target.value)}
         />
+        {/* The same four the compact panel offers. Typing a date into a date
+            input costs four interactions; "+3 days" costs one, and three of
+            every four follow-ups are one of these. */}
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {dateChips.map((c) => (
+            <button
+              key={c.label}
+              type="button"
+              disabled={!outcomeTakesDate(outcome)}
+              onClick={() => setFollowUpDate(c.value)}
+              className={cx(
+                "rounded-full border px-2 py-[2px] text-[11.5px]",
+                followUpDate === c.value
+                  ? "border-accent bg-accent-soft text-accent"
+                  : "border-line-2 bg-surface text-ink-2 hover:border-ink-3 disabled:opacity-50",
+              )}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
       </FirstCallField>
 
       <div className="flex items-end gap-2">

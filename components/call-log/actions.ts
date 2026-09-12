@@ -65,6 +65,7 @@ export type LogCallInput = {
    */
   studentName?: string | null;
   termId?: string | null;
+  sourceId?: string | null;
 };
 
 export type LogCallResult = {
@@ -312,7 +313,7 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
   const { data: enquiry, error: enquiryError } = await supabase
     .from("enquiries")
     .select(
-      "id, type, status, student_id, archived_at, importance, lead_verification, term_id, students ( mobile, name )",
+      "id, type, status, student_id, archived_at, importance, lead_verification, term_id, source_id, students ( mobile, name )",
     )
     .eq("id", input.enquiryId)
     .maybeSingle();
@@ -629,6 +630,17 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
         .update({ name: next })
         .eq("id", enquiry.student_id);
       if (error) console.error("Could not save the name:", error.message);
+    }
+  }
+
+  if (input.sourceId !== undefined) {
+    const next = input.sourceId || null;
+    if (next !== ((enquiry as { source_id?: string | null }).source_id ?? null)) {
+      const { error } = await supabase
+        .from("enquiries")
+        .update({ source_id: next })
+        .eq("id", targetEnquiryId);
+      if (error) console.error("Could not save the source:", error.message);
     }
   }
 
