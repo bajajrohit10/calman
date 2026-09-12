@@ -1574,6 +1574,7 @@ export type Database = {
         }[]
       }
       confirm_batch_export: { Args: { p_batch_id: string }; Returns: undefined }
+      convert_to_after_sale: { Args: { p_enquiry_id: number }; Returns: number }
       enquiries_table: {
         Args: {
           p_close_reason?: Database["public"]["Enums"]["close_reason"]
@@ -2021,7 +2022,7 @@ export type Database = {
         | "noted"
         | "escalated"
         | "resolved"
-      close_reason: "wrong_number" | "superseded"
+      close_reason: "wrong_number" | "superseded" | "converted"
       enquiry_status: "open" | "won" | "lost" | "closed" | "escalated"
       enquiry_type: "purchase" | "after_sale"
       import_outcome:
@@ -2193,7 +2194,7 @@ export const Constants = {
         "escalated",
         "resolved",
       ],
-      close_reason: ["wrong_number", "superseded"],
+      close_reason: ["wrong_number", "superseded", "converted"],
       enquiry_status: ["open", "won", "lost", "closed", "escalated"],
       enquiry_type: ["purchase", "after_sale"],
       import_outcome: [

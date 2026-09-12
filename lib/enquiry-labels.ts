@@ -56,6 +56,7 @@ export const LOST_REASON_LABELS: Record<LostReason, string> = {
 export const CLOSE_REASON_LABELS: Record<CloseReason, string> = {
   wrong_number: "wrong number",
   superseded: "superseded by a newer enquiry",
+  converted: "converted to an after-sale enquiry",
 };
 
 export const ITEM_STATUS_LABELS: Record<ItemStatus, string> = {

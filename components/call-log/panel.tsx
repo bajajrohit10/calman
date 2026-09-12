@@ -224,6 +224,15 @@ export function CallLogPanel({
   const [outcome, setOutcome] = useState<CallOutcome | "">("");
   const [followUpDate, setFollowUpDate] = useState("");
   const [issueCategory, setIssueCategory] = useState<IssueCategory | "">("");
+  /**
+   * §25. The counsellor rang expecting a sales call and found somebody whose
+   * videos will not play. Flipping this makes the rest of the panel behave as
+   * though the enquiry were after-sale — it is about to become one — so the
+   * outcome list, the issue category and the purchase-only gradings all follow
+   * one switch rather than each being remembered separately.
+   */
+  const [toAfterSale, setToAfterSale] = useState(false);
+  const asAfterSale = enquiry.type === "after_sale" || toAfterSale;
   const [orderId, setOrderId] = useState("");
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
   // Seeded with one blank row so the table always has something to type into.
@@ -321,7 +330,8 @@ export function CallLogPanel({
         outcome,
         discussion,
         nextFollowUpDate: outcomeTakesDate(outcome) ? followUpDate || null : null,
-        issueCategory: enquiry.type === "after_sale" ? issueCategory : null,
+        issueCategory: asAfterSale ? issueCategory : null,
+        convertToAfterSale: toAfterSale,
         importance,
         leadVerification,
         orderId: purchased ? orderId : enquiry.type === "after_sale" ? orderId : null,
@@ -435,6 +445,35 @@ export function CallLogPanel({
         </label>
 
         <div className="flex flex-wrap items-end gap-3">
+          {/* §25. Above the outcome because it changes what the outcomes
+              are: a counsellor who rang about a sale and found a problem
+              flips this first and the rest of the form follows. Purchase
+              enquiries only — the reverse is not a thing anybody asked for. */}
+          {isPurchase ? (
+            <label className="flex w-full cursor-pointer items-center gap-2 rounded-md border border-line-2 bg-surface-2 px-2.5 py-1.5 text-[12.5px] text-ink-2">
+              <input
+                type="checkbox"
+                checked={toAfterSale}
+                onChange={(e) => {
+                  setToAfterSale(e.target.checked);
+                  // The outcome sets do not overlap, so a half-chosen sales
+                  // outcome would sit there invalid and be submitted by Enter.
+                  setOutcome("");
+                }}
+              />
+              <span>
+                This is an <strong className="text-ink">after-sale</strong> call
+              </span>
+              {toAfterSale ? (
+                <span className="text-[11.5px] text-ink-3">
+                  {enquiry.slotsUsed > 0 || enquiry.timeline.some((c) => c.sameEnquiry)
+                    ? "This enquiry has calls on it, so saving closes it and opens a ticket for the student."
+                    : "Saving turns this enquiry into a ticket and drops its interests."}
+                </span>
+              ) : null}
+            </label>
+          ) : null}
+
           <label className="flex min-w-[230px] flex-col gap-1">
             <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
               Outcome
@@ -444,7 +483,7 @@ export function CallLogPanel({
               onChange={(e) => chooseOutcome(e.target.value as CallOutcome | "")}
             >
               <option value="">Choose…</option>
-              {outcomesFor(enquiry.type).map((o) => (
+              {outcomesFor(asAfterSale ? "after_sale" : "purchase").map((o) => (
                 <option key={o} value={o}>
                   {OUTCOME_LABELS[o]}
                 </option>
@@ -452,7 +491,7 @@ export function CallLogPanel({
             </Select>
           </label>
 
-          {enquiry.type === "after_sale" ? (
+          {asAfterSale ? (
             <label className="flex min-w-[180px] flex-col gap-1">
               <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
                 Issue category
@@ -471,7 +510,7 @@ export function CallLogPanel({
             </label>
           ) : null}
 
-          <label className="flex min-w-[210px] flex-col gap-1">
+          <label className={cx("min-w-[210px] flex-col gap-1", asAfterSale ? "hidden" : "flex")}>
             <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
               Importance
             </span>
@@ -489,7 +528,7 @@ export function CallLogPanel({
             </Select>
           </label>
 
-          <label className="flex min-w-[190px] flex-col gap-1">
+          <label className={cx("min-w-[190px] flex-col gap-1", asAfterSale ? "hidden" : "flex")}>
             <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
               Lead verification
             </span>

@@ -413,15 +413,9 @@ function NewEnquiryButtons({
 
   return (
     <div className="flex items-center gap-1.5">
-      <Select
-        aria-label="New enquiry type"
-        className="w-[130px]"
-        value={type}
-        onChange={(e) => setType(e.target.value as EnquiryType)}
-      >
-        <option value="purchase">Purchase</option>
-        <option value="after_sale">After Sale</option>
-      </Select>
+      <div className="w-[220px]">
+        <TypeChoice value={type} onChange={setType} size="sm" />
+      </div>
       <Button
         variant={supersede ? "secondary" : "primary"}
         disabled={busy}
@@ -512,10 +506,7 @@ function NewEnquiryForm({
         </Labelled>
 
         <Labelled label="Type">
-          <Select value={type} onChange={(e) => setType(e.target.value as EnquiryType)}>
-            <option value="purchase">Purchase</option>
-            <option value="after_sale">After Sale</option>
-          </Select>
+          <TypeChoice value={type} onChange={setType} />
         </Labelled>
 
         <Labelled label="Source">
@@ -607,6 +598,67 @@ function NewEnquiryForm({
         <span className="ml-auto text-[11.5px] text-ink-3">Enter opens the call log</span>
       </div>
     </form>
+  );
+}
+
+/**
+ * Purchase or After Sale, as two buttons rather than a dropdown (§25).
+ *
+ * It was a select among a dozen other selects, so it was read as one more
+ * field to leave alone — and a ticket filed as a purchase enquiry goes to the
+ * wrong list and stays there. Two buttons make the choice something you
+ * decide rather than something you skip. Purchase stays the default because
+ * it is most calls.
+ */
+export function TypeChoice({
+  value,
+  onChange,
+  size = "lg",
+}: {
+  value: EnquiryType;
+  onChange: (t: EnquiryType) => void;
+  size?: "lg" | "sm";
+}) {
+  const options: { id: EnquiryType; label: string; hint: string }[] = [
+    { id: "purchase", label: "Purchase", hint: "Wants to buy" },
+    { id: "after_sale", label: "After Sale", hint: "Already bought" },
+  ];
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Enquiry type"
+      className={cx("grid gap-1.5", size === "lg" ? "grid-cols-2" : "grid-cols-2")}
+    >
+      {options.map((o) => {
+        const on = value === o.id;
+        return (
+          <button
+            key={o.id}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            onClick={() => onChange(o.id)}
+            className={cx(
+              "rounded-md border text-left transition-colors",
+              size === "lg" ? "px-3 py-2" : "px-2.5 py-1.5",
+              on
+                ? "border-accent bg-accent-soft text-accent shadow-card"
+                : "border-line-2 bg-surface text-ink-2 hover:border-ink-3 hover:text-ink",
+            )}
+          >
+            <span
+              className={cx(
+                "block font-medium",
+                size === "lg" ? "text-[13.5px]" : "text-[12.5px]",
+              )}
+            >
+              {o.label}
+            </span>
+            <span className="block text-[11px] text-ink-3">{o.hint}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

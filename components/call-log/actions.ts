@@ -51,11 +51,22 @@ export type LogCallInput = {
   orderId: string | null;
   existingItems: ItemDecision[];
   newItems: NewItem[];
+  /**
+   * §25. The counsellor flipped "This is an after-sale call" in the panel: the
+   * enquiry becomes a ticket before the call is written, and the call is
+   * logged against whichever enquiry the conversion decides on.
+   */
+  convertToAfterSale?: boolean;
 };
 
 export type LogCallResult = {
   error: string | null;
   ok?: string;
+  /**
+   * Set when §25 moved the call onto a new after-sale enquiry, because the
+   * original had sales calls on it worth keeping.
+   */
+  convertedTo?: number;
   /**
    * Set when §23.5 moved the call onto a new enquiry: an offer call to a lost
    * lead with a live outcome opens one for the student. The screen needs to
@@ -292,7 +303,31 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
     };
   }
 
-  const type = enquiry.type as EnquiryType;
+  // §25. Done first, because everything below asks questions of the enquiry's
+  // type and the conversion is what changes the answer. It also decides which
+  // enquiry the call lands on: the same one when there was nothing to
+  // preserve, a new one when there were sales calls worth keeping.
+  let targetEnquiryId = input.enquiryId;
+  let convertedTo: number | undefined;
+  let type = enquiry.type as EnquiryType;
+
+  if (input.convertToAfterSale && type === "purchase") {
+    const { data: converted, error: convertError } = await supabase.rpc(
+      "convert_to_after_sale",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { p_enquiry_id: input.enquiryId } as any,
+    );
+    if (convertError) {
+      return { error: `Could not convert to an after-sale enquiry: ${convertError.message}` };
+    }
+    type = "after_sale";
+    const newId = Number(converted);
+    if (newId !== input.enquiryId) {
+      targetEnquiryId = newId;
+      convertedTo = newId;
+    }
+  }
+
   const outcome = input.outcome;
 
   if (!outcome) return { error: "Choose an outcome." };
@@ -332,7 +367,7 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
     const { count, error: countError } = await supabase
       .from("enquiry_items")
       .select("*", { count: "exact", head: true })
-      .eq("enquiry_id", input.enquiryId);
+      .eq("enquiry_id", targetEnquiryId);
     if (countError) return { error: countError.message };
     if ((count ?? 0) === 0 && input.newItems.length === 0) {
       return {
@@ -367,10 +402,10 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
   // and lose the record that the lead was ever lost. The student gets a new
   // enquiry instead (§4.8), and the call goes there. closed and competitor are
   // not live outcomes: they confirm the loss, so they stay on the old row.
-  let targetEnquiryId = input.enquiryId;
   let reopenedAs: number | undefined;
 
   if (
+    type === "purchase" &&
     isOfferCall &&
     enquiry.status === "lost" &&
     outcome !== "closed" &&
@@ -551,8 +586,9 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
   const nextImportance = (input.importance || null) as Importance | null;
   const nextLead = (input.leadVerification || null) as LeadVerification | null;
   const gradingChanged =
-    nextImportance !== (enquiry.importance ?? null) ||
-    nextLead !== (enquiry.lead_verification ?? null);
+    type === "purchase" &&
+    (nextImportance !== (enquiry.importance ?? null) ||
+      nextLead !== (enquiry.lead_verification ?? null));
 
   if (gradingChanged) {
     const { error } = await supabase
@@ -641,6 +677,14 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
   revalidatePath("/quick-add");
   revalidatePath("/my-day");
   revalidatePath("/new-calls");
+
+  if (convertedTo) {
+    return {
+      error: null,
+      ok: `Call logged as an after-sale ticket. Enquiry #${input.enquiryId} had sales calls on it, so it was closed as converted and this call opened ticket #${convertedTo}.`,
+      convertedTo,
+    };
+  }
 
   return {
     error: null,
