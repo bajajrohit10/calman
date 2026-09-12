@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 
+import { StudentLink } from "@/components/student-link";
+
 import { Badge, cx } from "@/components/ui";
 import {
   ENQUIRY_STATUS_LABELS,
@@ -117,13 +119,13 @@ export function TicketTable({
             >
               <td className="px-2 py-[5px]">
                 <span className="text-ink">{r.student_name || "No name"}</span>
-                <Link
-                  href={`/students/${r.mobile}`}
+                <StudentLink
+                  mobile={r.mobile}
                   onClick={(e) => e.stopPropagation()}
                   className="ml-1.5 tabular-nums text-ink-3 underline-offset-2 hover:underline"
                 >
                   {formatMobile(r.mobile)}
-                </Link>
+                </StudentLink>
               </td>
               <td className="px-2 py-[5px]">
                 <Badge

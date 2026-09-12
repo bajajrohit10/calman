@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 
+import { useUnsavedClaim } from "@/components/unsaved-guard";
+
 import { CallLogPanel, type PanelEnquiry, type PanelMasters } from "@/components/call-log/panel";
 import { StudentHistoryView } from "@/components/student-history";
 import { Badge, Button, ErrorNote, Input, Select, Textarea, cx } from "@/components/ui";
@@ -460,6 +462,34 @@ function NewEnquiryForm({
   const [termId, setTermId] = useState("");
   const [importance, setImportance] = useState<Importance | "">("");
   const [leadVerification, setLeadVerification] = useState<LeadVerification | "">("");
+
+  /**
+   * §27.4. The new-enquiry form holds typed content too — a name, a product
+   * note, a chosen grade — and it is the first thing a counsellor fills in
+   * while still talking. Saving from the prompt submits it exactly as the
+   * button would; the parent reports any refusal in its own error line.
+   */
+  useUnsavedClaim({
+    isDirty: () =>
+      name.trim().length > 0 ||
+      productText.trim().length > 0 ||
+      sourceId !== "" ||
+      termId !== "" ||
+      importance !== "" ||
+      leadVerification !== "",
+    save: async () => {
+      onSubmit(values());
+      return true;
+    },
+    discard: () => {
+      setName("");
+      setProductText("");
+      setSourceId("");
+      setTermId("");
+      setImportance("");
+      setLeadVerification("");
+    },
+  });
 
   function values(): NewEnquiryValues {
     return {

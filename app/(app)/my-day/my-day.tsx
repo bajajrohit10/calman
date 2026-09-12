@@ -1,6 +1,8 @@
 "use client";
 
-import Link from "next/link";
+
+import { StudentLink } from "@/components/student-link";
+import { useConfirmLeave } from "@/components/unsaved-guard";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState, useTransition } from "react";
 
@@ -95,6 +97,9 @@ export function MyDay({
   const [view, setView] = useState<"pending" | "done">("pending");
   const [open, setOpen] = useState<PanelPayload | null>(null);
   const [saveNote, setSaveNote] = useState<string | null>(null);
+  // §27.2. Where the list was scrolled when a first call took the screen, so
+  // Back puts the counsellor where they left off rather than at the top.
+  const scrollBeforeOpen = useRef(0);
   // §23.4. All three to begin with: an offer is aimed at people who have not
   // bought, and most of those were given up on long ago.
   const [offerStatuses, setOfferStatuses] = useState<string[]>(
@@ -254,6 +259,7 @@ export function MyDay({
   function openEnquiry(enquiryId: number, index: number) {
     setLoadError(null);
     openIndex.current = index;
+    scrollBeforeOpen.current = window.scrollY;
     start(async () => {
       const res = await loadPanelEnquiry(enquiryId);
       if (res.error || !res.enquiry) {
@@ -261,6 +267,26 @@ export function MyDay({
         return;
       }
       setOpen(res.enquiry);
+    });
+  }
+
+  /**
+   * §27.2. A lead nobody has called opens the full-width first-call form in
+   * place of the list; a follow-up keeps the side drawer. The form is the
+   * whole job on a first call — a 520px drawer cannot hold twelve fields
+   * without scrolling, which is the thing the layout exists to avoid.
+   */
+  const openIsFirstCall = Boolean(open && !open.timeline.some((c) => c.sameEnquiry));
+
+  const confirmLeave = useConfirmLeave();
+
+  function closeOpen() {
+    void confirmLeave().then((ok) => {
+      if (!ok) return;
+      setOpen(null);
+      // After the list is back, not before: the scroll target does not exist
+      // while the form is standing in its place.
+      requestAnimationFrame(() => window.scrollTo({ top: scrollBeforeOpen.current }));
     });
   }
 
@@ -293,12 +319,12 @@ export function MyDay({
                       "bg-accent-pick shadow-[inset_3px_0_0_var(--accent)]",
                   )}
                 >
-                  <Link
-                    href={`/students/${r.mobile}`}
+                  <StudentLink
+                    mobile={r.mobile}
                     className="text-[13px] font-medium text-ink underline-offset-2 hover:underline"
                   >
                     {r.student_name || "No name"}
-                  </Link>
+                  </StudentLink>
                   <span className="text-[12.5px] tabular-nums text-ink-2">
                     {formatMobile(r.mobile)}
                   </span>
@@ -579,7 +605,26 @@ export function MyDay({
         </span>
       </div>
 
-      <div className="flex flex-col gap-4 lg:flex-row">
+      {openIsFirstCall && open ? (
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={closeOpen}
+            className="self-start text-[12.5px] text-ink-2 underline-offset-2 hover:underline"
+          >
+            ← Back to {TABS.find((t) => t.key === tab)?.label ?? "the list"}
+          </button>
+          <CallLogPanel
+            enquiry={open}
+            masters={masters}
+            counsellorName={counsellorName}
+            onSaved={afterSave}
+            onCancel={closeOpen}
+          />
+        </div>
+      ) : null}
+
+      <div className={cx("gap-4 lg:flex-row", openIsFirstCall ? "hidden" : "flex flex-col")}>
         <div className="flex min-w-0 flex-1 flex-col gap-4">
           {tab === "tickets" ? (
             <TicketTable
@@ -646,8 +691,10 @@ export function MyDay({
           ) : null}
         </div>
 
-        {/* Side drawer: the list stays put behind it (§5.4). */}
-        {open ? (
+        {/* Side drawer: the list stays put behind it (§5.4). Never while the
+            first-call form is up — two panels would both mount, both claim the
+            unsaved-changes guard, and the empty one would win. */}
+        {open && !openIsFirstCall ? (
           <aside className="w-full shrink-0 lg:w-[520px]">
             <div className="sticky top-4">
               <CallLogPanel
@@ -712,12 +759,12 @@ function OverdueReport({
       <ul className="px-3 py-2 text-[12.5px]">
         {rows.map((r) => (
           <li key={r.enquiry_id} className="flex flex-wrap items-center gap-2 py-0.5">
-            <Link
-              href={`/students/${r.mobile}`}
+            <StudentLink
+              mobile={r.mobile}
               className="text-ink underline-offset-2 hover:underline"
             >
               {r.student_name || "No name"}
-            </Link>
+            </StudentLink>
             <span className="tabular-nums text-ink-3">{formatMobile(r.mobile)}</span>
             <span className="text-danger">due {formatDate(r.next_follow_up_date)}</span>
             <span className="text-ink-3">{r.assigned_to_name ?? "unassigned"}</span>

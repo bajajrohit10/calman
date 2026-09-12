@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+
+import { StudentLink } from "@/components/student-link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
@@ -559,12 +561,12 @@ export function AssignDesk({
                     </span>
                   </td>
                   <td className="px-2 py-[5px]">
-                    <Link
-                      href={`/students/${r.mobile}`}
+                    <StudentLink
+                      mobile={r.mobile}
                       className="text-ink underline-offset-2 hover:underline"
                     >
                       {r.student_name || "No name"}
-                    </Link>
+                    </StudentLink>
                     <span className="ml-1.5 tabular-nums text-ink-3">
                       {formatMobile(r.mobile)}
                     </span>

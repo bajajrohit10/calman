@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+
+import { StudentLink } from "@/components/student-link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
@@ -369,12 +371,12 @@ export function NewCallsBoard({
                 </td>
                 <td className="px-2 py-[5px]">
                   <span className="text-ink">{r.student_name || "No name"}</span>
-                  <Link
-                    href={`/students/${r.mobile}`}
+                  <StudentLink
+                    mobile={r.mobile}
                     className="ml-1.5 tabular-nums text-ink-3 underline-offset-2 hover:underline"
                   >
                     {formatMobile(r.mobile)}
-                  </Link>
+                  </StudentLink>
                 </td>
                 <td className="px-2 py-[5px]">
                   {r.importance ? (

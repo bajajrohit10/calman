@@ -33,6 +33,7 @@ import { EnquiryDetailsEditor } from "@/components/enquiry-details";
 import { EnquiryGlanceLine, InterestChips } from "@/components/enquiry-glance";
 import { formatDate, formatDateTime, istDatePlus, istNextMonday } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
+import { useUnsavedClaim } from "@/components/unsaved-guard";
 import { WhatsAppButton } from "@/components/whatsapp/button";
 import { stageOf } from "@/lib/whatsapp-text";
 
@@ -359,6 +360,32 @@ export function CallLogPanel({
     }
   }
 
+  /**
+   * §27.4. What "unsaved" means here: anything typed that a save would keep.
+   * The note is the expensive part, but a chosen outcome, a picked teacher or
+   * an edited name are all work somebody did and would have to do again.
+   */
+  useUnsavedClaim({
+    isDirty: () =>
+      discussion.trim().length > 0 ||
+      outcomeState !== "" ||
+      newLines.some(isComplete) ||
+      (isFirstCall &&
+        (studentName !== (enquiry.studentName ?? "") ||
+          termId !== (enquiry.termId ?? "") ||
+          importance !== (enquiry.importance ?? "") ||
+          leadVerification !== (enquiry.leadVerification ?? ""))),
+    save: async () => {
+      const res = await saveNow();
+      return !res?.error;
+    },
+    discard: () => {
+      setDiscussion("");
+      setOutcome("");
+      setNewLines([blankLine()]);
+    },
+  });
+
   function save(forced?: CallOutcome) {
     const outcome = forced ?? outcomeState;
     if (pending) return;
@@ -375,6 +402,14 @@ export function CallLogPanel({
     }
     setResult(null);
     startTransition(async () => {
+      await saveNow(forced);
+    });
+  }
+
+  /** The save itself, awaitable — the guard needs to know whether it worked. */
+  async function saveNow(forced?: CallOutcome) {
+    const outcome = forced ?? outcomeState;
+    {
       const res = await logCall({
         enquiryId: enquiry.id,
         outcome,
@@ -404,7 +439,8 @@ export function CallLogPanel({
       });
       setResult(res);
       if (!res.error) onSaved?.(res.reopenedAs ? (res.ok ?? undefined) : undefined);
-    });
+      return res;
+    }
   }
 
   /**
@@ -1079,6 +1115,24 @@ function FirstCallFields({
         </Select>
       </FirstCallField>
 
+      <FirstCallField label="Subject" hint="applies to every line">
+        <Select value={defSubject} onChange={(e) => setDefSubject(e.target.value)}>
+          <option value="">Choose…</option>
+          {subjectsForCourse.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </Select>
+      </FirstCallField>
+
+      <FirstCallField label="Content" hint="applies to every line">
+        <Select value={defContent} onChange={(e) => setDefContent(e.target.value)}>
+          <option value="">Choose…</option>
+          {masters.contents.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </Select>
+      </FirstCallField>
+
       {/* The one control that is not a plain field: each teacher picked
           becomes an interest line, and the chips below are those lines. */}
       <FirstCallField
@@ -1152,24 +1206,6 @@ function FirstCallFields({
             No interest lines yet — each teacher you pick becomes one.
           </p>
         )}
-      </FirstCallField>
-
-      <FirstCallField label="Subject" hint="applies to every line">
-        <Select value={defSubject} onChange={(e) => setDefSubject(e.target.value)}>
-          <option value="">Choose…</option>
-          {subjectsForCourse.map((s) => (
-            <option key={s.id} value={s.id}>{s.name}</option>
-          ))}
-        </Select>
-      </FirstCallField>
-
-      <FirstCallField label="Content" hint="applies to every line">
-        <Select value={defContent} onChange={(e) => setDefContent(e.target.value)}>
-          <option value="">Choose…</option>
-          {masters.contents.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </Select>
       </FirstCallField>
 
       <FirstCallField label="Term">

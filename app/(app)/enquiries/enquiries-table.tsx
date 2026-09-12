@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+
+import { StudentLink } from "@/components/student-link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
@@ -247,13 +249,13 @@ export function EnquiriesTable({
                   </td>
                   <td className="px-2 py-[5px] text-ink">{r.student_name || "No name"}</td>
                   <td className="px-2 py-[5px]">
-                    <Link
-                      href={`/students/${r.mobile}`}
+                    <StudentLink
+                      mobile={r.mobile}
                       onClick={(e) => e.stopPropagation()}
                       className="tabular-nums text-ink-2 underline-offset-2 hover:underline"
                     >
                       {formatMobile(r.mobile)}
-                    </Link>
+                    </StudentLink>
                   </td>
                   <td className="px-2 py-[5px] text-ink-2">{ENQUIRY_TYPE_LABELS[r.type]}</td>
                   <td className="px-2 py-[5px]">

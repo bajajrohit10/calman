@@ -2,6 +2,7 @@ import { Suspense, type ReactNode } from "react";
 
 import { signOut } from "@/app/actions/sign-out";
 import { Button } from "@/components/ui";
+import { UnsavedProvider } from "@/components/unsaved-guard";
 import { ROLE_LABELS, isAdmin, requireUser } from "@/lib/auth";
 import { timed } from "@/lib/server-timing";
 import { createClient } from "@/lib/supabase/server";
@@ -79,33 +80,35 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-dvh bg-ground">
-      <Sidebar
-        // Streamed, not awaited. This count is one RPC, and it used to sit at
-        // the top of the layout where every route on every navigation waited
-        // for it before rendering a single row — a whole round trip spent
-        // numbering a badge. Inside Suspense it arrives when it arrives, and
-        // the page no longer knows it exists.
-        badges={{
-          newCalls: (
-            <Suspense fallback={null}>
-              <NewCallsCount />
-            </Suspense>
-          ),
-          myDay: (
-            <Suspense fallback={null}>
-              <MyDayPendingCount />
-            </Suspense>
-          ),
-        }}
-        showSettings={isAdmin(profile.role)}
-        fullName={profile.full_name}
-        roleLabel={ROLE_LABELS[profile.role]}
-        signOut={signOut}
-      />
-      <main className="min-w-0 flex-1 px-5 pt-4 pb-7">
-        <div className="mx-auto max-w-[1400px]">{children}</div>
-      </main>
-    </div>
+    <UnsavedProvider>
+      <div className="flex min-h-dvh bg-ground">
+        <Sidebar
+          // Streamed, not awaited. This count is one RPC, and it used to sit at
+          // the top of the layout where every route on every navigation waited
+          // for it before rendering a single row — a whole round trip spent
+          // numbering a badge. Inside Suspense it arrives when it arrives, and
+          // the page no longer knows it exists.
+          badges={{
+            newCalls: (
+              <Suspense fallback={null}>
+                <NewCallsCount />
+              </Suspense>
+            ),
+            myDay: (
+              <Suspense fallback={null}>
+                <MyDayPendingCount />
+              </Suspense>
+            ),
+          }}
+          showSettings={isAdmin(profile.role)}
+          fullName={profile.full_name}
+          roleLabel={ROLE_LABELS[profile.role]}
+          signOut={signOut}
+        />
+        <main className="min-w-0 flex-1 px-5 pt-4 pb-7">
+          <div className="mx-auto max-w-[1400px]">{children}</div>
+        </main>
+      </div>
+    </UnsavedProvider>
   );
 }

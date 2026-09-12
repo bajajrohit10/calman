@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { Button, cx } from "@/components/ui";
+import { useConfirmLeave } from "@/components/unsaved-guard";
 
 type Item = {
   href: string;
@@ -85,6 +86,8 @@ export function Sidebar({
   signOut: () => Promise<void>;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const confirmLeave = useConfirmLeave();
   const items = showSettings
     ? [...ITEMS, SETTINGS]
     : ITEMS.filter((item) => !item.adminOnly);
@@ -114,6 +117,15 @@ export function Sidebar({
               <Link
                 href={item.href}
                 title={item.hint}
+                // §27.4. A sidebar click is the commonest way to walk away
+                // from a half-written note, so it asks first and navigates
+                // itself once the answer is in.
+                onClick={(e) => {
+                  e.preventDefault();
+                  void confirmLeave().then((ok: boolean) => {
+                    if (ok) router.push(item.href);
+                  });
+                }}
                 aria-current={active ? "page" : undefined}
                 className={cx(
                   "flex items-center gap-[9px] rounded-md px-2 py-1.5 text-[12.5px] transition-colors",
