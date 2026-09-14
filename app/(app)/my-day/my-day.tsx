@@ -38,7 +38,12 @@ import {
   SLOT_TABS,
   type MyDaySubTab,
 } from "@/lib/my-day-tabs";
-import { MY_DAY_TABS, type MyDayTabKey } from "@/lib/my-day-tabs";
+import {
+  ALL_COUNSELLORS,
+  ALL_COUNSELLORS_LABEL,
+  MY_DAY_TABS,
+  type MyDayTabKey,
+} from "@/lib/my-day-tabs";
 import type { RecommendedRow } from "@/lib/recommended";
 
 import { dismissOverdue } from "../assign/actions";
@@ -462,6 +467,10 @@ export function MyDay({
                 defaultValue={counsellorId}
                 className="w-[190px]"
               >
+                {/* §30.4's way in. The team grid had this option only on its
+                    own header, so it could be reached only by typing the query
+                    string — a door that opened from the inside. */}
+                <option value={ALL_COUNSELLORS}>{ALL_COUNSELLORS_LABEL}</option>
                 {roster.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.name}

@@ -5,7 +5,11 @@ import { loadMasters } from "@/lib/masters";
 import { logServerTiming } from "@/lib/server-timing";
 import { loadMyDay } from "@/lib/my-day";
 import { loadTeamDay } from "@/lib/my-day-team";
-import { parseMyDayTab } from "@/lib/my-day-tabs";
+import {
+  ALL_COUNSELLORS,
+  ALL_COUNSELLORS_LABEL,
+  parseMyDayTab,
+} from "@/lib/my-day-tabs";
 import { loadRecommended } from "@/lib/recommended";
 import { createClient } from "@/lib/supabase/server";
 
@@ -34,7 +38,7 @@ export default async function Page({
   // §30.4. "All counsellors" is a different screen, not a different filter:
   // the team grid counts everybody's day and has nothing to show a counsellor
   // about their own, so it is admin-only in the same breath as the picker.
-  const team = admin && wanted === "all";
+  const team = admin && wanted === ALL_COUNSELLORS;
   const counsellorId = admin ? (wanted && !team ? wanted : viewer.userId!) : viewer.userId!;
 
   const supabase = await createClient();
@@ -151,9 +155,11 @@ export default async function Page({
 /**
  * The date and counsellor picker, for the team grid.
  *
- * A copy of My Day's own bar rather than a shared component: this one has an
- * "All counsellors" option and no tabs behind it, and the two will diverge
- * further the moment either grows a filter.
+ * A copy of My Day's own bar rather than a shared component: this one has no
+ * tabs behind it, and the two will diverge further the moment either grows a
+ * filter. Both offer ALL_COUNSELLORS, so either can navigate to the other —
+ * the constant is shared even though the markup is not, because it is the one
+ * thing that has to match.
  */
 function TeamHeader({
   date,
@@ -187,7 +193,7 @@ function TeamHeader({
           defaultValue="all"
           className="h-[30px] w-[190px] rounded-md border border-line-2 bg-surface px-2 text-[12.5px] text-ink"
         >
-          <option value="all">All counsellors</option>
+          <option value={ALL_COUNSELLORS}>{ALL_COUNSELLORS_LABEL}</option>
           {roster.map((p) => (
             <option key={p.id} value={p.id}>
               {p.full_name ?? "(no name)"}

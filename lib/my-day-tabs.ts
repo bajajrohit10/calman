@@ -27,6 +27,18 @@ export const MY_DAY_TABS: {
 export type MyDayView = "pending" | "done";
 
 /**
+ * The counsellor picker's value for the team grid (§30.4).
+ *
+ * A constant because two headers offer it — the one over a counsellor's own
+ * day and the one over the grid — and they have to agree about the word or the
+ * option navigates nowhere. That is not hypothetical: the option existed only
+ * on the grid's own header at first, so the only way to reach the grid was to
+ * type the query string, which nobody would.
+ */
+export const ALL_COUNSELLORS = "all";
+export const ALL_COUNSELLORS_LABEL = "All counsellors";
+
+/**
  * The tab named in a query string, or New Calls.
  *
  * §30.4 made a cell of the team grid a link, and a link has to be able to say
