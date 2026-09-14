@@ -1125,6 +1125,7 @@ export type Database = {
           id: string
           is_active: boolean
           role: Database["public"]["Enums"]["user_role"]
+          theme: string
         }
         Insert: {
           created_at?: string
@@ -1132,6 +1133,7 @@ export type Database = {
           id: string
           is_active?: boolean
           role: Database["public"]["Enums"]["user_role"]
+          theme?: string
         }
         Update: {
           created_at?: string
@@ -1139,6 +1141,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           role?: Database["public"]["Enums"]["user_role"]
+          theme?: string
         }
         Relationships: []
       }
@@ -2112,6 +2115,7 @@ export type Database = {
         Args: { p_enquiry_id: number; p_offer_id: string }
         Returns: number
       }
+      set_my_theme: { Args: { p_theme: string }; Returns: string }
       supersede_enquiry: { Args: { p_enquiry_id: number }; Returns: undefined }
       tickets_counts: {
         Args: { p_date?: string; p_mine_for?: string }

@@ -142,6 +142,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
             showSettings={isAdmin(profile.role)}
             fullName={profile.full_name}
             roleLabel={ROLE_LABELS[profile.role]}
+            theme={profile.theme === "light" ? "light" : "dark"}
             signOut={signOut}
           />
           {/* §40.2. The frame every screen pays for, on a 768px-tall laptop:

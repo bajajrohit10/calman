@@ -126,6 +126,34 @@ export function StudentHistoryView({
   const rows = callHistory(enquiries);
   const events = eventHistory(enquiries);
   const callCount = rows.length;
+
+  /**
+   * §43.1. Which pipelines this number actually has, and what belongs to each.
+   *
+   * Decided by the enquiries rather than by the calls: a ticket raised this
+   * morning and not yet called is still an after-sale conversation, and a
+   * table that appeared only once somebody had rung would be a table that
+   * showed up on the second call.
+   */
+  const KINDS = [
+    { kind: "purchase" as const, title: "Purchase calls" },
+    { kind: "after_sale" as const, title: "After-sale calls" },
+  ];
+  const present = KINDS.filter((k) => enquiries.some((e) => e.type === k.kind));
+  const split = present.length > 1;
+  const panes = (split ? present : [present[0] ?? KINDS[0]]).map((k) => {
+    const mine = split ? rows.filter((r) => r.type === k.kind) : rows;
+    return {
+      kind: k.kind,
+      // Unsplit, the table keeps the words it has always had: "every enquiry
+      // on this number" is true when there is only one kind on it.
+      title: split
+        ? `${k.title} (${mine.length})`
+        : `Calls — every enquiry on this number (${callCount} call${callCount === 1 ? "" : "s"})`,
+      cards: split ? shown.filter((e) => e.type === k.kind) : shown,
+      rows: mine,
+    };
+  });
   /** The most recent call on one enquiry — each card shows its own. */
   const lastCallFor = (enquiryId: number) =>
     rows.find((r) => r.enquiryId === enquiryId) ?? null;
@@ -154,101 +182,43 @@ export function StudentHistoryView({
         </div>
       ) : null}
 
-      {/* Side by side, because they are genuinely separate things: a lead and
-          a complaint on the same number have their own status, their own
-          stage or reminder and their own last note, and stacking one on top of
-          the other reads as history rather than as two live conversations. */}
+      {/* §43.1. One column per pipeline, each with its own live card above
+          its own calls.
+          A lead and a complaint on the same number are worked by different
+          people on different screens, with their own status, their own stage
+          or reminder and their own last note. One merged call table made
+          somebody about to ring about a refund read past four sales calls to
+          find the one that mattered — and the Enquiry # column was the only
+          thing saying which was which. Two tables when there are two kinds of
+          conversation; one, exactly as before, when there is one. */}
       <div
-        className={cx(
-          "grid gap-3",
-          shown.length > 1 ? "lg:grid-cols-2" : "grid-cols-1",
-        )}
+        className={cx("grid gap-3", split ? "lg:grid-cols-2" : "grid-cols-1")}
       >
-        {shown.map((e) => (
-          <NowCard
-            key={e.id}
-            enquiry={e}
-            student={student}
-            counsellorName={counsellorName}
-            canUnarchive={canUnarchive}
-            today={today}
-            lastCall={lastCallFor(e.id)}
-            onEdited={onEdited}
-          />
+        {panes.map((pane) => (
+          <div key={pane.kind} className="flex min-w-0 flex-col gap-3">
+            {pane.cards.map((e) => (
+              <NowCard
+                key={e.id}
+                enquiry={e}
+                student={student}
+                counsellorName={counsellorName}
+                canUnarchive={canUnarchive}
+                today={today}
+                lastCall={lastCallFor(e.id)}
+                onEdited={onEdited}
+              />
+            ))}
+            <CallsTable
+              title={pane.title}
+              rows={pane.rows}
+              student={student}
+              viewerId={viewerId}
+              viewerIsAdmin={viewerIsAdmin}
+              compact={split}
+            />
+          </div>
         ))}
       </div>
-
-      {/* ---- (b) one call history, across every enquiry ---- */}
-      <section>
-        <h3 className="mb-1.5 text-[12.5px] font-semibold text-ink">
-          Calls — every enquiry on this number ({callCount} call
-          {callCount === 1 ? "" : "s"})
-        </h3>
-        <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
-          <table className="w-full min-w-[860px] border-collapse text-[12.5px]">
-            <thead>
-              {/* §35.3. Remarks moved up beside the counsellor and takes the
-                  width, because it is the column anybody actually reads; the
-                  enquiry number and the stage are reference, so they sit at
-                  the end where reference belongs. */}
-              <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-                <th className="w-[130px] px-1.5 py-[7px]">Date/time</th>
-                <th className="w-[110px] px-1.5 py-[7px]">Counsellor</th>
-                <th className="px-1.5 py-[7px]">Remarks</th>
-                <th className="w-[110px] px-1.5 py-[7px]">Outcome</th>
-                <th className="w-[95px] px-1.5 py-[7px]">Follow-up</th>
-                <th className="w-[70px] px-1.5 py-[7px]">Enquiry #</th>
-                <th className="w-[110px] px-1.5 py-[7px]">Stage</th>
-                <th className="w-[90px] px-1.5 py-[7px]">Edits</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.key} className="border-b border-line last:border-b-0">
-                  <td className="px-1.5 py-[5px] whitespace-nowrap text-ink-2">
-                    {formatDateTime(r.at)}
-                  </td>
-                  <td className="px-1.5 py-[5px] text-ink-2">{r.counsellor}</td>
-                  <td className="px-1.5 py-[5px] text-ink-2">
-                    {r.remarks || "—"}
-                    {r.call ? (
-                      <EditCallRow
-                        call={r.call}
-                        type={r.type}
-                        importance={r.importance}
-                        leadVerification={r.leadVerification}
-                        viewerId={viewerId}
-                        viewerIsAdmin={viewerIsAdmin}
-                      />
-                    ) : null}
-                  </td>
-                  <td className="px-1.5 py-[5px] text-ink">{r.outcome}</td>
-                  <td className="px-1.5 py-[5px] whitespace-nowrap text-ink-3">
-                    {r.followUp}
-                  </td>
-                  <td className="px-1.5 py-[5px] tabular-nums text-ink-3">#{r.enquiryId}</td>
-                  <td className="px-1.5 py-[5px] text-ink-3">{r.stage || "—"}</td>
-                  <td className="px-1.5 py-[5px]">
-                    {r.call ? (
-                      <CallEdits
-                        callId={r.call.id}
-                        edits={student.editedCalls?.[r.call.id] ?? 0}
-                      />
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-ink-3">
-                    Nobody has called this number yet.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </section>
 
       {/* ---- (c) everything else that happened (§37) ---- */}
       {events.length ? (
@@ -716,5 +686,104 @@ function NowCard({
           </div>
         ) : null}
       </section>
+  );
+}
+
+/**
+ * One pipeline's calls, or all of them when there is only one pipeline (§43.1).
+ *
+ * The columns are what they were: this is the same table, drawn once or twice.
+ * `compact` drops the minimum width when two of these share a row — eight
+ * columns at 860px twice over is a horizontal scrollbar on every laptop, and
+ * §40.2 spent a brief getting rid of those.
+ */
+function CallsTable({
+  title,
+  rows,
+  student,
+  viewerId,
+  viewerIsAdmin,
+  compact,
+}: {
+  title: string;
+  rows: UnifiedRow[];
+  student: StudentHistory;
+  viewerId?: string | null;
+  viewerIsAdmin?: boolean;
+  compact?: boolean;
+}) {
+  return (
+    <section>
+      <h3 className="mb-1.5 text-[12.5px] font-semibold text-ink">{title}</h3>
+      <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
+        <table
+          className={cx(
+            "w-full border-collapse text-[12.5px]",
+            compact ? "min-w-[620px]" : "min-w-[860px]",
+          )}
+        >
+          <thead>
+            {/* §35.3. Remarks moved up beside the counsellor and takes the
+                width, because it is the column anybody actually reads; the
+                enquiry number and the stage are reference, so they sit at
+                the end where reference belongs. */}
+            <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+              <th className="w-[130px] px-1.5 py-[7px]">Date/time</th>
+              <th className="w-[110px] px-1.5 py-[7px]">Counsellor</th>
+              <th className="px-1.5 py-[7px]">Remarks</th>
+              <th className="w-[110px] px-1.5 py-[7px]">Outcome</th>
+              <th className="w-[95px] px-1.5 py-[7px]">Follow-up</th>
+              <th className="w-[70px] px-1.5 py-[7px]">Enquiry #</th>
+              <th className="w-[110px] px-1.5 py-[7px]">Stage</th>
+              <th className="w-[90px] px-1.5 py-[7px]">Edits</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.key} className="border-b border-line last:border-b-0">
+                <td className="px-1.5 py-[5px] whitespace-nowrap text-ink-2">
+                  {formatDateTime(r.at)}
+                </td>
+                <td className="px-1.5 py-[5px] text-ink-2">{r.counsellor}</td>
+                <td className="px-1.5 py-[5px] text-ink-2">
+                  {r.remarks || "—"}
+                  {r.call ? (
+                    <EditCallRow
+                      call={r.call}
+                      type={r.type}
+                      importance={r.importance}
+                      leadVerification={r.leadVerification}
+                      viewerId={viewerId}
+                      viewerIsAdmin={viewerIsAdmin}
+                    />
+                  ) : null}
+                </td>
+                <td className="px-1.5 py-[5px] text-ink">{r.outcome}</td>
+                <td className="px-1.5 py-[5px] whitespace-nowrap text-ink-3">
+                  {r.followUp}
+                </td>
+                <td className="px-1.5 py-[5px] tabular-nums text-ink-3">#{r.enquiryId}</td>
+                <td className="px-1.5 py-[5px] text-ink-3">{r.stage || "—"}</td>
+                <td className="px-1.5 py-[5px]">
+                  {r.call ? (
+                    <CallEdits
+                      callId={r.call.id}
+                      edits={student.editedCalls?.[r.call.id] ?? 0}
+                    />
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-3 py-8 text-center text-ink-3">
+                  Nobody has called this number yet.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }

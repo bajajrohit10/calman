@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useSyncExternalStore, type ReactNode } from "react";
+import { useSyncExternalStore, useTransition, type ReactNode } from "react";
 
 import { syncBlink } from "@/components/blink";
 import { Button, cx } from "@/components/ui";
 import { useConfirmLeave } from "@/components/unsaved-guard";
 
+import { setTheme } from "./actions/set-theme";
 import { useNewCallsCount } from "./new-calls-count";
 
 type Item = {
@@ -86,12 +87,15 @@ export function Sidebar({
   showSettings,
   fullName,
   roleLabel,
+  theme,
   badges,
   signOut,
 }: {
   showSettings: boolean;
   fullName: string;
   roleLabel: string;
+  /** §43.2: which palette this person is looking at. */
+  theme: "dark" | "light";
   /**
    * The two counts, as streamed server components rather than numbers. They
    * arrive after the rest of the rail, so nothing here can wait on them —
@@ -106,6 +110,7 @@ export function Sidebar({
   // The pill's polled figure, once it has one. Until then the server's.
   const newCalls = useNewCallsCount();
   const collapsed = useRailCollapsed();
+  const [themePending, startTheme] = useTransition();
   const items = showSettings
     ? [...ITEMS, SETTINGS]
     : ITEMS.filter((item) => !item.adminOnly);
@@ -280,6 +285,42 @@ export function Sidebar({
         >
           {roleLabel}
         </div>
+        {/* §43.2. Two words, one of them on. A switch that only says "Dark"
+            makes you press it to find out what it does; this says what you
+            are looking at and what the other one is. */}
+        <div
+          className={cx(
+            "mt-1.5 inline-flex overflow-hidden rounded-md border border-rail-line",
+            label,
+          )}
+        >
+          {(["dark", "light"] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              aria-pressed={theme === t}
+              disabled={themePending}
+              onClick={() => {
+                if (theme === t) return;
+                startTheme(async () => {
+                  await setTheme(t);
+                  // The palette lives on <html>, which the root layout owns;
+                  // refresh re-renders it with the value just written.
+                  router.refresh();
+                });
+              }}
+              className={cx(
+                "px-2 py-[3px] text-[11.5px] capitalize transition-colors",
+                theme === t
+                  ? "bg-rail-hover font-medium text-white"
+                  : "text-rail-ink-2 hover:text-white",
+              )}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
         <form action={signOut} className={collapsed ? "" : "mt-2"}>
           <Button
             type="submit"
