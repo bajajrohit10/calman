@@ -62,6 +62,8 @@ export type HistoryAssignment = {
   id: string;
   date: string;
   bucket: AssignmentBucket;
+  /** §19.2: what a campaign assignment was handed out as. */
+  label: string | null;
   counsellor: { full_name: string | null } | null;
 };
 
@@ -77,6 +79,8 @@ export type HistoryEnquiry = {
     id: string;
     occurred_at: string;
     note: string | null;
+    /** §37: set when the arrival came in through an import, not by hand. */
+    import_batch_id: string | null;
     source: { name: string } | null;
   }[];
   product_text: string | null;
@@ -91,6 +95,8 @@ export type HistoryEnquiry = {
   follow_up_slots_used: number;
   created_at: string;
   closed_at: string | null;
+  /** §37: who put it in the archive, for the events table. */
+  archiver: { full_name: string | null } | null;
   source: { name: string } | null;
   term: { name: string } | null;
   calls: HistoryCall[];
@@ -121,8 +127,9 @@ const SELECT = `
     follow_up_slots_used, created_at, closed_at, archived_at, re_enquired_at,
     source:sources ( name ),
     term:terms ( name ),
+    archiver:profiles!enquiries_archived_by_fkey ( full_name ),
     enquiry_sources (
-      id, occurred_at, note,
+      id, occurred_at, note, import_batch_id,
       source:sources ( name )
     ),
     calls!calls_enquiry_id_fkey (
@@ -138,7 +145,7 @@ const SELECT = `
       content:contents ( name )
     ),
     assignments (
-      id, date, bucket,
+      id, date, bucket, label,
       counsellor:profiles!assignments_counsellor_id_fkey ( full_name )
     ),
     whatsapp_sends (

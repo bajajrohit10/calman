@@ -116,11 +116,13 @@ export function StudentHistoryView({
   const shown = nowCards.length ? nowCards : current ? [current] : [];
   const previous = enquiries.filter((e) => !shown.some((x) => x.id === e.id));
 
-  const rows = unifiedHistory(enquiries);
-  const callCount = rows.filter((r) => r.kind === "call").length;
+  // §37. Two tables: the conversations, and everything else that happened.
+  const rows = callHistory(enquiries);
+  const events = eventHistory(enquiries);
+  const callCount = rows.length;
   /** The most recent call on one enquiry — each card shows its own. */
   const lastCallFor = (enquiryId: number) =>
-    rows.find((r) => r.kind === "call" && r.enquiryId === enquiryId) ?? null;
+    rows.find((r) => r.enquiryId === enquiryId) ?? null;
 
   if (!current) {
     return <p className={cx("text-[13px] text-ink-3", className)}>No enquiries yet.</p>;
@@ -173,7 +175,7 @@ export function StudentHistoryView({
       {/* ---- (b) one call history, across every enquiry ---- */}
       <section>
         <h3 className="mb-1.5 text-[12.5px] font-semibold text-ink">
-          Call history — every enquiry on this number ({callCount} call
+          Calls — every enquiry on this number ({callCount} call
           {callCount === 1 ? "" : "s"})
         </h3>
         <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
@@ -196,15 +198,7 @@ export function StudentHistoryView({
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr
-                  key={r.key}
-                  className={cx(
-                    "border-b border-line last:border-b-0",
-                    // Sends and source events are context, not calls: muted, so
-                    // the eye runs down the calls and takes these in passing.
-                    r.kind !== "call" && "bg-sunk/30 text-ink-3",
-                  )}
-                >
+                <tr key={r.key} className="border-b border-line last:border-b-0">
                   <td className="px-2 py-[5px] whitespace-nowrap text-ink-2">
                     {formatDateTime(r.at)}
                   </td>
@@ -222,9 +216,7 @@ export function StudentHistoryView({
                       />
                     ) : null}
                   </td>
-                  <td className={cx("px-2 py-[5px]", r.kind === "call" && "text-ink")}>
-                    {r.outcome}
-                  </td>
+                  <td className="px-2 py-[5px] text-ink">{r.outcome}</td>
                   <td className="px-2 py-[5px] whitespace-nowrap text-ink-3">
                     {r.followUp}
                   </td>
@@ -243,7 +235,7 @@ export function StudentHistoryView({
               {rows.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-3 py-8 text-center text-ink-3">
-                    Nothing has happened on this number yet.
+                    Nobody has called this number yet.
                   </td>
                 </tr>
               ) : null}
@@ -251,6 +243,49 @@ export function StudentHistoryView({
           </table>
         </div>
       </section>
+
+      {/* ---- (c) everything else that happened (§37) ---- */}
+      {events.length ? (
+        <details className="rounded-lg border border-line bg-surface shadow-card">
+          <summary className="cursor-pointer list-none px-4 py-2.5 text-[12.5px] text-ink-2 hover:text-ink">
+            <span className="inline-block w-3 text-ink-3">›</span>
+            Events ({events.length})
+            <span className="ml-1.5 text-[11.5px] text-ink-3">
+              messages, arrivals, assignments and the rest
+            </span>
+          </summary>
+          <div className="overflow-x-auto border-t border-line">
+            <table className="w-full min-w-[720px] border-collapse text-[12.5px]">
+              <thead>
+                <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+                  <th className="w-[130px] px-2 py-[7px]">Date/time</th>
+                  <th className="w-[110px] px-2 py-[7px]">Event</th>
+                  <th className="px-2 py-[7px]">Details</th>
+                  <th className="w-[120px] px-2 py-[7px]">By</th>
+                  <th className="w-[70px] px-2 py-[7px]">Enquiry #</th>
+                </tr>
+              </thead>
+              <tbody>
+                {events.map((e) => (
+                  <tr key={e.key} className="border-b border-line last:border-b-0">
+                    <td className="px-2 py-[5px] whitespace-nowrap text-ink-2">
+                      {formatDateTime(e.at)}
+                    </td>
+                    <td className="px-2 py-[5px] whitespace-nowrap text-ink">
+                      {e.event}
+                    </td>
+                    <td className="px-2 py-[5px] text-ink-2">{e.details}</td>
+                    <td className="px-2 py-[5px] text-ink-3">{e.by}</td>
+                    <td className="px-2 py-[5px] tabular-nums text-ink-3">
+                      #{e.enquiryId}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      ) : null}
 
       {/* ---- (c) the ones that are over ---- */}
       {previous.length ? (
@@ -346,7 +381,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 type UnifiedRow = {
   key: string;
   at: string;
-  kind: "call" | "send" | "event";
+  kind: "call";
   /** Present on call rows only: what §29.4's editor needs to correct it. */
   call?: {
     id: number;
@@ -375,7 +410,16 @@ type UnifiedRow = {
  * what hides it. The stage is the one the call was at when it happened, not
  * the enquiry's slot count now.
  */
-function unifiedHistory(enquiries: HistoryEnquiry[]): UnifiedRow[] {
+/**
+ * The calls, newest first (§37).
+ *
+ * Only rows with a counsellor on them, because that is what a call is: a
+ * person rang somebody. Everything else that happened to this number — a
+ * template sent, a number arriving again, a lead handed out — is a fact about
+ * the record rather than a conversation, and it was drowning the conversations
+ * it sat between.
+ */
+function callHistory(enquiries: HistoryEnquiry[]): UnifiedRow[] {
   const rows: UnifiedRow[] = [];
   for (const e of enquiries) {
     const stages = stagesByCall(e.calls);
@@ -403,39 +447,106 @@ function unifiedHistory(enquiries: HistoryEnquiry[]): UnifiedRow[] {
         leadVerification: e.lead_verification,
       });
     }
+  }
+  return rows.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+}
+
+export type EventRow = {
+  key: string;
+  at: string;
+  event: string;
+  details: string;
+  by: string;
+  enquiryId: number;
+};
+
+/**
+ * Everything else that happened, newest first (§37).
+ *
+ * Folded away by default behind a count, because it is looked at when
+ * something is being reconstructed rather than before a call. Nothing is
+ * dropped: every row that used to be in the single timeline is in exactly one
+ * of the two tables now, and the events that were never shown at all —
+ * assignments, re-enquiries, conversions, archiving — are here too.
+ *
+ * A date-only event (a re-enquiry, an assignment) is given midday so it sorts
+ * sensibly against the timestamps around it rather than jumping to the top of
+ * its day.
+ */
+function eventHistory(enquiries: HistoryEnquiry[]): EventRow[] {
+  const rows: EventRow[] = [];
+  const atNoon = (date: string) => `${date}T12:00:00+05:30`;
+
+  for (const e of enquiries) {
     for (const w of e.whatsapp_sends) {
       rows.push({
         key: `w${w.id}`,
         at: w.sent_at,
-        kind: "send",
+        event: "WhatsApp",
+        details: w.template?.name ?? w.message_text.slice(0, 120),
+        by: w.sender?.full_name ?? "—",
         enquiryId: e.id,
-        counsellor: w.sender?.full_name ?? "—",
-        stage: "",
-        outcome: "WhatsApp",
-        followUp: "—",
-        remarks: w.template?.name ?? w.message_text.slice(0, 90),
-        type: e.type,
-        importance: e.importance,
-        leadVerification: e.lead_verification,
       });
     }
+
     for (const src of e.enquiry_sources) {
       rows.push({
         key: `s${src.id}`,
         at: src.occurred_at,
-        kind: "event",
+        // An import and a number typed in by hand are both arrivals, and which
+        // it was is the first thing anybody asks about an unexpected lead.
+        event: src.import_batch_id ? "Import" : "Source",
+        details: [src.source?.name, src.note].filter(Boolean).join(" · ") || "—",
+        by: "—",
         enquiryId: e.id,
-        counsellor: "—",
-        stage: "",
-        outcome: src.source?.name ? `Source: ${src.source.name}` : "Source",
-        followUp: "—",
-        remarks: src.note ?? "",
-        type: e.type,
-        importance: e.importance,
-        leadVerification: e.lead_verification,
+      });
+    }
+
+    for (const a of e.assignments) {
+      rows.push({
+        key: `a${a.id}`,
+        at: atNoon(a.date),
+        event: "Assigned",
+        details: [BUCKET_LABELS[a.bucket], a.label].filter(Boolean).join(" · "),
+        by: a.counsellor?.full_name ?? "—",
+        enquiryId: e.id,
+      });
+    }
+
+    if (e.re_enquired_at) {
+      rows.push({
+        key: `r${e.id}`,
+        at: atNoon(e.re_enquired_at),
+        event: "Re-enquired",
+        details: "The number arrived again while this was open",
+        by: "—",
+        enquiryId: e.id,
+      });
+    }
+
+    if (e.close_reason === "converted" && e.closed_at) {
+      rows.push({
+        key: `v${e.id}`,
+        at: e.closed_at,
+        event: "Converted",
+        details: "Closed and continued as an after-sale enquiry",
+        by: "—",
+        enquiryId: e.id,
+      });
+    }
+
+    if (e.archived_at) {
+      rows.push({
+        key: `x${e.id}`,
+        at: e.archived_at,
+        event: "Archived",
+        details: "Exported and taken off the working lists",
+        by: e.archiver?.full_name ?? "—",
+        enquiryId: e.id,
       });
     }
   }
+
   return rows.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
 }
 
