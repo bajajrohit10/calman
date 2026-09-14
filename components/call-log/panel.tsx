@@ -109,6 +109,9 @@ export type PanelEnquiry = {
 
 type Decision = { won: boolean; amount: string; close: boolean };
 
+/** The chip that is the Course/Subject/Content boxes rather than a saved row. */
+const DEFAULTS_KEY = "__defaults__";
+
 /* -------------------------------------------------------------------------- */
 
 function itemLabel(item: PanelItem) {
@@ -376,6 +379,46 @@ export function CallLogPanel({
       .slice(0, 6);
   })();
 
+  /**
+   * The course, subject and content the counsellor chose, when they named no
+   * teacher at all.
+   *
+   * These three boxes are defaults for each teacher line, and a line was only
+   * ever born from picking a teacher — so "CA Final · FR" and nothing else
+   * produced no line, no chip, and a call that saved with the two facts the
+   * counsellor had learned thrown away. §39.2 made a teacher-less line legal
+   * everywhere else; this is what makes it reachable here. With a teacher
+   * line on screen the three boxes are baked into it and this is nothing.
+   */
+  const defaultsLine: NewLine | null =
+    !newLines.some(hasDetail) && (defCourse || defSubject || defContent)
+      ? {
+          key: DEFAULTS_KEY,
+          teacherId: "",
+          courseId: defCourse,
+          subjectId: defSubject,
+          contentId: defContent,
+          won: false,
+          amount: "",
+        }
+      : null;
+
+  /** Editing that chip is editing the three boxes it is made of. */
+  function editDefaults(patch: Partial<NewLine>) {
+    // A teacher named on it is not an edit: it turns the defaults into a real
+    // line, which is what addTeacher already builds out of them.
+    if (patch.teacherId) {
+      addTeacher(patch.teacherId);
+      return;
+    }
+    if ("courseId" in patch) {
+      setDefCourse(patch.courseId ?? "");
+      setDefSubject("");
+    }
+    if ("subjectId" in patch) setDefSubject(patch.subjectId ?? "");
+    if ("contentId" in patch) setDefContent(patch.contentId ?? "");
+  }
+
   function addTeacher(id: string) {
     setNewLines((lines) => [
       ...lines.filter((l) => hasDetail(l)),
@@ -465,7 +508,15 @@ export function CallLogPanel({
   const issueRef = useRef<HTMLSelectElement | null>(null);
 
   const purchased = outcome === "purchased";
-  const filledLines = newLines.filter(hasDetail);
+  /**
+   * What the call will write. The defaults line stands in when nobody named a
+   * teacher, so it counts everywhere a line counts: what gets saved, whether
+   * this enquiry will still have no interest against it, and the prompts that
+   * turn on that question.
+   */
+  const filledLines = defaultsLine
+    ? [...newLines.filter(hasDetail), defaultsLine]
+    : newLines.filter(hasDetail);
   const tickedCount =
     Object.values(decisions).filter((d) => d.won).length +
     filledLines.filter((l) => l.won).length;
@@ -743,11 +794,23 @@ export function CallLogPanel({
           setTeacherQuery={setTeacherQuery}
           teacherMatches={teacherMatches}
           addTeacher={addTeacher}
-          lines={newLines}
-          removeLine={(key) => setNewLines((l) => l.filter((x) => x.key !== key))}
-          editLine={(key, patch) =>
-            setNewLines((l) => l.map((x) => (x.key === key ? { ...x, ...patch } : x)))
-          }
+          lines={defaultsLine ? [...newLines, defaultsLine] : newLines}
+          removeLine={(key) => {
+            if (key === DEFAULTS_KEY) {
+              setDefCourse("");
+              setDefSubject("");
+              setDefContent("");
+              return;
+            }
+            setNewLines((l) => l.filter((x) => x.key !== key));
+          }}
+          editLine={(key, patch) => {
+            if (key === DEFAULTS_KEY) {
+              editDefaults(patch);
+              return;
+            }
+            setNewLines((l) => l.map((x) => (x.key === key ? { ...x, ...patch } : x)));
+          }}
           savedLines={items}
           onSaveSaved={saveItem}
           onRemoveSaved={dropItem}
@@ -1372,6 +1435,12 @@ function FirstCallFields({
   // one being edited stays on screen even if every field is momentarily
   // cleared, or the editor would unmount under the counsellor's cursor.
   const shown = lines.filter((l) => hasDetail(l) || l.key === editingKey);
+  // These three are defaults for each teacher line — until they are the only
+  // thing named, at which point they are the line, and saying otherwise would
+  // be telling the counsellor their course and subject are going nowhere.
+  const defaultsHint = shown.some((l) => l.key === DEFAULTS_KEY)
+    ? "saved as a line of its own"
+    : "applies to every line";
 
   return (
     <div className="grid gap-x-3 gap-y-2.5 px-4 py-3 md:grid-cols-2 xl:grid-cols-3">
@@ -1426,7 +1495,7 @@ function FirstCallFields({
         </Select>
       </FirstCallField>
 
-      <FirstCallField label="Course" hint="applies to every line">
+      <FirstCallField label="Course" hint={defaultsHint}>
         <Select
           value={defCourse}
           onChange={(e) => {
@@ -1441,7 +1510,7 @@ function FirstCallFields({
         </Select>
       </FirstCallField>
 
-      <FirstCallField label="Subject" hint="applies to every line">
+      <FirstCallField label="Subject" hint={defaultsHint}>
         <Select value={defSubject} onChange={(e) => setDefSubject(e.target.value)}>
           <option value="">Choose…</option>
           {subjectsForCourse.map((s) => (
@@ -1450,7 +1519,7 @@ function FirstCallFields({
         </Select>
       </FirstCallField>
 
-      <FirstCallField label="Content" hint="applies to every line">
+      <FirstCallField label="Content" hint={defaultsHint}>
         <Select value={defContent} onChange={(e) => setDefContent(e.target.value)}>
           <option value="">Choose…</option>
           {masters.contents.map((c) => (
@@ -1585,8 +1654,8 @@ function FirstCallFields({
           </div>
         ) : savedLines.length ? null : (
           <p className="mt-1.5 text-[11.5px] italic text-ink-3">
-            No interest lines yet — each teacher you pick becomes one. A course on
-            its own is worth keeping too.
+            No interest lines yet — each teacher you pick becomes one, and a course
+            on its own becomes one too.
           </p>
         )}
       </FirstCallField>
