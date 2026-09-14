@@ -26,6 +26,17 @@ export const MY_DAY_TABS: {
 
 export type MyDayView = "pending" | "done";
 
+/**
+ * The tab named in a query string, or New Calls.
+ *
+ * §30.4 made a cell of the team grid a link, and a link has to be able to say
+ * which tab it means. Parsed rather than cast: the string comes from a URL.
+ */
+export function parseMyDayTab(value: string | null | undefined): MyDayTabKey {
+  const found = MY_DAY_TABS.find((t) => t.key === value);
+  return found ? found.key : "new";
+}
+
 /** For the export filename: "new-calls", "assigned-calls". */
 export function myDayTabSlug(key: MyDayTabKey): string {
   const tab = MY_DAY_TABS.find((t) => t.key === key);

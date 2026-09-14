@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       archive_batches: {
@@ -94,6 +119,7 @@ export type Database = {
           assigned_at: string
           assigned_by: string
           bucket: Database["public"]["Enums"]["assignment_bucket"]
+          carried_to: string | null
           counsellor_id: string
           created_at: string
           date: string
@@ -105,6 +131,7 @@ export type Database = {
           assigned_at?: string
           assigned_by: string
           bucket: Database["public"]["Enums"]["assignment_bucket"]
+          carried_to?: string | null
           counsellor_id: string
           created_at?: string
           date: string
@@ -116,6 +143,7 @@ export type Database = {
           assigned_at?: string
           assigned_by?: string
           bucket?: Database["public"]["Enums"]["assignment_bucket"]
+          carried_to?: string | null
           counsellor_id?: string
           created_at?: string
           date?: string
@@ -1573,6 +1601,19 @@ export type Database = {
           total_outcomes: number
         }[]
       }
+      carry_forward_assignments: {
+        Args: {
+          p_buckets?: Database["public"]["Enums"]["assignment_bucket"][]
+          p_counsellor: string
+          p_date: string
+          p_enquiry_ids?: number[]
+          p_to_date: string
+        }
+        Returns: {
+          moved: number
+          skipped: number
+        }[]
+      }
       confirm_batch_export: { Args: { p_batch_id: string }; Returns: undefined }
       convert_to_after_sale: { Args: { p_enquiry_id: number }; Returns: number }
       enquiries_table: {
@@ -1731,6 +1772,7 @@ export type Database = {
           bucket: Database["public"]["Enums"]["assignment_bucket"]
           bucket_rank: number
           called_today: boolean
+          carried_to: string
           enquiry_id: number
           follow_up_slots_used: number
           importance: Database["public"]["Enums"]["importance"]
@@ -1758,6 +1800,25 @@ export type Database = {
       my_day_pending_count: {
         Args: { p_counsellor_id?: string; p_date?: string }
         Returns: number
+      }
+      my_day_team: {
+        Args: { p_date?: string }
+        Returns: {
+          assigned_pending: number
+          assigned_total: number
+          counsellor_id: string
+          counsellor_name: string
+          custom_pending: number
+          custom_total: number
+          new_pending: number
+          new_total: number
+          offer_pending: number
+          offer_total: number
+          tickets_pending: number
+          tickets_total: number
+          total_pending: number
+          total_total: number
+        }[]
       }
       new_calls_facets: {
         Args: {
@@ -1855,6 +1916,21 @@ export type Database = {
           purged_import_rows: number
           purged_items: number
           purged_whatsapp_sends: number
+        }[]
+      }
+      reallocate_assignments: {
+        Args: {
+          p_buckets?: Database["public"]["Enums"]["assignment_bucket"][]
+          p_count?: number
+          p_date: string
+          p_enquiry_ids?: number[]
+          p_from: string
+          p_target_date?: string
+          p_to: string
+        }
+        Returns: {
+          moved: number
+          skipped: number
         }[]
       }
       recommended_calls: {
@@ -2175,6 +2251,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       assignment_bucket: [

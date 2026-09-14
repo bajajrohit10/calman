@@ -1,736 +1,118 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, useTransition } from "react";
-
-import { useUnsavedClaim } from "@/components/unsaved-guard";
+import { useState, useTransition } from "react";
 
 import { CallLogPanel, type PanelEnquiry, type PanelMasters } from "@/components/call-log/panel";
+import { loadPanelEnquiry } from "@/components/call-log/actions";
 import { StudentHistoryView } from "@/components/student-history";
-
-import { AddMany } from "./add-many";
-import { Badge, Button, ErrorNote, Input, Select, Textarea, cx } from "@/components/ui";
-import {
-  IMPORTANCE_LABELS,
-  LEAD_VERIFICATION_LABELS,
-  type EnquiryType,
-  type Importance,
-  type LeadVerification,
-} from "@/lib/enquiry-labels";
-import { formatMobile, isValidMobile, mobileHint, normaliseMobile } from "@/lib/mobile";
+import { Button, ErrorNote } from "@/components/ui";
 import type { StudentHistory } from "@/lib/students";
 
-import { createEnquiry, lookupMobile } from "./actions";
+import { lookupMobile } from "./actions";
+import { QuickAddGrid } from "./grid";
 
 export type QuickAddMasters = PanelMasters & {
   sources: { id: string; name: string }[];
   terms: { id: string; name: string }[];
 };
 
-type Stage =
-  | { kind: "idle" }
-  | { kind: "looking" }
-  | { kind: "unknown" }
-  | { kind: "known"; student: StudentHistory }
-  | { kind: "logging"; enquiry: PanelEnquiry; student: StudentHistory | null };
-
 /**
- * §5.1. One box, live lookup, and the three branches the number can take.
+ * §30.1. Quick Add is the grid, and the call window the grid opens.
  *
- * The number is normalised on every keystroke rather than on blur, so what is
- * in the box is always what would be stored — pasting "+91 98765-43210" from
- * WhatsApp shows 9876543210 immediately.
+ * The single-number box that used to live here has gone. It was the same three
+ * steps as one row of the grid — type the number, see what Calman knows,
+ * decide what to do — done on a screen of its own, which meant two
+ * implementations of §10.1's rules and two places for a change to be forgotten.
+ * The phone ringing is now the first row.
+ *
+ * The call window is reached from a row rather than being a stage of the box:
+ * every filled row is saved first (so nothing typed is lost to opening a
+ * call), then this loads the enquiry that row became and hands it to the same
+ * panel My Day uses.
  */
 export function QuickAdd({
   masters,
   counsellorName,
   viewerId,
   viewerIsAdmin,
-  defaultFollowUpDate,
 }: {
   masters: QuickAddMasters;
   counsellorName: string | null;
-  /** §29.4: who is looking, so a call row knows whether it is theirs. */
+  /** §29.4: who is looking, so a call row in the history knows if it is theirs. */
   viewerId: string | null;
   viewerIsAdmin: boolean;
-  /**
-   * The next working day, decided by the database when this page rendered
-   * (§20.2). Passed in rather than fetched per lookup: the lookup runs on
-   * every settled keystroke and this changes once a day.
-   */
-  defaultFollowUpDate: string | null;
 }) {
-  const [raw, setRaw] = useState("");
-  const mobile = normaliseMobile(raw);
-  const valid = isValidMobile(mobile);
-  const hint = mobileHint(mobile);
-
-  // What the last completed lookup found, tagged with the number it was for.
-  // Keeping the number alongside the answer is what lets the visible stage be
-  // derived rather than pushed from the effect: any keystroke immediately
-  // makes `lookup.mobile !== mobile` and the panel reads as "looking up".
-  const [lookup, setLookup] = useState<{
-    mobile: string;
-    student: StudentHistory | null;
-  } | null>(null);
   const [logging, setLogging] = useState<{
     enquiry: PanelEnquiry;
     student: StudentHistory | null;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // What the last "Send to New Calls" did, kept after the box is cleared so the
-  // counsellor sees it happened — the screen resets to empty either way.
-  const [pooled, setPooled] = useState<string | null>(null);
-  const [creating, startCreate] = useTransition();
-  const [many, setMany] = useState(false);
+  const [, startLoad] = useTransition();
 
-  const boxRef = useRef<HTMLInputElement | null>(null);
-  // Guards against an older lookup landing after a newer one.
-  const lookupSeq = useRef(0);
-
-  useEffect(() => {
-    if (!valid || lookup?.mobile === mobile) return;
-
-    const seq = ++lookupSeq.current;
-    let cancelled = false;
-
-    void (async () => {
-      const res = await lookupMobile(mobile);
-      if (cancelled || seq !== lookupSeq.current) return; // a newer keystroke won
-      if (res.error) {
-        setError(res.error);
+  function openCall(enquiryId: number, mobile: string) {
+    setError(null);
+    startLoad(async () => {
+      // Both at once: the panel needs the enquiry, the history below it needs
+      // the student, and neither waits on the other.
+      const [panel, history] = await Promise.all([
+        loadPanelEnquiry(enquiryId),
+        lookupMobile(mobile),
+      ]);
+      if (panel.error || !panel.enquiry) {
+        setError(panel.error ?? "Could not open that enquiry.");
         return;
       }
-      setLookup({ mobile, student: res.student });
-    })();
+      setLogging({ enquiry: panel.enquiry, student: history.student });
+    });
+  }
 
-    return () => {
-      cancelled = true;
-    };
-  }, [mobile, valid, lookup?.mobile]);
-
-  const stage: Stage = logging
-    ? { kind: "logging", enquiry: logging.enquiry, student: logging.student }
-    : !valid
-      ? { kind: "idle" }
-      : lookup?.mobile === mobile
-        ? lookup.student
-          ? { kind: "known", student: lookup.student }
-          : { kind: "unknown" }
-        : { kind: "looking" };
-
-  function reset() {
-    setRaw("");
-    setLookup(null);
+  function close() {
     setLogging(null);
     setError(null);
-    boxRef.current?.focus();
   }
 
-  /**
-   * "Send to New Calls": create the lead and stop.
-   *
-   * No call is logged and nothing is assigned, which is exactly what puts it
-   * in the shared pool — new_calls_pool() is "open, never had a fresh call,
-   * and on nobody's day". So the counsellor who took the ring is not the one
-   * committed to calling it back; whoever is free takes it from New Calls.
-   */
-  function sendToPool(input: {
-    type: EnquiryType;
-    name: string | null;
-    sourceId: string | null;
-    productText: string | null;
-    termId: string | null;
-    importance: Importance | "";
-    leadVerification: LeadVerification | "";
-  }) {
-    setError(null);
-    const number = mobile;
-    startCreate(async () => {
-      const res = await createEnquiry({
-        mobile: number,
-        name: input.name,
-        type: input.type,
-        sourceId: input.sourceId,
-        productText: input.productText,
-        termId: input.termId,
-        importance: input.importance,
-        leadVerification: input.leadVerification,
-        supersedeEnquiryId: null,
-      });
-      if (res.error || !res.enquiry) {
-        setError(res.error ?? "Could not save the lead.");
-        return;
-      }
-      reset();
-      setPooled(
-        `${formatMobile(number)} is in New Calls as enquiry #${res.enquiry.id}. ` +
-          "Anyone can take it.",
-      );
-    });
-  }
-
-  function openEnquiry(input: {
-    type: EnquiryType;
-    name?: string | null;
-    sourceId?: string | null;
-    productText?: string | null;
-    termId?: string | null;
-    importance?: Importance | "";
-    leadVerification?: LeadVerification | "";
-    supersedeEnquiryId?: number | null;
-  }) {
-    setError(null);
-    startCreate(async () => {
-      const res = await createEnquiry({
-        mobile,
-        name: input.name ?? null,
-        type: input.type,
-        sourceId: input.sourceId ?? null,
-        productText: input.productText ?? null,
-        termId: input.termId ?? null,
-        importance: input.importance ?? null,
-        leadVerification: input.leadVerification ?? null,
-        supersedeEnquiryId: input.supersedeEnquiryId ?? null,
-      });
-      if (res.error || !res.enquiry) {
-        setError(res.error ?? "Could not open the enquiry.");
-        return;
-      }
-      setLogging({ enquiry: res.enquiry, student: lookup?.student ?? null });
-    });
-  }
-
-  // §9: an archived enquiry is shown in the history below, but it is not
-  // something to update or supersede — doing so would write into a batch that
-  // has already been exported, and un-archive it by the back door. As far as
-  // "is there anything open on this number?" goes, an archived row is not.
-  const openEnquiryRow =
-    stage.kind === "known"
-      ? stage.student.enquiries.find((e) => e.status === "open" && !e.archived_at)
-      : null;
-
-  if (many) {
+  if (logging) {
     return (
-      <AddMany
-        sources={masters.sources}
-        onDone={() => setMany(false)}
-      />
+      <div className="flex flex-col gap-4">
+        <div>
+          <Button size="sm" variant="ghost" onClick={close}>
+            ← Back to the grid
+          </Button>
+        </div>
+        <CallLogPanel
+          enquiry={logging.enquiry}
+          masters={masters}
+          counsellorName={counsellorName}
+          onSaved={close}
+          onCancel={close}
+        />
+        <p className="text-[12.5px] text-ink-3">
+          Saving returns you to the grid, ready for the next number.{" "}
+          <Link
+            href={`/students/${logging.enquiry.mobile}`}
+            className="underline underline-offset-2"
+          >
+            Open the full history
+          </Link>
+        </p>
+        {logging.student ? (
+          <StudentHistoryView
+            student={logging.student}
+            masters={masters}
+            counsellorName={counsellorName}
+            viewerId={viewerId}
+            viewerIsAdmin={viewerIsAdmin}
+          />
+        ) : null}
+      </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      {/* ---- the one box ---- */}
-      <div>
-        <div className="mb-1.5 flex items-center gap-2">
-          <label htmlFor="quick-add-mobile" className="text-[12.5px] text-ink-3">
-            Mobile number
-          </label>
-          {/* §29.3. Beside the box rather than in a menu: somebody with a list
-              in front of them should not have to know the mode exists to find
-              it. */}
-          <Button size="sm" variant="ghost" onClick={() => setMany(true)}>
-            Add many
-          </Button>
-        </div>
-        <Input
-          id="quick-add-mobile"
-          ref={boxRef}
-          autoFocus
-          inputMode="numeric"
-          autoComplete="off"
-          placeholder="Mobile number"
-          value={raw}
-          onChange={(e) => {
-            setRaw(e.target.value);
-            setLogging(null);
-            setError(null);
-            setPooled(null);
-          }}
-          className="h-14 w-full max-w-md text-[24px] tracking-[0.12em] tabular-nums"
-        />
-        <div className="mt-1.5 flex items-center gap-2 text-[12.5px]">
-          {mobile ? (
-            <span className="tabular-nums text-ink-2">
-              Normalised: <span className="font-medium text-ink">{mobile || "—"}</span>
-            </span>
-          ) : (
-            <span className="text-ink-3">
-              Type or paste a number — +91, leading zeros, spaces and dashes are stripped.
-            </span>
-          )}
-          {hint ? <span className="text-warn">{hint}</span> : null}
-          {valid && stage.kind === "looking" ? (
-            <span className="text-ink-3">looking up…</span>
-          ) : null}
-        </div>
-      </div>
-
+    <div className="flex flex-col gap-4">
       {error ? <ErrorNote>{error}</ErrorNote> : null}
-
-      {pooled ? (
-        <p
-          role="status"
-          className="rounded-md border border-ok/40 bg-ok-soft px-2.5 py-1.5 text-[12.5px] text-ok"
-        >
-          {pooled}
-        </p>
-      ) : null}
-
-      {/* ---- branch: unknown number ---- */}
-      {stage.kind === "unknown" ? (
-        <NewEnquiryForm
-          masters={masters}
-          busy={creating}
-          onSubmit={(values) => openEnquiry(values)}
-          onSendToPool={sendToPool}
-        />
-      ) : null}
-
-      {/* ---- branch: known number ---- */}
-      {stage.kind === "known" ? (
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-info/40 bg-info-soft/40 px-4 py-3">
-            <Badge tone="info">Known number</Badge>
-            <span className="text-[13px] text-ink">
-              {stage.student.name || "No name recorded"}
-            </span>
-            {openEnquiryRow ? (
-              <span className="text-[12.5px] text-ink-2">
-                has an open enquiry (#{openEnquiryRow.id})
-              </span>
-            ) : (
-              <span className="text-[12.5px] text-ink-2">has no open enquiry</span>
-            )}
-
-            <div className="ml-auto flex flex-wrap items-center gap-2">
-              {openEnquiryRow ? (
-                <Button
-                  variant="primary"
-                  disabled={creating}
-                  onClick={() =>
-                    setLogging({
-                      enquiry: {
-                        id: openEnquiryRow.id,
-                        type: openEnquiryRow.type,
-                        studentName: stage.student.name,
-                        mobile: stage.student.mobile,
-                        term: openEnquiryRow.term?.name ?? null,
-                        productText: openEnquiryRow.product_text,
-                        slotsUsed: openEnquiryRow.follow_up_slots_used,
-                        termId: null,
-                        sourceId: null,
-                        importance: openEnquiryRow.importance,
-                        leadVerification: openEnquiryRow.lead_verification,
-                        defaultFollowUpDate,
-                        status: openEnquiryRow.status,
-                        sourceNames: [
-                          ...new Set(
-                            [...(openEnquiryRow.enquiry_sources ?? [])]
-                              .sort((a, b) =>
-                                b.occurred_at.localeCompare(a.occurred_at),
-                              )
-                              .map((e) => e.source?.name)
-                              .filter((n): n is string => Boolean(n)),
-                          ),
-                        ],
-                        nextFollowUpDate: openEnquiryRow.next_follow_up_date,
-                        reEnquiredAt: openEnquiryRow.re_enquired_at,
-                        createdAt: openEnquiryRow.created_at,
-                        // Built from the history already loaded rather than
-                        // re-fetched: this path has the whole student in hand.
-                        timeline: stage.student.enquiries.flatMap((e) =>
-                          e.calls.map((c) => ({
-                            id: c.id,
-                            enquiryId: e.id,
-                            sameEnquiry: e.id === openEnquiryRow.id,
-                            calledAt: c.called_at,
-                            callDate: c.call_date,
-                            outcome: c.outcome,
-                            discussion: c.discussion,
-                            nextFollowUpDate: c.next_follow_up_date,
-                            callerName: c.caller?.full_name ?? null,
-                            calledBy: c.called_by,
-                          })),
-                        ),
-                        viewerId,
-                        viewerIsAdmin,
-                        items: openEnquiryRow.enquiry_items.map((i) => ({
-                          id: i.id,
-                          status: i.status,
-                          teacher: i.teacher?.name ?? null,
-                          course: i.course?.name ?? null,
-                          subject: i.subject?.name ?? null,
-                          content: i.content?.name ?? null,
-                        })),
-                      },
-                      student: stage.student,
-                    })
-                  }
-                >
-                  Update existing enquiry
-                </Button>
-              ) : null}
-
-              <NewEnquiryButtons
-                busy={creating}
-                supersede={openEnquiryRow ? openEnquiryRow.id : null}
-                onOpen={(type) =>
-                  openEnquiry({
-                    type,
-                    supersedeEnquiryId: openEnquiryRow ? openEnquiryRow.id : null,
-                  })
-                }
-              />
-            </div>
-          </div>
-
-          <StudentHistoryView
-            student={stage.student}
-            masters={masters}
-            counsellorName={counsellorName}
-            viewerId={viewerId}
-            viewerIsAdmin={viewerIsAdmin}
-            onEdited={() => setLookup(null)}
-          />
-        </div>
-      ) : null}
-
-      {/* ---- branch: logging ---- */}
-      {stage.kind === "logging" ? (
-        <div className="flex flex-col gap-4">
-          <CallLogPanel
-            enquiry={stage.enquiry}
-            masters={masters}
-            counsellorName={counsellorName}
-            onSaved={reset}
-            onCancel={reset}
-          />
-          <p className="text-[12.5px] text-ink-3">
-            Saving returns you to an empty box, ready for the next call.{" "}
-            <Link
-              href={`/students/${stage.enquiry.mobile}`}
-              className="underline underline-offset-2"
-            >
-              Open the full history
-            </Link>
-          </p>
-          {stage.student ? (
-            <StudentHistoryView
-              student={stage.student}
-              masters={masters}
-            counsellorName={counsellorName}
-            viewerId={viewerId}
-            viewerIsAdmin={viewerIsAdmin}
-              onEdited={() => setLookup(null)}
-            />
-          ) : null}
-        </div>
-      ) : null}
+      <QuickAddGrid sources={masters.sources} onLogCall={openCall} />
     </div>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-
-function NewEnquiryButtons({
-  busy,
-  supersede,
-  onOpen,
-}: {
-  busy: boolean;
-  supersede: number | null;
-  onOpen: (type: EnquiryType) => void;
-}) {
-  const [type, setType] = useState<EnquiryType>("purchase");
-
-  return (
-    <div className="flex items-center gap-1.5">
-      <div className="w-[220px]">
-        <TypeChoice value={type} onChange={setType} size="sm" />
-      </div>
-      <Button
-        variant={supersede ? "secondary" : "primary"}
-        disabled={busy}
-        onClick={() => onOpen(type)}
-        title={
-          supersede
-            ? `Closes enquiry #${supersede} as superseded and opens a new one`
-            : undefined
-        }
-      >
-        Open new enquiry
-      </Button>
-    </div>
-  );
-}
-
-type NewEnquiryValues = {
-  type: EnquiryType;
-  name: string | null;
-  sourceId: string | null;
-  productText: string | null;
-  termId: string | null;
-  importance: Importance | "";
-  leadVerification: LeadVerification | "";
-};
-
-function NewEnquiryForm({
-  masters,
-  busy,
-  onSubmit,
-  onSendToPool,
-}: {
-  masters: QuickAddMasters;
-  busy: boolean;
-  onSubmit: (values: NewEnquiryValues) => void;
-  onSendToPool: (values: NewEnquiryValues) => void;
-}) {
-  const [name, setName] = useState("");
-  const [type, setType] = useState<EnquiryType>("purchase");
-  const [sourceId, setSourceId] = useState("");
-  const [productText, setProductText] = useState("");
-  const [termId, setTermId] = useState("");
-  const [importance, setImportance] = useState<Importance | "">("");
-  const [leadVerification, setLeadVerification] = useState<LeadVerification | "">("");
-
-  /**
-   * §27.4. The new-enquiry form holds typed content too — a name, a product
-   * note, a chosen grade — and it is the first thing a counsellor fills in
-   * while still talking. Saving from the prompt submits it exactly as the
-   * button would; the parent reports any refusal in its own error line.
-   */
-  useUnsavedClaim({
-    isDirty: () =>
-      name.trim().length > 0 ||
-      productText.trim().length > 0 ||
-      sourceId !== "" ||
-      termId !== "" ||
-      importance !== "" ||
-      leadVerification !== "",
-    save: async () => {
-      onSubmit(values());
-      return true;
-    },
-    discard: () => {
-      setName("");
-      setProductText("");
-      setSourceId("");
-      setTermId("");
-      setImportance("");
-      setLeadVerification("");
-    },
-  });
-
-  function values(): NewEnquiryValues {
-    return {
-      type,
-      name: name.trim() || null,
-      sourceId: sourceId || null,
-      productText: productText.trim() || null,
-      termId: termId || null,
-      importance,
-      leadVerification,
-    };
-  }
-
-  function submit() {
-    if (busy) return;
-    onSubmit(values());
-  }
-
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        submit();
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" && !e.shiftKey && (e.target as HTMLElement).tagName !== "BUTTON") {
-          e.preventDefault();
-          submit();
-        }
-      }}
-      className="rounded-lg border border-line bg-surface shadow-card"
-    >
-      <header className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5">
-        <Badge tone="ok">New number</Badge>
-        <span className="text-[12.5px] text-ink-2">
-          Everything here is optional — only the number is required. Fill what you
-          have, then choose whether you are calling it or passing it on.
-        </span>
-      </header>
-
-      <div className="grid gap-3 px-4 py-3 sm:grid-cols-2 lg:grid-cols-3">
-        <Labelled label="Name">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Optional" />
-        </Labelled>
-
-        <Labelled label="Type">
-          <TypeChoice value={type} onChange={setType} />
-        </Labelled>
-
-        <Labelled label="Source">
-          <Select value={sourceId} onChange={(e) => setSourceId(e.target.value)}>
-            <option value="">—</option>
-            {masters.sources.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </Select>
-        </Labelled>
-
-        <Labelled label="Term">
-          <Select value={termId} onChange={(e) => setTermId(e.target.value)}>
-            <option value="">—</option>
-            {masters.terms.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </Select>
-        </Labelled>
-
-        <Labelled label="Importance">
-          <Select
-            value={importance}
-            onChange={(e) => setImportance(e.target.value as Importance | "")}
-          >
-            <option value="">—</option>
-            {Object.entries(IMPORTANCE_LABELS).map(([v, label]) => (
-              <option key={v} value={v}>
-                {label}
-              </option>
-            ))}
-          </Select>
-        </Labelled>
-
-        <Labelled label="Lead verification">
-          <Select
-            value={leadVerification}
-            onChange={(e) => setLeadVerification(e.target.value as LeadVerification | "")}
-          >
-            <option value="">—</option>
-            {Object.entries(LEAD_VERIFICATION_LABELS).map(([v, label]) => (
-              <option key={v} value={v}>
-                {label}
-              </option>
-            ))}
-          </Select>
-        </Labelled>
-
-        <div className="sm:col-span-2 lg:col-span-3">
-          <Labelled label="Product text">
-            <Textarea
-              rows={2}
-              value={productText}
-              onChange={(e) => setProductText(e.target.value)}
-              placeholder="The raw product title, as the lead described it"
-            />
-          </Labelled>
-        </div>
-      </div>
-
-      {/* Two ways out, said plainly. The distinction is who owns the call
-          next: keeping it means it is on your day from the moment you save,
-          passing it on means it is on nobody's until somebody takes it. */}
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-line bg-sunk px-4 py-3">
-        <Button type="submit" variant="primary" disabled={busy}>
-          {busy ? "Saving…" : "Add details & log call"}
-        </Button>
-        {type === "purchase" ? (
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={busy}
-            onClick={() => {
-              if (!busy) onSendToPool(values());
-            }}
-          >
-            Send to New Calls
-          </Button>
-        ) : null}
-        <span className="text-[11.5px] text-ink-3">
-          {type === "purchase"
-            ? "Log call assigns it to you for today · Send to New Calls leaves it unassigned for anyone to take"
-            : "After-sale enquiries are worked in Tickets, not the New Calls pool."}
-        </span>
-        <span className="ml-auto text-[11.5px] text-ink-3">Enter opens the call log</span>
-      </div>
-    </form>
-  );
-}
-
-/**
- * Purchase or After Sale, as two buttons rather than a dropdown (§25).
- *
- * It was a select among a dozen other selects, so it was read as one more
- * field to leave alone — and a ticket filed as a purchase enquiry goes to the
- * wrong list and stays there. Two buttons make the choice something you
- * decide rather than something you skip. Purchase stays the default because
- * it is most calls.
- */
-export function TypeChoice({
-  value,
-  onChange,
-  size = "lg",
-}: {
-  value: EnquiryType;
-  onChange: (t: EnquiryType) => void;
-  size?: "lg" | "sm";
-}) {
-  const options: { id: EnquiryType; label: string; hint: string }[] = [
-    { id: "purchase", label: "Purchase", hint: "Wants to buy" },
-    { id: "after_sale", label: "After Sale", hint: "Already bought" },
-  ];
-  return (
-    <div
-      role="radiogroup"
-      aria-label="Enquiry type"
-      className={cx("grid gap-1.5", size === "lg" ? "grid-cols-2" : "grid-cols-2")}
-    >
-      {options.map((o) => {
-        const on = value === o.id;
-        return (
-          <button
-            key={o.id}
-            type="button"
-            role="radio"
-            aria-checked={on}
-            onClick={() => onChange(o.id)}
-            className={cx(
-              "rounded-md border text-left transition-colors",
-              size === "lg" ? "px-3 py-2" : "px-2.5 py-1.5",
-              on
-                ? "border-accent bg-accent-soft text-accent shadow-card"
-                : "border-line-2 bg-surface text-ink-2 hover:border-ink-3 hover:text-ink",
-            )}
-          >
-            <span
-              className={cx(
-                "block font-medium",
-                size === "lg" ? "text-[13.5px]" : "text-[12.5px]",
-              )}
-            >
-              {o.label}
-            </span>
-            <span className="block text-[11px] text-ink-3">{o.hint}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function Labelled({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className={cx("flex flex-col gap-1")}>
-      <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-        {label}
-      </span>
-      {children}
-    </label>
   );
 }

@@ -598,7 +598,6 @@ export function CallLogPanel({
           studentName={studentName}
           setStudentName={setStudentName}
           isPurchase={isPurchase}
-          toAfterSale={toAfterSale}
           onType={(next) => {
             setToAfterSale(next);
             setOutcome("");
@@ -1087,7 +1086,6 @@ function FirstCallFields({
   studentName,
   setStudentName,
   isPurchase,
-  toAfterSale,
   onType,
   defCourse,
   setDefCourse,
@@ -1127,7 +1125,6 @@ function FirstCallFields({
   studentName: string;
   setStudentName: (v: string) => void;
   isPurchase: boolean;
-  toAfterSale: boolean;
   onType: (afterSale: boolean) => void;
   defCourse: string;
   setDefCourse: (v: string) => void;
@@ -1181,10 +1178,16 @@ function FirstCallFields({
       </FirstCallField>
 
       <FirstCallField label="Type">
+        {/* §30.2. What this enquiry *is*, not what the after-sale switch has
+            been flipped to. An enquiry created as after-sale opened this form
+            with Purchase lit and greyed out — the switch starts false and the
+            control was reading it — so the first thing a ticket call showed
+            was the wrong word for what it was. asAfterSale is the enquiry's
+            own type or the switch, which is the question being asked. */}
         <div className="grid grid-cols-2 gap-1.5">
           {[
-            { on: !toAfterSale, label: "Purchase", next: false },
-            { on: toAfterSale, label: "After Sale", next: true },
+            { on: !asAfterSale, label: "Purchase", next: false },
+            { on: asAfterSale, label: "After Sale", next: true },
           ].map((o) => (
             <button
               key={o.label}

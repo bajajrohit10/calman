@@ -68,6 +68,12 @@ export type MyDayRow = {
    * follow_up_slots_used is where the lead is *now* and moves under them.
    */
   slots_at_open: number;
+  /**
+   * Where this uncalled assignment was carried to (§30.6), or null. The day it
+   * was assigned to keeps the row — Tuesday really did have this work on it —
+   * and this says the work has moved on, so it stops counting as not called.
+   */
+  carried_to: string | null;
 };
 
 /** A ticket, plus the one thing the Tickets screen does not need to know. */

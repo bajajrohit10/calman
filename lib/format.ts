@@ -65,6 +65,19 @@ export function istDatePlus(days: number): string {
 }
 
 /** The next Monday strictly after today, in IST. */
+/**
+ * The calendar day after a plain YYYY-MM-DD date.
+ *
+ * Dates in this app are days, not instants, so this is arithmetic on the
+ * string's own calendar and not on a timezone: adding a day to "2026-09-14"
+ * must give "2026-09-15" wherever the browser thinks it is.
+ */
+export function dayAfter(date: string): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 export function istNextMonday(): string {
   const parts = istToday().split("-").map(Number);
   const d = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));

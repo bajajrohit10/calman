@@ -27,7 +27,7 @@ import {
   offerStatusLabel,
   offerStatusOf,
 } from "@/lib/enquiry-labels";
-import { formatDate, formatTime } from "@/lib/format";
+import { formatDate, formatTime, istToday } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
 import type { MyDayData, MyDayRow, MyDayTicket } from "@/lib/my-day";
 import {
@@ -43,6 +43,8 @@ import type { RecommendedRow } from "@/lib/recommended";
 
 import { dismissOverdue } from "../assign/actions";
 import { refreshMyDay } from "./actions";
+import { carryForward } from "./team-actions";
+import { Dialog } from "./dialog";
 
 /**
  * The day, as five boxes.
@@ -69,6 +71,9 @@ const byCallTimeDesc = <T extends { last_call_at: string | null }>(a: T, b: T) =
 export function MyDay({
   initial,
   date,
+  initialTab,
+  initialView,
+  nextWorkingDay,
   isAdmin,
   counsellorName,
   counsellorId,
@@ -79,6 +84,11 @@ export function MyDay({
 }: {
   initial: MyDayData;
   date: string;
+  /** §30.4: a cell of the team grid links at a tab, so the URL names one. */
+  initialTab: MyDayTabKey;
+  initialView: "pending" | "done";
+  /** §30.6's default target for carrying uncalled work forward. */
+  nextWorkingDay: string | null;
   isAdmin: boolean;
   counsellorName: string | null;
   counsellorId: string;
@@ -93,8 +103,8 @@ export function MyDay({
   // counts without the route re-rendering and losing the open tab (see
   // refreshMyDay). `initial` is the server's copy and seeds it.
   const [data, setData] = useState<MyDayData>(initial);
-  const [tab, setTab] = useState<TabKey>("new");
-  const [view, setView] = useState<"pending" | "done">("pending");
+  const [tab, setTab] = useState<TabKey>(initialTab);
+  const [view, setView] = useState<"pending" | "done">(initialView);
   const [open, setOpen] = useState<PanelPayload | null>(null);
   const [saveNote, setSaveNote] = useState<string | null>(null);
   // §27.2. Where the list was scrolled when a first call took the screen, so
@@ -112,6 +122,10 @@ export function MyDay({
   const [subTab, setSubTab] = useState<MyDaySubTab>(ALL_SUB_TAB);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  /** §30.6. Which category is being carried forward, once somebody asks. */
+  const [carry, setCarry] = useState<{ tab: TabKey | "all"; count: number } | null>(
+    null,
+  );
 
   // One button per visible row, in render order, so focus can move to the next
   // row after a call is logged without waiting for the list to come back.
@@ -151,6 +165,26 @@ export function MyDay({
   }, [data, offerStatuses]);
 
   const current = groups[tab];
+
+  /**
+   * §30.6. What this day still owes, per category — and only for a day that
+   * has already been: today's pending is not "not called", it is "not called
+   * yet". A row already carried to another date is not owed either; the work
+   * has moved, and offering to move it again would double it.
+   */
+  const isPast = date < istToday();
+  const notCalled = useMemo(() => {
+    if (!isPast) return { total: 0, perTab: [] as { key: TabKey; label: string; count: number }[] };
+    const perTab = TABS.filter((t) => t.key !== "tickets")
+      .map((t) => ({
+        key: t.key,
+        label: t.label,
+        count: groups[t.key].rows.filter((r) => !r.called_today && !r.carried_to)
+          .length,
+      }))
+      .filter((c) => c.count > 0);
+    return { total: perTab.reduce((n, c) => n + c.count, 0), perTab };
+  }, [isPast, groups]);
 
   /**
    * The sub-tabs for the tab in view, each counted over that tab's own rows
@@ -341,6 +375,14 @@ export function MyDay({
                       Re-enquired
                     </Badge>
                   ) : null}
+                  {/* §30.6. It was never called on this day and the work has
+                      moved on. The row stays because the day really did have
+                      it — deleting it would rewrite what happened. */}
+                  {r.carried_to ? (
+                    <Badge tone="neutral">
+                      Carried to {formatDate(r.carried_to)}
+                    </Badge>
+                  ) : null}
                   {r.status !== "open" ? (
                     <Badge
                       dot
@@ -453,6 +495,35 @@ export function MyDay({
             Dismiss
           </button>
         </p>
+      ) : null}
+
+      {/* §30.6. A past day that still has uncalled work says so, per category,
+          and offers to move it onto a day somebody will actually work. */}
+      {notCalled.total > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-warn/40 bg-warn-soft/40 px-3 py-2">
+          <span className="text-[12.5px] font-medium text-warn">
+            Not called on {formatDate(date)}
+          </span>
+          {notCalled.perTab.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => setCarry({ tab: c.key, count: c.count })}
+              className="rounded-full border border-warn/40 bg-surface px-2 py-[2px] text-[11.5px] text-ink-2 hover:border-warn hover:text-warn"
+              title={`Carry ${c.count} uncalled ${c.label} forward`}
+            >
+              {c.label} <span className="font-semibold tabular-nums">{c.count}</span>
+            </button>
+          ))}
+          <Button
+            size="sm"
+            variant="secondary"
+            className="ml-auto"
+            onClick={() => setCarry({ tab: "all", count: notCalled.total })}
+          >
+            Carry forward all ({notCalled.total})
+          </Button>
+        </div>
       ) : null}
 
       {/* ---- the five boxes ---- */}
@@ -694,7 +765,139 @@ export function MyDay({
 
         {/* §28.3: no side drawer. Every call opens in the window above. */}
       </div>
+
+      {carry ? (
+        <CarryForwardDialog
+          date={date}
+          counsellorId={counsellorId}
+          tab={carry.tab}
+          count={carry.count}
+          defaultDate={nextWorkingDay}
+          onClose={() => setCarry(null)}
+          onDone={(message) => {
+            setCarry(null);
+            setSaveNote(message);
+            // The day is client state, so the rows that have just been carried
+            // have to be re-read for their marks to appear.
+            start(async () => {
+              const next = await refreshMyDay({ date, counsellorId });
+              if (!next.error) setData(next);
+            });
+          }}
+          onError={setLoadError}
+        />
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * Move a past day's uncalled calls onto another date (§30.6).
+ *
+ * The counsellor keeps the work — this is the day moving, not the owner — and
+ * the bucket and label go with it, so a campaign called "Evening call backs"
+ * is still that tomorrow. The default is the next working day because that is
+ * the answer nine times in ten; it is a date field because the tenth time
+ * somebody wants it today.
+ */
+function CarryForwardDialog({
+  date,
+  counsellorId,
+  tab,
+  count,
+  defaultDate,
+  onClose,
+  onDone,
+  onError,
+}: {
+  date: string;
+  counsellorId: string;
+  tab: TabKey | "all";
+  count: number;
+  defaultDate: string | null;
+  onClose: () => void;
+  onDone: (message: string) => void;
+  onError: (message: string) => void;
+}) {
+  const [toDate, setToDate] = useState(defaultDate ?? istToday());
+  const [pending, start] = useTransition();
+  // A category already names itself in the plural — "Assigned Calls" — so only
+  // the generic word takes an s.
+  const what =
+    tab === "all"
+      ? `call${count === 1 ? "" : "s"}`
+      : (TABS.find((t) => t.key === tab)?.label ?? "calls");
+
+  return (
+    <Dialog title={`Carry forward ${count} uncalled ${what}`} onClose={onClose}>
+      <div className="flex flex-col gap-3 px-4 py-3">
+        <label className="flex w-[200px] flex-col gap-1">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+            To
+          </span>
+          <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+        </label>
+        <div className="flex flex-wrap gap-1.5">
+          {[
+            { label: "Next working day", value: defaultDate },
+            { label: "Today", value: istToday() },
+          ]
+            .filter((c): c is { label: string; value: string } => Boolean(c.value))
+            .map((c) => (
+              <button
+                key={c.label}
+                type="button"
+                onClick={() => setToDate(c.value)}
+                className={cx(
+                  "rounded-full border px-2.5 py-[3px] text-[11.5px]",
+                  toDate === c.value
+                    ? "border-accent bg-accent-soft text-accent"
+                    : "border-line-2 bg-surface text-ink-2 hover:border-ink-3",
+                )}
+              >
+                {c.label}
+              </button>
+            ))}
+        </div>
+        <p className="text-[11.5px] leading-relaxed text-ink-3">
+          {formatDate(date)} keeps its record — the calls stay on it, marked
+          carried — and anything already assigned on {formatDate(toDate)} is
+          left alone rather than doubled.
+        </p>
+      </div>
+      <div className="flex items-center gap-2 border-t border-line bg-sunk px-4 py-2.5">
+        <Button
+          variant="primary"
+          disabled={pending}
+          onClick={() =>
+            start(async () => {
+              const res = await carryForward({
+                date,
+                counsellorId,
+                toDate,
+                tab,
+                enquiryIds: null,
+              });
+              if (res.error) {
+                onError(res.error);
+                return;
+              }
+              onDone(
+                `Carried ${res.moved} call${res.moved === 1 ? "" : "s"} forward to ${formatDate(toDate)}` +
+                  (res.skipped
+                    ? `. ${res.skipped} ${res.skipped === 1 ? "was" : "were"} already assigned on that date.`
+                    : "."),
+              );
+            })
+          }
+        >
+          {pending ? "Carrying…" : "Carry forward"}
+        </Button>
+        <Button variant="ghost" onClick={onClose}>
+          Cancel
+        </Button>
+      </div>
+    </Dialog>
   );
 }
 
