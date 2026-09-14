@@ -61,7 +61,22 @@ const STATUS_OPTIONS = Object.entries(ENQUIRY_STATUS_LABELS).map(([id, name]) =>
  * (§17.2). Each is just a URL, so it can be shared, bookmarked and backed out
  * of; nothing about them is special to this component.
  */
-export const PRESETS: { id: string; label: string; query: (date: string) => string }[] = [
+export /**
+ * The bucket, as a colour on the row's left edge (§36.3).
+ *
+ * Never the only carrier of the meaning: every row also has the word in its
+ * title and in a screen-reader-only span, and the legend under the table names
+ * each colour. Colour is the fast path, not the whole path.
+ */
+const BUCKET_EDGE: Record<AssignmentBucket, string> = {
+  follow_up: "var(--info)",
+  call_back: "var(--warn)",
+  fresh: "var(--accent)",
+  offer: "var(--ok)",
+  campaign: "var(--ink-3)",
+};
+
+const PRESETS: { id: string; label: string; query: (date: string) => string }[] = [
   {
     id: "evening",
     label: "Evening call backs",
@@ -243,13 +258,25 @@ export function AssignDesk({
   // What is set but out of sight. Read from the query string rather than from
   // the parsed filters so a chip appears for anything the URL carries, even a
   // parameter this component does not otherwise render.
+  /**
+   * The filters that are on, each with the query string that would turn it
+   * off (§36.3). Computing the "without" here rather than in the markup keeps
+   * the removal honest: it is this screen's own search string minus one key,
+   * so a chip can never drop a filter it did not name.
+   */
   const activeChips = (() => {
     const params = new URLSearchParams(search);
-    const chips: string[] = [];
+    const chips: { label: string; without: string }[] = [];
     for (const [key, label] of Object.entries(CHIP_LABELS)) {
       const values = params.getAll(key).filter(Boolean);
       if (!values.length) continue;
-      chips.push(values.length > 1 ? `${label} ×${values.length}` : label);
+      const without = new URLSearchParams(search);
+      without.delete(key);
+      without.delete("page");
+      chips.push({
+        label: values.length > 1 ? `${label} ×${values.length}` : label,
+        without: without.toString(),
+      });
     }
     return chips;
   })();
@@ -339,21 +366,11 @@ export function AssignDesk({
             <p className="mt-1 text-[11.5px] text-ink-3">{c.label}</p>
           </div>
         ))}
-        <p className="ml-auto pb-1 text-[11.5px] text-ink-3">
-          For {formatDate(selected.date || date)}, under the filters below.
-        </p>
-      </div>
-
-    <div className="flex flex-col gap-4 xl:flex-row">
-      {/* ------------------------------- left ------------------------------- */}
-      <div className="min-w-0 flex-1 flex flex-col gap-3">
-        {/* One-click starting points (§17.2). They are plain links, not
-            buttons: a preset is a filter state, so it should be shareable,
-            bookmarkable and reachable with the back button like any other. */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-            Presets
-          </span>
+        {/* §36.3. The ways in, beside the state of the day: a preset is where
+            most mornings start, and it was three inches below the numbers that
+            prompt it. Plain links, so a preset stays shareable, bookmarkable
+            and reachable with the back button. */}
+        <div className="ml-auto flex max-w-[640px] flex-wrap items-center justify-end gap-1.5 pb-1">
           {PRESETS.map((preset) => (
             <Link
               key={preset.label}
@@ -363,8 +380,15 @@ export function AssignDesk({
               {preset.label}
             </Link>
           ))}
+          <span className="w-full text-right text-[11px] text-ink-3">
+            For {formatDate(selected.date || date)}, under the filters below.
+          </span>
         </div>
+      </div>
 
+    <div className="flex flex-col gap-4 xl:flex-row">
+      {/* ------------------------------- left ------------------------------- */}
+      <div className="min-w-0 flex-1 flex flex-col gap-3 pb-16">
         <form method="GET" className="rounded-lg border border-line bg-surface shadow-card">
           {/* Always visible: the two questions the desk is actually about. */}
           <div className="flex flex-wrap items-end gap-2 p-2.5">
@@ -389,7 +413,7 @@ export function AssignDesk({
                 scroll={false}
                 className="inline-flex h-[26px] items-center rounded-md border border-line-2 bg-surface px-2.5 text-[12.5px] font-medium text-ink-2 hover:border-ink-3 hover:text-ink"
               >
-                More filters {showMore ? "−" : "+"}
+                Filters {showMore ? "−" : "+"}
               </Link>
               {/* §34. Beside More filters, because it is the other way in to
                   the same set — and the one that does not need you to know
@@ -401,21 +425,28 @@ export function AssignDesk({
               >
                 Smart assign
               </button>
-              {/* What is hidden, when it is hidden. A filter you cannot see is
-                  a filter you forget you set. */}
-              {!showMore && activeChips.length
+              {/* §36.3. The chips are the filter card now: what is set, always
+                  visible, each one removable where it is read. They used to
+                  appear only while the panel was shut, which meant the moment
+                  you opened it to change something you lost the summary of
+                  what you had already done. */}
+              {activeChips.length
                 ? activeChips.map((chip) => (
-                    <span
-                      key={chip}
-                      className="inline-flex h-[20px] items-center rounded-full border border-accent/40 bg-accent-soft px-2 text-[11px] text-accent"
+                    <Link
+                      key={chip.label}
+                      href={`?${chip.without}`}
+                      scroll={false}
+                      title={`Remove ${chip.label}`}
+                      className="inline-flex h-[20px] items-center gap-1 rounded-full border border-accent/40 bg-accent-soft px-2 text-[11px] text-accent hover:border-accent"
                     >
-                      {chip}
-                    </span>
+                      {chip.label}
+                      <span aria-hidden className="opacity-60">×</span>
+                      <span className="sr-only">— remove this filter</span>
+                    </Link>
                   ))
-                : null}
-              {!showMore && !activeChips.length ? (
-                <span className="text-[11.5px] text-ink-3">No other filters set</span>
-              ) : null}
+                : (
+                  <span className="text-[11.5px] text-ink-3">No other filters set</span>
+                )}
             </span>
           </div>
 
@@ -552,7 +583,7 @@ export function AssignDesk({
           <table className="w-full min-w-[900px] border-collapse text-[12.5px]">
             <thead>
               <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-                <th className="w-8 px-2 py-[7px]">
+                <th className="w-8 px-2 py-[6px]">
                   <input
                     type="checkbox"
                     aria-label="Select all on this page"
@@ -566,20 +597,30 @@ export function AssignDesk({
                     }
                   />
                 </th>
-                <th className="px-2 py-[7px]">Bucket</th>
-                <th className="px-2 py-[7px]">Student</th>
-                <th className="px-2 py-[7px]">Imp</th>
-                <th className="px-2 py-[7px]">Teachers</th>
-                <th className="px-2 py-[7px]">Term</th>
-                <th className="px-2 py-[7px]">Follow-up</th>
-                <th className="px-2 py-[7px]">Slots</th>
-                <th className="px-2 py-[7px]">Assigned to</th>
+                <th className="px-2 py-[6px]">Student</th>
+                <th className="w-[34px] px-1 py-[6px]">Imp</th>
+                <th className="px-2 py-[6px]">Interests</th>
+                <th className="w-[80px] px-2 py-[6px]">Term</th>
+                <th className="w-[95px] px-2 py-[6px]">Follow-up</th>
+                <th className="w-[60px] px-2 py-[6px]">Slots</th>
+                <th className="px-2 py-[6px]">Assigned to</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
                 <tr
                   key={r.enquiry_id}
+                  // §36.3. The bucket is the row's left edge rather than a
+                  // column of pills — it recovers the width and reads as a
+                  // shape down the page. Colour is never the only carrier:
+                  // the title and the screen-reader label below both say the
+                  // word, and the legend under the table names every colour.
+                  title={BUCKET_LABELS[r.bucket]}
+                  style={
+                    picked.has(r.enquiry_id)
+                      ? undefined
+                      : { boxShadow: `inset 3px 0 0 ${BUCKET_EDGE[r.bucket]}` }
+                  }
                   className={cx(
                     "border-b border-line last:border-b-0",
                     // The picked row keeps its own fill and gains an edge, so a long
@@ -596,30 +637,10 @@ export function AssignDesk({
                       onChange={() => toggle(r)}
                     />
                   </td>
-                  <td className="px-2 py-[5px]">
-                    <span className="flex items-center gap-1.5">
-                      <Badge dot tone={r.bucket === "call_back" ? "warn" : "info"}>
-                        {BUCKET_LABELS[r.bucket]}
-                      </Badge>
-                      {/* Which offer put it here. Two offers, two names, one
-                          row — the lead is called once. */}
-                      {r.offer_names?.length ? (
-                        <span
-                          className="truncate text-[11.5px] text-ink-2"
-                          title={r.offer_names.join(" · ")}
-                        >
-                          {r.offer_names.join(" · ")}
-                        </span>
-                      ) : null}
-                      {offerStatusLabel(r.status, r.lost_reason) ? (
-                        <Badge tone="warn">
-                          {offerStatusLabel(r.status, r.lost_reason)}
-                        </Badge>
-                      ) : null}
-                      {r.is_overdue ? <Badge tone="danger">Overdue</Badge> : null}
-                    </span>
-                  </td>
-                  <td className="px-2 py-[5px]">
+                  <td className="px-2 py-[4px] whitespace-nowrap">
+                    {/* The bucket in words, for anyone the colour does not
+                        reach. Read out with the row, invisible on screen. */}
+                    <span className="sr-only">{BUCKET_LABELS[r.bucket]}. </span>
                     <StudentLink
                       mobile={r.mobile}
                       className="text-ink underline-offset-2 hover:underline"
@@ -634,37 +655,94 @@ export function AssignDesk({
                     >
                       {formatMobile(r.mobile)}
                     </StudentLink>
+                    {/* The flags that used to sit in the bucket column: which
+                        offer put this here, and whether it is late. */}
+                    {r.offer_names?.length ||
+                    offerStatusLabel(r.status, r.lost_reason) ||
+                    r.is_overdue ? (
+                      <span className="ml-1.5 inline-flex items-center gap-1.5 align-middle">
+                        {r.offer_names?.length ? (
+                          <span
+                            className="max-w-[160px] truncate text-[11px] text-ink-2"
+                            title={r.offer_names.join(" · ")}
+                          >
+                            {r.offer_names.join(" · ")}
+                          </span>
+                        ) : null}
+                        {offerStatusLabel(r.status, r.lost_reason) ? (
+                          <Badge tone="warn">
+                            {offerStatusLabel(r.status, r.lost_reason)}
+                          </Badge>
+                        ) : null}
+                        {r.is_overdue ? <Badge tone="danger">Overdue</Badge> : null}
+                      </span>
+                    ) : null}
                   </td>
-                  <td className="px-2 py-[5px]">
+                  <td className="px-1 py-[4px]">
                     {r.importance ? <ImportanceMark grade={r.importance} /> : "—"}
                   </td>
-                  <td className="px-2 py-[5px] text-ink-2">
-                    {r.teacher_names?.join(", ") || "—"}
+                  <td className="px-2 py-[4px]">
+                    {/* One chip per teacher rather than a comma list: at this
+                        density the commas ran together and a lead with three
+                        teachers read as one long name. */}
+                    {r.teacher_names?.length ? (
+                      <span className="flex flex-wrap gap-1">
+                        {r.teacher_names.map((t) => (
+                          <span
+                            key={t}
+                            className="rounded-full border border-line-2 bg-surface-2 px-1.5 py-[1px] text-[11px] whitespace-nowrap text-ink-2"
+                          >
+                            {t}
+                          </span>
+                        ))}
+                      </span>
+                    ) : (
+                      <span className="text-[11.5px] italic text-ink-3">no interests</span>
+                    )}
                   </td>
-                  <td className="px-2 py-[5px] text-ink-2">{r.term_name ?? "—"}</td>
+                  <td className="px-2 py-[4px] whitespace-nowrap text-ink-2">
+                    {r.term_name ?? "—"}
+                  </td>
                   <td
                     className={cx(
-                      "px-2 py-[5px] tabular-nums",
+                      "px-2 py-[4px] whitespace-nowrap tabular-nums",
                       r.is_overdue ? "text-danger" : "text-ink-2",
                     )}
                   >
                     {r.next_follow_up_date ? formatDate(r.next_follow_up_date) : "—"}
                   </td>
-                  <td className="px-2 py-[5px] tabular-nums text-ink-2">
+                  <td className="px-2 py-[4px] tabular-nums text-ink-2">
                     {r.follow_up_slots_used}/3
                   </td>
-                  <td className="px-2 py-[5px] text-ink-2">{r.assigned_to_name ?? "—"}</td>
+                  <td className="px-2 py-[4px] whitespace-nowrap text-ink-2">
+                    {r.assigned_to_name ?? "—"}
+                  </td>
                 </tr>
               ))}
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-3 py-8 text-center text-ink-3">
+                  <td colSpan={8} className="px-3 py-8 text-center text-ink-3">
                     Nothing due on this date with these filters.
                   </td>
                 </tr>
               ) : null}
             </tbody>
           </table>
+
+          {/* §36.3. The legend is what makes the edge colour readable at all:
+              a colour with no key is decoration. */}
+          <div className="flex flex-wrap items-center gap-3 border-t border-line px-3 py-1.5 text-[11px] text-ink-3">
+            {(Object.keys(BUCKET_EDGE) as AssignmentBucket[]).map((k) => (
+              <span key={k} className="inline-flex items-center gap-1">
+                <span
+                  aria-hidden
+                  className="inline-block h-[10px] w-[3px] rounded-sm"
+                  style={{ background: BUCKET_EDGE[k] }}
+                />
+                {BUCKET_LABELS[k]}
+              </span>
+            ))}
+          </div>
         </div>
 
         {total > pageSize ? (
@@ -680,34 +758,59 @@ export function AssignDesk({
               Counsellors · {formatDate(date)}
             </h2>
             <p className="text-[11px] text-ink-3">
-              &ldquo;Last called&rdquo; counts the list on screen; pending and done
-              are this date&rsquo;s assignments.
+              Still to call over the day&rsquo;s assignments. &ldquo;here&rdquo;
+              counts the list on screen whose last call was theirs.
             </p>
           </header>
-          <ul className="px-3 py-2 text-[12.5px]">
-            {roster.map((r) => (
-              <li key={r.id} className="flex items-center justify-between gap-2 py-1">
-                <span className="truncate text-ink-2">{r.name}</span>
-                <span className="shrink-0 whitespace-nowrap text-[11.5px] tabular-nums text-ink-3">
-                  last called{" "}
-                  <span className={cx("font-medium", r.lastCalled ? "text-ink" : "")}>
-                    {r.lastCalled}
-                  </span>{" "}
-                  · pending{" "}
-                  <span className={cx("font-medium", r.pending ? "text-ink" : "")}>
-                    {r.pending}
-                  </span>{" "}
-                  · done{" "}
-                  <span className={cx("font-medium", r.done ? "text-ink" : "")}>
-                    {r.done}
-                  </span>
-                </span>
-              </li>
-            ))}
+          {/* §36.3. A bar each, because "who has room" is the question and it
+              was three numbers to subtract. Accent is still to call, green is
+              done, and the bar is the whole day — so somebody with nothing
+              left reads as full green without reading anything. The figures
+              stay beside it: the bar is for the glance, the numbers for the
+              decision. */}
+          <ul className="flex flex-col gap-2 px-3 py-2.5 text-[12.5px]">
+            {roster.map((r) => {
+              const day = r.pending + r.done;
+              return (
+                <li key={r.id}>
+                  <div className="flex items-baseline gap-2">
+                    <span className="min-w-0 flex-1 truncate text-ink-2">{r.name}</span>
+                    <span className="shrink-0 whitespace-nowrap text-[11.5px] tabular-nums text-ink-3">
+                      <span className={cx("font-medium", r.pending ? "text-ink" : "")}>
+                        {r.pending}
+                      </span>
+                      <span>/{day}</span>
+                      {r.lastCalled ? (
+                        <span className="ml-1.5">· {r.lastCalled} here</span>
+                      ) : null}
+                    </span>
+                  </div>
+                  <div
+                    className="mt-1 flex h-[5px] overflow-hidden rounded-full bg-surface-2"
+                    role="img"
+                    aria-label={`${r.name}: ${r.pending} still to call, ${r.done} done`}
+                  >
+                    <span
+                      className="bg-accent"
+                      style={{ width: `${day ? (r.pending / day) * 100 : 0}%` }}
+                    />
+                    <span
+                      className="bg-ok/60"
+                      style={{ width: `${day ? (r.done / day) * 100 : 0}%` }}
+                    />
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </section>
 
-        <section className="rounded-lg border border-accent/40 bg-surface px-3 py-3">
+        {/* §36.3. The assign panel became a sticky bar at the foot of the
+            screen, so it is where the hand already is after ticking rows
+            rather than across the page in the rail. It is rendered here, in
+            the aside, only as a fallback for the narrow layout where the rail
+            stacks under the table; the bar itself is below. */}
+        <section className="hidden rounded-lg border border-accent/40 bg-surface px-3 py-3">
           <h2 className="text-[13px] font-semibold text-ink">
             Assign {toAssign.length} selected
           </h2>
@@ -823,6 +926,75 @@ export function AssignDesk({
         ) : null}
       </aside>
       </div>
+
+      {/* §36.3. Only when there is something to act on, and where the hand
+          already is. The list above carries pb-16 so the bar never covers the
+          last row. */}
+      {toAssign.length ? (
+        <div className="sticky bottom-3 z-20 mx-auto flex w-full max-w-[820px] flex-wrap items-center gap-2 rounded-lg border border-accent/40 bg-surface px-3 py-2 shadow-panel">
+          <span className="text-[13px] font-semibold text-ink">
+            {toAssign.length} selected
+          </span>
+          <Select
+            aria-label="Assign to"
+            className="w-[170px]"
+            value={counsellor}
+            onChange={(e) => setCounsellor(e.target.value)}
+          >
+            <option value="">Choose a counsellor…</option>
+            {roster.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </Select>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={pending || !counsellor}
+            onClick={() =>
+              run(() =>
+                assignEnquiries({
+                  rows: toAssign,
+                  counsellorId: counsellor,
+                  date,
+                  label: includeNotDue ? label.trim() || null : null,
+                }),
+              )
+            }
+          >
+            Assign {toAssign.length}
+          </Button>
+          {includeNotDue ? (
+            <Input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="Campaign label"
+              className="w-[190px]"
+            />
+          ) : null}
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={pending || !ids.length}
+            onClick={() => run(() => unassignEnquiries({ enquiryIds: ids, date }))}
+          >
+            Unassign
+          </Button>
+          <span className="text-[11px] text-ink-3">
+            {includeNotDue
+              ? `As ${BUCKET_LABELS.campaign} for ${formatDate(date)}`
+              : `Each row keeps its bucket · ${formatDate(date)}`}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPicked(new Map())}
+            className="ml-auto text-[12px] text-ink-3 underline-offset-2 hover:text-ink hover:underline"
+          >
+            Clear
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

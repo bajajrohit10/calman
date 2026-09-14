@@ -22,27 +22,11 @@ export type FacetMap = {
 };
 
 /**
- * The facets that hang off enquiry_items, and so carry two numbers. Counted
- * over OPEN lines only — a won or lost interest is not somebody who still
- * needs calling.
- *
- * Institute is one of these: it is reached through the line's teacher, so
- * "3 numbers · 4 items" means the same thing there as it does for a teacher.
- */
-/**
  * The option id meaning "nothing recorded for this field" (Brief 17). Kept
  * here as well as in enquiry-labels so this module stays importable from both
  * sides without pulling the label table in.
  */
 export const NO_DETAIL_ID = "__none__";
-
-const ITEM_FACETS = new Set([
-  "teacher",
-  "course",
-  "subject",
-  "content",
-  "institute",
-]);
 
 export function buildFacetMap(rows: FacetRow[]): FacetMap {
   const byFacet: Record<string, Record<string, FacetCounts>> = {};
@@ -63,26 +47,25 @@ export function buildFacetMap(rows: FacetRow[]): FacetMap {
   return { total, byFacet };
 }
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-
 /**
- * "Bhanwar Borana (12 numbers · 18 items)", or "AC (37)" for the facets that
- * are a property of the enquiry rather than of its interests.
+ * "Bhanwar Borana (12)" — the option, and how many leads are behind it.
+ *
+ * It used to read "12 numbers · 18 items" on the facets that hang off interest
+ * lines. Two figures where one was wanted: the question at a filter is always
+ * "how much work is this", and work is leads. The second number was also the
+ * larger one, so a teacher with several lines per lead read as far more than
+ * the list would show — which is how a count meant to help became a count to
+ * be second-guessed (§36.3).
+ *
+ * The items figure is still counted and still in the facet map; nothing here
+ * stops a screen showing it where it genuinely answers the question.
  */
 export function countLabel(
   name: string,
   facet: string,
   counts: FacetCounts | undefined,
-  id?: string,
 ): string {
-  const c = counts ?? { numbers: 0, items: 0 };
-  // "No detail" counts leads, never items — its whole meaning is that there
-  // are no items — so it takes the plain form even on an item facet.
-  if (id === NO_DETAIL_ID) return `${name} (${c.numbers})`;
-  if (ITEM_FACETS.has(facet)) {
-    return `${name} (${plural(c.numbers, "number", "numbers")} · ${plural(c.items, "item", "items")})`;
-  }
-  return `${name} (${c.numbers})`;
+  return `${name} (${counts?.numbers ?? 0})`;
 }
 
 /**

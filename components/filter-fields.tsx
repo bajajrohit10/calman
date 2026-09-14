@@ -83,7 +83,7 @@ export function FacetSelect({
             value={o.id}
             className={empty ? "text-ink-3" : undefined}
           >
-            {facets ? countLabel(o.name, facet, counts?.[o.id], o.id) : o.name}
+            {facets ? countLabel(o.name, facet, counts?.[o.id]) : o.name}
           </option>
         );
       })}
