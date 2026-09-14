@@ -4,7 +4,7 @@
 import { StudentLink } from "@/components/student-link";
 import { useConfirmLeave } from "@/components/unsaved-guard";
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import { loadPanelEnquiry, type PanelPayload } from "@/components/call-log/actions";
 import { CallLogPanel, type PanelMasters } from "@/components/call-log/panel";
@@ -86,6 +86,8 @@ export function MyDay({
   initialTab,
   initialView,
   initialSubTab,
+  initialTicketTab,
+  initialTicketOwner,
   nextWorkingDay,
   viewerId,
   isAdmin,
@@ -103,6 +105,9 @@ export function MyDay({
   initialView: "pending" | "done";
   /** §33.1: the sub-tab survives a date or counsellor change too. */
   initialSubTab: MyDaySubTab;
+  /** §35.2: and so does the ticket state, so Back lands where you left. */
+  initialTicketTab: TicketTabKey;
+  initialTicketOwner: TicketOwner;
   /** §30.6's default target for carrying uncalled work forward. */
   nextWorkingDay: string | null;
   /** §33.7: who "Mine" means on the shared ticket queue. */
@@ -145,8 +150,8 @@ export function MyDay({
     null,
   );
   /** §33.3/§33.7: the Tickets tab has its own state and its own owner. */
-  const [ticketTab, setTicketTab] = useState<TicketTabKey>("open");
-  const [ticketOwner, setTicketOwner] = useState<TicketOwner>(TICKET_OWNER_ALL);
+  const [ticketTab, setTicketTab] = useState<TicketTabKey>(initialTicketTab);
+  const [ticketOwner, setTicketOwner] = useState<TicketOwner>(initialTicketOwner);
 
   // One button per visible row, in render order, so focus can move to the next
   // row after a call is logged without waiting for the list to come back.
@@ -396,6 +401,36 @@ export function MyDay({
   }
 
 
+  /**
+   * §35.2. Keep the URL saying which tab is open.
+   *
+   * The tab is client state — it has to be, because logging a call must not
+   * re-render the route and lose the counsellor's place — so the address bar
+   * knew nothing about it. That was invisible until the mobile number became
+   * a link: clicking it and pressing Back landed on New Calls, whatever tab
+   * you had been working.
+   *
+   * Through the router rather than history.replaceState, which was the first
+   * attempt and does not work: it changes the address bar but not the entry
+   * Next has cached for this URL, so Back restores the render from before the
+   * tab moved and the screen lands on New Calls again. router.replace keeps
+   * the two in step. It is a replace, not a push, because switching tabs is
+   * not a navigation — making it one would mean six presses of Back to leave
+   * the screen.
+   */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    params.set("tab", tab);
+    params.set("view", view);
+    params.set("sub", formatSubTab(subTab));
+    if (tab === "tickets") {
+      params.set("ticket", ticketTab);
+      params.set("owner", ticketOwner);
+    }
+    if (params.toString() === window.location.search.replace(/^\?/, "")) return;
+    router.replace(`${window.location.pathname}?${params}`, { scroll: false });
+  }, [tab, view, subTab, ticketTab, ticketOwner, router]);
+
   /** One row of the day. Shared by the flat list and the labelled groups. */
   function rowFor(r: MyDayRow, i: number) {
     return (
@@ -413,9 +448,16 @@ export function MyDay({
                   >
                     {r.student_name || "No name"}
                   </StudentLink>
-                  <span className="text-[12.5px] tabular-nums text-ink-2">
+                  {/* §35.2. The number opens the history; the rest of the
+                      row opens the call window. Two things to do with a row,
+                      and the one you want is the one you click. */}
+                  <StudentLink
+                    mobile={r.mobile}
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-[12.5px] tabular-nums text-ink-2 underline-offset-2 hover:text-ink hover:underline"
+                  >
                     {formatMobile(r.mobile)}
-                  </span>
+                  </StudentLink>
                   {r.importance ? <ImportanceMark grade={r.importance} /> : null}
                   {r.is_overdue && !r.called_today ? (
                     <Badge tone="danger">Overdue</Badge>
@@ -1079,7 +1121,12 @@ function OverdueReport({
             >
               {r.student_name || "No name"}
             </StudentLink>
-            <span className="tabular-nums text-ink-3">{formatMobile(r.mobile)}</span>
+            <StudentLink
+              mobile={r.mobile}
+              className="tabular-nums text-ink-3 underline-offset-2 hover:text-ink hover:underline"
+            >
+              {formatMobile(r.mobile)}
+            </StudentLink>
             <span className="text-danger">due {formatDate(r.next_follow_up_date)}</span>
             <span className="text-ink-3">{r.assigned_to_name ?? "unassigned"}</span>
           </li>

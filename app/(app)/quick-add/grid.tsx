@@ -7,10 +7,10 @@ import { useUnsavedClaim } from "@/components/unsaved-guard";
 import {
   describeNumber,
   dismissQuestion,
+  ticketOnly,
   type DuplicateVerdict,
   type NumberStatus,
 } from "@/lib/duplicate-rules";
-import type { EnquiryType } from "@/lib/enquiry-labels";
 import { isValidMobile, normaliseMobile } from "@/lib/mobile";
 import { lookupNumbers } from "@/app/(app)/import/actions";
 
@@ -20,7 +20,6 @@ type Row = {
   key: string;
   mobile: string;
   name: string;
-  type: EnquiryType;
   sourceId: string;
   status: NumberStatus | null;
   /** Case 5 only: what the counsellor chose. */
@@ -37,8 +36,6 @@ const blank = (): Row => ({
   key: `r${++seq}`,
   mobile: "",
   name: "",
-  // Most calls are somebody wanting to buy, so that is what a blank row is.
-  type: "purchase",
   sourceId: "",
   status: null,
   decision: null,
@@ -80,11 +77,18 @@ export function QuickAddGrid({
 
   const filled = rows.filter((r) => r.mobile.trim());
   const invalid = filled.filter((r) => !isValidMobile(normaliseMobile(r.mobile)));
-  // §33.5. The type is part of the question: an after-sale row meets the
-  // ticket rules, a purchase row meets the purchase rules, and a number can be
-  // in both pipelines at once.
+  /**
+   * §35.1. The grid no longer asks what kind of enquiry this is, because the
+   * answer is not known until somebody has spoken to them — that is what the
+   * first-call form's Purchase/After Sale toggle and the call window's
+   * after-sale switch are for. So a row is a purchase lead unless the number
+   * already has an open ticket, in which case the arrival belongs to that
+   * conversation and the row joins it (§33.5, case 6).
+   */
   const verdictOf = (r: Row): DuplicateVerdict | null =>
-    r.status ? describeNumber(r.status, r.type) : null;
+    r.status
+      ? describeNumber(r.status, ticketOnly(r.status) ? "after_sale" : "purchase")
+      : null;
   const undecided = filled.filter((r) => {
     const v = verdictOf(r);
     return v?.needsDecision && !r.decision;
@@ -207,7 +211,6 @@ export function QuickAddGrid({
       filled.map((r) => ({
         mobile: r.mobile,
         name: r.name.trim() || null,
-        type: r.type,
         sourceId: r.sourceId || null,
         decision: r.decision,
       })),
@@ -261,9 +264,8 @@ export function QuickAddGrid({
             <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
               <th className="w-[40px] px-2 py-[7px] text-right">#</th>
               <th className="w-[150px] px-2 py-[7px]">Mobile</th>
-              <th className="w-[170px] px-2 py-[7px]">Name</th>
-              <th className="w-[125px] px-2 py-[7px]">Type</th>
-              <th className="w-[145px] px-2 py-[7px]">Source</th>
+              <th className="w-[200px] px-2 py-[7px]">Name</th>
+              <th className="w-[165px] px-2 py-[7px]">Source</th>
               <th className="px-2 py-[7px]">Status</th>
               <th className="w-[120px] px-2 py-[7px]">Action</th>
             </tr>
@@ -315,21 +317,6 @@ export function QuickAddGrid({
                       onChange={(e) => patch(r.key, { name: e.target.value })}
                       onKeyDown={(e) => onEnter(e, r)}
                     />
-                  </td>
-                  <td className="px-2 py-[5px]">
-                    <Select
-                      value={r.type}
-                      aria-label={`Type, row ${i + 1}`}
-                      onChange={(e) =>
-                        patch(r.key, {
-                          type: e.target.value as EnquiryType,
-                          decision: null,
-                        })
-                      }
-                    >
-                      <option value="purchase">Purchase</option>
-                      <option value="after_sale">After Sale</option>
-                    </Select>
                   </td>
                   <td className="px-2 py-[5px]">
                     <Select

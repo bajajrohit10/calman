@@ -3,6 +3,7 @@ import Link from "next/link";
 import { EnquiryDetailsEditor, type DetailMasters } from "@/components/enquiry-details";
 import { EnquiryInterests } from "@/components/enquiry-interests";
 import { UnarchiveButton } from "@/components/unarchive-button";
+import { CallEdits } from "@/components/call-edits";
 import { EditCallRow } from "@/components/call-log/edit-call-row";
 import type { ItemMasters } from "@/components/interest-lines";
 import { Collapsed } from "@/components/enquiry-glance";
@@ -178,14 +179,19 @@ export function StudentHistoryView({
         <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
           <table className="w-full min-w-[860px] border-collapse text-[12.5px]">
             <thead>
+              {/* §35.3. Remarks moved up beside the counsellor and takes the
+                  width, because it is the column anybody actually reads; the
+                  enquiry number and the stage are reference, so they sit at
+                  the end where reference belongs. */}
               <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-                <th className="px-2 py-[7px]">Date</th>
-                <th className="px-2 py-[7px]">Counsellor</th>
-                <th className="px-2 py-[7px]">Enquiry</th>
-                <th className="px-2 py-[7px]">Stage</th>
-                <th className="px-2 py-[7px]">Outcome</th>
-                <th className="px-2 py-[7px]">Follow-up</th>
+                <th className="w-[130px] px-2 py-[7px]">Date/time</th>
+                <th className="w-[110px] px-2 py-[7px]">Counsellor</th>
                 <th className="px-2 py-[7px]">Remarks</th>
+                <th className="w-[110px] px-2 py-[7px]">Outcome</th>
+                <th className="w-[95px] px-2 py-[7px]">Follow-up</th>
+                <th className="w-[70px] px-2 py-[7px]">Enquiry #</th>
+                <th className="w-[110px] px-2 py-[7px]">Stage</th>
+                <th className="w-[90px] px-2 py-[7px]">Edits</th>
               </tr>
             </thead>
             <tbody>
@@ -203,14 +209,6 @@ export function StudentHistoryView({
                     {formatDateTime(r.at)}
                   </td>
                   <td className="px-2 py-[5px] text-ink-2">{r.counsellor}</td>
-                  <td className="px-2 py-[5px] tabular-nums text-ink-3">#{r.enquiryId}</td>
-                  <td className="px-2 py-[5px] text-ink-3">{r.stage || "—"}</td>
-                  <td className={cx("px-2 py-[5px]", r.kind === "call" && "text-ink")}>
-                    {r.outcome}
-                  </td>
-                  <td className="px-2 py-[5px] whitespace-nowrap text-ink-3">
-                    {r.followUp}
-                  </td>
                   <td className="px-2 py-[5px] text-ink-2">
                     {r.remarks || "—"}
                     {r.call ? (
@@ -224,11 +222,27 @@ export function StudentHistoryView({
                       />
                     ) : null}
                   </td>
+                  <td className={cx("px-2 py-[5px]", r.kind === "call" && "text-ink")}>
+                    {r.outcome}
+                  </td>
+                  <td className="px-2 py-[5px] whitespace-nowrap text-ink-3">
+                    {r.followUp}
+                  </td>
+                  <td className="px-2 py-[5px] tabular-nums text-ink-3">#{r.enquiryId}</td>
+                  <td className="px-2 py-[5px] text-ink-3">{r.stage || "—"}</td>
+                  <td className="px-2 py-[5px]">
+                    {r.call ? (
+                      <CallEdits
+                        callId={r.call.id}
+                        edits={student.editedCalls?.[r.call.id] ?? 0}
+                      />
+                    ) : null}
+                  </td>
                 </tr>
               ))}
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-ink-3">
+                  <td colSpan={8} className="px-3 py-8 text-center text-ink-3">
                     Nothing has happened on this number yet.
                   </td>
                 </tr>

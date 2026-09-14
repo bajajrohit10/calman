@@ -984,3 +984,53 @@ export async function editCall(input: EditCallInput): Promise<LogCallResult> {
 
   return { error: null, ok: "Call updated." };
 }
+
+/* -------------------------------------------------------------------------- */
+/* The edit history of one call (§35.3)                                       */
+/* -------------------------------------------------------------------------- */
+
+export type CallEdit = {
+  changedAt: string;
+  actorName: string;
+  field: string;
+  oldValue: string | null;
+  newValue: string | null;
+};
+
+/**
+ * What was changed on a call, and by whom.
+ *
+ * Read through call_edits(), which is security definer: the audit log itself
+ * is admin-only, and the person who most needs to know a note was rewritten is
+ * the counsellor reading the note. The function returns only the fields the
+ * history already shows, so nothing leaks out of it that is not on the screen.
+ */
+export async function loadCallEdits(
+  callId: number,
+): Promise<{ error: string | null; edits?: CallEdit[] }> {
+  await requireUser();
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("call_edits", {
+    p_call_id: callId,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any);
+
+  if (error) return { error: error.message };
+
+  return {
+    error: null,
+    edits: ((data ?? []) as unknown as {
+      changed_at: string;
+      actor_name: string;
+      field: string;
+      old_value: string | null;
+      new_value: string | null;
+    }[]).map((r) => ({
+      changedAt: r.changed_at,
+      actorName: r.actor_name,
+      field: r.field,
+      oldValue: r.old_value,
+      newValue: r.new_value,
+    })),
+  };
+}

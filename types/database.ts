@@ -1573,6 +1573,16 @@ export type Database = {
         Args: { p_enquiry_id: number; p_note?: string; p_source_id?: string }
         Returns: string
       }
+      call_edits: {
+        Args: { p_call_id: number }
+        Returns: {
+          actor_name: string
+          changed_at: string
+          field: string
+          new_value: string
+          old_value: string
+        }[]
+      }
       call_report: {
         Args: {
           p_counsellor_id?: string
@@ -1603,6 +1613,13 @@ export type Database = {
           tickets: number
           total_calls: number
           total_outcomes: number
+        }[]
+      }
+      calls_edited: {
+        Args: { p_call_ids: number[] }
+        Returns: {
+          call_id: number
+          edits: number
         }[]
       }
       carry_forward_assignments: {

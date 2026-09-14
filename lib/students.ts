@@ -105,6 +105,12 @@ export type StudentHistory = {
   name: string | null;
   created_at: string;
   enquiries: HistoryEnquiry[];
+  /**
+   * §35.3: how many times each call has been edited, keyed by call id. Loaded
+   * with the history rather than per row — the marker is needed on every row
+   * and the detail on none of them until somebody asks.
+   */
+  editedCalls: Record<number, number>;
 };
 
 const SELECT = `
@@ -166,6 +172,30 @@ function sortHistory(student: StudentHistory): StudentHistory {
   return { ...student, enquiries };
 }
 
+/**
+ * §35.3. One question for the whole table: which of these calls has been
+ * edited. The edits themselves are fetched only when a marker is opened, so
+ * the common case — a history nobody has corrected — costs one small query
+ * and no detail at all.
+ */
+async function withEdits(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  student: StudentHistory,
+): Promise<StudentHistory> {
+  const callIds = student.enquiries.flatMap((e) => e.calls.map((c) => c.id));
+  const editedCalls: Record<number, number> = {};
+  if (callIds.length) {
+    const { data } = await supabase.rpc("calls_edited", {
+      p_call_ids: callIds,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    for (const row of (data ?? []) as unknown as { call_id: number; edits: number }[]) {
+      editedCalls[row.call_id] = row.edits;
+    }
+  }
+  return { ...student, editedCalls };
+}
+
 /** null when the number has never been seen. */
 export async function loadStudentByMobile(
   mobile: string,
@@ -180,7 +210,7 @@ export async function loadStudentByMobile(
   if (error) throw new Error(error.message);
   if (!data) return null;
 
-  return sortHistory(data as unknown as StudentHistory);
+  return withEdits(supabase, sortHistory(data as unknown as StudentHistory));
 }
 
 /** The enquiry Quick Add would offer to update: the open one, newest first. */

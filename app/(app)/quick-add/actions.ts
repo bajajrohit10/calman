@@ -10,7 +10,11 @@ import type {
   LeadVerification,
 } from "@/lib/enquiry-labels";
 import { lookupNumbers } from "@/app/(app)/import/actions";
-import { describeNumber, type DuplicateCase } from "@/lib/duplicate-rules";
+import {
+  describeNumber,
+  ticketOnly,
+  type DuplicateCase,
+} from "@/lib/duplicate-rules";
 import { isValidMobile, normaliseMobile } from "@/lib/mobile";
 import { loadStudentByMobile, type StudentHistory } from "@/lib/students";
 import { createClient } from "@/lib/supabase/server";
@@ -218,7 +222,6 @@ export async function createEnquiry(
 export type BulkRowInput = {
   mobile: string;
   name: string | null;
-  type: EnquiryType;
   sourceId: string | null;
   /**
    * Case 5 only (Brief 31): a number somebody has already called today does
@@ -301,29 +304,23 @@ export async function createManyEnquiries(
       fail(index, row.mobile, "not a valid Indian mobile number");
       return;
     }
-    // §32.4 refuses the same number twice — but §33.5 makes one number in two
-    // pipelines a legitimate thing to type: a lead and a complaint are
-    // different conversations with different people. So the row is identified
-    // by number *and* type, and only a true repeat is refused.
-    const key = `${mobile}:${row.type}`;
-    const first = seen.get(key);
+    // §32.4 refuses the same number twice. Brief 33 had briefly keyed this on
+    // number *and* type, so one number could be typed as a lead and as a
+    // ticket; with the Type column gone there is one row per number again.
+    const first = seen.get(mobile);
     if (first !== undefined) {
-      fail(
-        index,
-        mobile,
-        `the same number and type is on row ${first + 1} of this grid`,
-      );
+      fail(index, mobile, `the same number is on row ${first + 1} of this grid`);
       return;
     }
-    seen.set(key, index);
+    seen.set(mobile, index);
     jobs.push({ index, mobile, row });
   });
 
   // One lookup for the whole grid, taken now. Batched, so it costs the same
   // for ten numbers as for one — which is why reusing the grid's own lookup
   // would buy nothing measurable.
-  // Every row, whatever its type: an after-sale row needs to know whether a
-  // ticket is already open on the number (§33.5).
+  // Every row: the rules need to know both what is open on the purchase side
+  // and whether a ticket is already running (§33.5, §35.1).
   const toLookUp = jobs.map((j) => j.mobile);
   const { statuses, error: lookupError } = await lookupNumbers([...new Set(toLookUp)]);
   if (lookupError) return { error: lookupError };
@@ -337,15 +334,13 @@ export async function createManyEnquiries(
   for (const job of jobs) {
     const status = known.get(job.mobile);
 
-    // §33.5. An after-sale row meets the ticket rules: if a ticket is already
-    // open on this number, the arrival is logged against it and nothing new is
-    // made. Otherwise it is a new ticket, which is a plain create.
-    if (job.row.type === "after_sale") {
-      if (status?.ticketEnquiryId) {
-        attaching.push({ ...job, ticketId: status.ticketEnquiryId });
-      } else {
-        creating.push(job);
-      }
+    // §35.1. Nothing here asks what kind of enquiry this is: a row is a
+    // purchase lead, and what it turns out to be is decided when somebody
+    // speaks to them. The one exception is §33.5's case 6 — a number whose
+    // only live conversation is an open ticket. That arrival belongs to the
+    // ticket, so it joins it and nothing new is made.
+    if (status && ticketOnly(status)) {
+      attaching.push({ ...job, ticketId: status.ticketEnquiryId! });
       continue;
     }
 
@@ -614,7 +609,10 @@ async function createMany(
     .insert(
       ready.map((j) => ({
         student_id: studentByMobile.get(j.mobile)!,
-        type: j.row.type,
+        // §35.1: always a purchase lead. The call window is where it becomes
+        // an after-sale enquiry, if that is what the conversation turns out
+        // to be about.
+        type: "purchase",
         source_id: j.row.sourceId,
         created_by: userId,
       })) as never,

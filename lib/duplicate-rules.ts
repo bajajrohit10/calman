@@ -259,6 +259,21 @@ export const CASE_TITLES: Record<DuplicateCase, string> = {
   6: "Open ticket",
 };
 
+/**
+ * Is this number *only* in the after-sale pipeline? (§35.1)
+ *
+ * Quick Add no longer asks what kind of enquiry a row is — that is decided
+ * when somebody speaks to them — so the rule decides instead. A number with an
+ * open ticket and nothing open on the purchase side belongs to that ticket:
+ * the arrival joins the conversation already in progress rather than starting
+ * a sales lead beside it. A number with both keeps the purchase rules, which
+ * is what Brief 33 established when it allowed the two to coexist; the row
+ * still says the ticket is there.
+ */
+export function ticketOnly(status: NumberStatus): boolean {
+  return Boolean(status.ticketEnquiryId) && !status.openEnquiryId;
+}
+
 /** The confirmation Dismiss asks for, in both places it is offered. */
 export function dismissQuestion(mobile: string): string {
   return `Dismiss ${mobile}? The call made today stays as it is.`;

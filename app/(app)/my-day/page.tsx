@@ -5,6 +5,7 @@ import { loadMasters } from "@/lib/masters";
 import { logServerTiming } from "@/lib/server-timing";
 import { loadMyDay } from "@/lib/my-day";
 import { loadTeamDay } from "@/lib/my-day-team";
+import { parseTicketTab } from "@/lib/ticket-tabs";
 import {
   ALL_COUNSELLORS,
   ALL_COUNSELLORS_LABEL,
@@ -131,6 +132,8 @@ export default async function Page({
         initialTab={parseMyDayTab(one(sp.tab))}
         initialView={one(sp.view) === "done" ? "done" : "pending"}
         initialSubTab={parseSubTab(one(sp.sub))}
+        initialTicketTab={parseTicketTab(one(sp.ticket))}
+        initialTicketOwner={one(sp.owner) ?? "all"}
         nextWorkingDay={(nextWorkingDay.data as string | null) ?? null}
         viewerId={viewer.userId ?? null}
         isAdmin={admin}

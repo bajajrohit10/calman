@@ -599,9 +599,14 @@ export function AssignDesk({
                     >
                       {r.student_name || "No name"}
                     </StudentLink>
-                    <span className="ml-1.5 tabular-nums text-ink-3">
+                    {/* §35.2: the number is the way into the history. */}
+                    <StudentLink
+                      mobile={r.mobile}
+                      onClick={(e) => e.stopPropagation()}
+                      className="ml-1.5 tabular-nums text-ink-3 underline-offset-2 hover:text-ink hover:underline"
+                    >
                       {formatMobile(r.mobile)}
-                    </span>
+                    </StudentLink>
                   </td>
                   <td className="px-2 py-[5px]">
                     {r.importance ? <ImportanceMark grade={r.importance} /> : "—"}
