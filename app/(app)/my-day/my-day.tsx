@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import { loadPanelEnquiry, type PanelPayload } from "@/components/call-log/actions";
 import { CallLogPanel, type PanelMasters } from "@/components/call-log/panel";
+import { OfferCrossBadges } from "@/components/offer-cross-badges";
 import { ExportButton } from "@/components/export-button";
 import { TicketTable } from "@/components/ticket-table";
 import {
@@ -96,6 +97,7 @@ export function MyDay({
   roster,
   overdue,
   overdueDismissed,
+  offerCalls,
   masters,
 }: {
   initial: MyDayData;
@@ -117,6 +119,8 @@ export function MyDay({
   counsellorId: string;
   roster: { id: string; name: string }[];
   overdue: RecommendedRow[];
+  /** §42.4: which of today's leads was already rung under a live offer. */
+  offerCalls?: Record<number, { offerName: string; calledOn: string }>;
   overdueDismissed: boolean;
   masters: PanelMasters;
 }) {
@@ -497,6 +501,13 @@ export function MyDay({
                       {offerStatusLabel(r.status, r.lost_reason)}
                     </Badge>
                   ) : null}
+                  {/* §42.4. What the other list knows about this lead. */}
+                  <OfferCrossBadges
+                    bucket={r.bucket}
+                    nextFollowUpDate={r.next_follow_up_date}
+                    date={date}
+                    offerCall={offerCalls?.[r.enquiry_id]}
+                  />
                   <span className="text-[12px] text-ink-3">
                     {r.teacher_names?.join(", ") || "no interests yet"}
                   </span>

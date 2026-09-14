@@ -47,6 +47,8 @@ export type OfferInput = {
   startDate: string;
   endDate: string;
   reminderDays: number;
+  /** §42.1: null means reach every matching lead, whenever it arrived. */
+  lookbackDays: number | null;
   targets: OfferTargets;
 };
 
@@ -58,6 +60,12 @@ function validate(input: OfferInput): string | null {
     return "Reminder days must be zero or more.";
   }
   if (input.reminderDays > 365) return "Reminder days must be 365 or fewer.";
+  if (input.lookbackDays != null) {
+    if (!Number.isFinite(input.lookbackDays) || input.lookbackDays < 0) {
+      return "Look-back days must be zero or more, or left blank for all.";
+    }
+    if (input.lookbackDays > 3650) return "Look-back days must be 3650 or fewer.";
+  }
   return null;
 }
 
@@ -83,6 +91,7 @@ export async function saveOffer(input: OfferInput): Promise<OfferActionResult> {
     start_date: input.startDate,
     end_date: input.endDate,
     reminder_days: input.reminderDays,
+    lookback_days: input.lookbackDays,
   };
 
   let id = input.id ?? null;
@@ -150,8 +159,10 @@ export async function setOfferActive(
  */
 export async function previewOfferMatches(
   targets: Record<OfferTargetKey, string[]>,
+  /** §42.1: the look-back being typed, and the start it counts back from. */
+  lookback?: { days: number | null; startDate: string },
 ): Promise<{ count: number; error: string | null }> {
   const auth = await authorise();
   if (auth.error) return { count: 0, error: auth.error };
-  return countOfferMatches(targets);
+  return countOfferMatches(targets, lookback);
 }

@@ -34,11 +34,12 @@ export async function loadOffers(): Promise<{
       start_date: string;
       end_date: string;
       reminder_days: number;
+      lookback_days: number | null;
       is_active: boolean;
     }>((from, to) =>
       supabase
         .from("offers")
-        .select("id, name, start_date, end_date, reminder_days, is_active")
+        .select("id, name, start_date, end_date, reminder_days, lookback_days, is_active")
         .order("end_date", { ascending: false })
         .order("name")
         .range(from, to) as never,
@@ -104,6 +105,8 @@ export async function loadOffers(): Promise<{
  */
 export async function countOfferMatches(
   targets: Record<OfferTargetKey, string[]>,
+  /** §42.1: the look-back the form is holding, and the start it counts from. */
+  lookback?: { days: number | null; startDate: string },
 ): Promise<{ count: number; error: string | null }> {
   const supabase = await createClient();
   const list = (v: string[]) => (v.length ? v : undefined);
@@ -113,6 +116,10 @@ export async function countOfferMatches(
     p_courses: list(targets.courses),
     p_subjects: list(targets.subjects),
     p_contents: list(targets.contents),
+    // Both or neither: the database ignores the pair unless it is complete,
+    // which is what "blank means all" has to mean on this side too.
+    p_lookback: lookback?.days ?? undefined,
+    p_start_date: lookback?.days == null ? undefined : lookback.startDate,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
 

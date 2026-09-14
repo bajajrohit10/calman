@@ -73,8 +73,13 @@ export function istDatePlus(days: number): string {
  * must give "2026-09-15" wherever the browser thinks it is.
  */
 export function dayAfter(date: string): string {
+  return shiftDay(date, 1);
+}
+
+/** The same arithmetic, any number of days either way (§42.1). */
+export function shiftDay(date: string, days: number): string {
   const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + 1);
+  d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
 

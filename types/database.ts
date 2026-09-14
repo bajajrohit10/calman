@@ -1055,6 +1055,7 @@ export type Database = {
           end_date: string
           id: string
           is_active: boolean
+          lookback_days: number | null
           name: string
           reminder_days: number
           start_date: string
@@ -1065,6 +1066,7 @@ export type Database = {
           end_date: string
           id?: string
           is_active?: boolean
+          lookback_days?: number | null
           name: string
           reminder_days?: number
           start_date: string
@@ -1075,6 +1077,7 @@ export type Database = {
           end_date?: string
           id?: string
           is_active?: boolean
+          lookback_days?: number | null
           name?: string
           reminder_days?: number
           start_date?: string
@@ -1921,11 +1924,21 @@ export type Database = {
         }[]
       }
       next_working_day: { Args: { p_from?: string }; Returns: string }
+      offer_calls_for: {
+        Args: { p_enquiry_ids: number[] }
+        Returns: {
+          called_on: string
+          enquiry_id: number
+          offer_name: string
+        }[]
+      }
       offer_match_count: {
         Args: {
           p_contents?: string[]
           p_courses?: string[]
           p_institutes?: string[]
+          p_lookback?: number
+          p_start_date?: string
           p_subjects?: string[]
           p_teachers?: string[]
         }

@@ -36,6 +36,11 @@ export type Offer = {
   start_date: string;
   end_date: string;
   reminder_days: number;
+  /**
+   * §42.1. How many days before the start an enquiry may have arrived and
+   * still be reached. Null is the default and means no limit.
+   */
+  lookback_days: number | null;
   is_active: boolean;
   targets: OfferTargets;
 };
@@ -62,6 +67,7 @@ export const OFFER_EXPORT_COLUMNS = [
   { key: "start_date", label: "Start" },
   { key: "end_date", label: "End" },
   { key: "reminder_days", label: "Reminder days" },
+  { key: "lookback_days", label: "Look-back days" },
   { key: "window_from", label: "Reminders from" },
   { key: "is_active", label: "Active" },
   { key: "targets", label: "Targets" },

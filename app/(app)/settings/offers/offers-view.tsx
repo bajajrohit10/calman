@@ -12,7 +12,7 @@ import {
   Input,
   cx,
 } from "@/components/ui";
-import { formatDate, istDatePlus, istToday } from "@/lib/format";
+import { formatDate, istDatePlus, istToday, shiftDay } from "@/lib/format";
 import {
   TARGET_KEYS,
   TARGET_TABLES,
@@ -315,6 +315,12 @@ function OfferForm({
   const [reminderDays, setReminderDays] = useState(
     String(offer?.reminder_days ?? DEFAULT_REMINDER),
   );
+  // §42.1. Blank is the default and means "reach everybody", so the box holds
+  // a string and only becomes a number when somebody types one.
+  const [lookbackDays, setLookbackDays] = useState(
+    offer?.lookback_days == null ? "" : String(offer.lookback_days),
+  );
+  const lookback = lookbackDays.trim() === "" ? null : Number(lookbackDays);
   const [targets, setTargets] = useState<OfferTargets>(
     offer ? { ...blankTargets(), ...offer.targets } : blankTargets(),
   );
@@ -327,7 +333,9 @@ function OfferForm({
   });
   const [pending, start] = useTransition();
 
-  const targetKey = JSON.stringify(targets);
+  // The look-back is part of the question, so it is part of the key: changing
+  // it has to move the number, or the number is answering the old offer.
+  const targetKey = JSON.stringify({ targets, lookback, startDate });
   const counting = counted.key !== targetKey;
   const matches = counted.count;
 
@@ -337,7 +345,15 @@ function OfferForm({
   useEffect(() => {
     let cancelled = false;
     const timer = window.setTimeout(async () => {
-      const res = await previewOfferMatches(JSON.parse(targetKey) as OfferTargets);
+      const asked = JSON.parse(targetKey) as {
+        targets: OfferTargets;
+        lookback: number | null;
+        startDate: string;
+      };
+      const res = await previewOfferMatches(asked.targets, {
+        days: asked.lookback,
+        startDate: asked.startDate,
+      });
       if (cancelled) return;
       setCounted({ key: targetKey, count: res.error ? null : res.count });
     }, 350);
@@ -360,6 +376,7 @@ function OfferForm({
         startDate,
         endDate,
         reminderDays: Number(reminderDays) || 0,
+        lookbackDays: lookback,
         targets,
       });
       onDone(res);
@@ -401,10 +418,48 @@ function OfferForm({
             className="w-[110px]"
           />
         </label>
-        <p className="pb-1.5 text-[11.5px] text-ink-3">
-          Reminders from <strong className="text-ink-2">{formatDate(windowFrom)}</strong>{" "}
-          to {formatDate(endDate)}
-        </p>
+        <label className="flex flex-col gap-1">
+          <span className={FIELD_LABEL}>Look-back days</span>
+          <Input
+            type="number"
+            min={0}
+            max={3650}
+            value={lookbackDays}
+            placeholder="all"
+            onChange={(e) => setLookbackDays(e.target.value)}
+            className="w-[110px]"
+          />
+        </label>
+        <div className="flex w-full flex-col gap-0.5 pb-0.5">
+          <p className="text-[11.5px] text-ink-3">
+            Reminders from <strong className="text-ink-2">{formatDate(windowFrom)}</strong>{" "}
+            to {formatDate(endDate)}
+          </p>
+          {/* §42.3. The rule was only discoverable by setting a number and
+              watching what happened, which is a poor way to learn what a
+              campaign will do the night before it runs. */}
+          <p className="text-[11.5px] text-ink-3">
+            Leads appear from (end date − reminder days) to the end date.
+            Reminder days 0 = last day only; 1 = both days of a two-day offer.
+          </p>
+          {/* §42.1, said where the box is. */}
+          <p className="text-[11.5px] text-ink-3">
+            {lookback == null ? (
+              <>
+                Look-back blank: every matching lead, whenever it first asked.
+              </>
+            ) : (
+              <>
+                Only leads that arrived on or after{" "}
+                <strong className="text-ink-2">
+                  {formatDate(shiftDay(startDate, -lookback))}
+                </strong>{" "}
+                — {lookback} day{lookback === 1 ? "" : "s"} before the start —
+                plus everything that arrives while the offer runs.
+              </>
+            )}
+          </p>
+        </div>
         {/* The whole point of the form, and above the target selects rather
             than below them: a multi-select's popover opens downwards and would
             cover the number at exactly the moment it is changing. */}

@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/ui";
 import { requireAdminProfile } from "@/lib/auth";
 import { facetsAgreeWithList, loadDeskFacets } from "@/lib/facets";
+import { loadOfferCallBadges } from "@/lib/offer-badges";
 import { loadAssignmentCounts, loadRecommended } from "@/lib/recommended";
 import { loadMasters } from "@/lib/masters";
 import { loadOfferOptions } from "@/lib/offers";
@@ -95,6 +96,10 @@ export default async function Page({
     done: doneCounts[p.id]?.numbers ?? 0,
   }));
 
+  // §42.4. Asked for the rows on screen, after the list is known — fifty ids,
+  // one round trip, and a badge that cannot be drawn is simply not drawn.
+  const offerCalls = await loadOfferCallBadges(list.rows.map((r) => r.enquiry_id));
+
   // One line per render, so the phase breakdown is in the server log.
   logServerTiming("/assign");
   return (
@@ -121,6 +126,7 @@ export default async function Page({
         preset={one(sp.preset) ?? ""}
         offers={offers}
         bucket={one(sp.bucket) ?? ""}
+        offerCalls={offerCalls}
         page={page}
         pageSize={PAGE_SIZE}
         includeNotDue={includeNotDue}

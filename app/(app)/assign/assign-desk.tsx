@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import { OfferCrossBadges } from "@/components/offer-cross-badges";
 import { StudentLink } from "@/components/student-link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -191,6 +192,7 @@ export function AssignDesk({
   preset,
   offers,
   bucket,
+  offerCalls,
 }: {
   rows: RecommendedRow[];
   total: number;
@@ -220,6 +222,8 @@ export function AssignDesk({
   offers: { id: string; name: string }[];
   /** The §6 bucket the view is pinned to, if any. */
   bucket: string;
+  /** §42.4: which of these leads was already rung under a live offer. */
+  offerCalls?: Record<number, { offerName: string; calledOn: string }>;
 }) {
   const router = useRouter();
   const [picked, setPicked] = useState<Map<number, AssignmentBucket>>(new Map());
@@ -649,7 +653,9 @@ export function AssignDesk({
                         offer put this here, and whether it is late. */}
                     {r.offer_names?.length ||
                     offerStatusLabel(r.status, r.lost_reason) ||
-                    r.is_overdue ? (
+                    r.is_overdue ||
+                    offerCalls?.[r.enquiry_id] ||
+                    (r.bucket === "offer" && r.next_follow_up_date === date) ? (
                       <span className="ml-1.5 inline-flex items-center gap-1.5 align-middle">
                         {r.offer_names?.length ? (
                           <span
@@ -665,6 +671,13 @@ export function AssignDesk({
                           </Badge>
                         ) : null}
                         {r.is_overdue ? <Badge tone="danger">Overdue</Badge> : null}
+                        {/* §42.4. What the other list knows about this lead. */}
+                        <OfferCrossBadges
+                          bucket={r.bucket}
+                          nextFollowUpDate={r.next_follow_up_date}
+                          date={date}
+                          offerCall={offerCalls?.[r.enquiry_id]}
+                        />
                       </span>
                     ) : null}
                   </td>

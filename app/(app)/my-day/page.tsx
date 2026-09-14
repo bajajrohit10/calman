@@ -4,6 +4,7 @@ import { dayAfter, istDatePlus, istToday } from "@/lib/format";
 import { loadMasters } from "@/lib/masters";
 import { logServerTiming } from "@/lib/server-timing";
 import { loadMyDay } from "@/lib/my-day";
+import { loadOfferCallBadges } from "@/lib/offer-badges";
 import { loadTeamDay } from "@/lib/my-day-team";
 import { parseTicketTab } from "@/lib/ticket-tabs";
 import {
@@ -118,6 +119,11 @@ export default async function Page({
     : { rows: [], total: 0, error: null };
 
 
+  // §42.4. The day's rows, asked once. A counsellor's day is tens of leads,
+  // so this is one round trip whose answer is pure decoration — if it fails
+  // the rows are still right, they simply say less.
+  const offerCalls = await loadOfferCallBadges(day.rows.map((r) => r.enquiry_id));
+
   // One line per render, so the phase breakdown is in the server log.
   logServerTiming("/my-day");
   return (
@@ -145,6 +151,7 @@ export default async function Page({
         }))}
         overdue={overdue.rows.filter((r) => r.is_overdue)}
         overdueDismissed={Boolean(dismissal.data)}
+        offerCalls={offerCalls}
         masters={{
           teachers: masters.teachers,
           courses: masters.courses,
