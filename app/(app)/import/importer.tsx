@@ -5,8 +5,13 @@ import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 
 import { Badge, Button, ErrorNote, Select, cx } from "@/components/ui";
+import {
+  CASE_TITLES,
+  caseOf,
+  describeNumber,
+} from "@/lib/duplicate-rules";
 import type { Importance, LeadVerification } from "@/lib/enquiry-labels";
-import { formatDate, formatDateTime } from "@/lib/format";
+
 import { isValidMobile, normaliseMobile } from "@/lib/mobile";
 
 import {
@@ -20,6 +25,7 @@ import {
   type NumberStatus,
   type RowDecision,
 } from "./actions";
+import { ConfirmDismiss } from "../quick-add/grid";
 import { SAMPLE_HEADERS, SampleFileButton } from "./sample";
 
 type Master = { id: string; name: string };
@@ -59,6 +65,13 @@ type ReviewRow = {
   duplicateOf: number | null;
   status: NumberStatus | null;
   decision: RowDecision;
+  /**
+   * Brief 31 case 5: somebody called this number today, and no rule can decide
+   * what to do about that. The row carries a decision so the commit path has
+   * something to act on, but it does not count as chosen until a person
+   * chooses it, and nothing commits while any row is still waiting.
+   */
+  needsDecision: boolean;
   name: string | null;
   sourceId: string | null;
   productText: string | null;
@@ -293,6 +306,7 @@ export function Importer({ masters }: { masters: ImportMasters }) {
           duplicateOf: dup ?? null,
           status: null,
           decision: "skip",
+          needsDecision: false,
           name: mapping.name ? (p.raw[mapping.name] ?? "").trim() || null : null,
           sourceId: source.value,
           productText: mapping.product_text
@@ -338,14 +352,20 @@ export function Importer({ masters }: { masters: ImportMasters }) {
           case "open_called_earlier":
             row.decision = "re_enquire";
             break;
-          // (d) already called today: default to leaving it alone.
+          // (d) already called today: no default at all (Brief 31). Dismiss
+          //     loses a lead; adding it back sends a colleague to ring
+          //     somebody who was rung an hour ago. A person decides.
           case "open_called_today":
             row.decision = "dismiss";
+            row.needsDecision = true;
             break;
-          // (a) a previous wrong number still imports, but tagged.
+          // (a) a previous wrong number still imports. It used to carry a
+          //     tag saying so, which Brief 31 makes redundant twice over: the
+          //     row's own sentence reads "Closed call · <date> · Wrong
+          //     number", and invalidReason is what the row prints when there
+          //     is something wrong with it, which there is not.
           case "wrong_number":
             row.decision = "import";
-            row.invalidReason = "Previously closed as a wrong number";
             break;
           // (a) nothing open, or nothing at all.
           default:
@@ -428,29 +448,35 @@ export function Importer({ masters }: { masters: ImportMasters }) {
 
   /* ------------------------------ grouping ------------------------------ */
 
+  /**
+   * Brief 31: grouped by the five situations, and by nothing else. Won, lost
+   * and "previously a wrong number" used to be three groups with three
+   * headings; to somebody working a list they are one thing — a call that is
+   * over — and the row's own sentence still says which.
+   */
   const groups = useMemo(() => {
     const g = {
       invalid: [] as ReviewRow[],
       duplicate: [] as ReviewRow[],
-      new: [] as ReviewRow[],
-      open_uncalled: [] as ReviewRow[],
-      open_called_earlier: [] as ReviewRow[],
-      open_called_today: [] as ReviewRow[],
-      wrong_number: [] as ReviewRow[],
-      resolved: [] as ReviewRow[],
+      1: [] as ReviewRow[],
+      2: [] as ReviewRow[],
+      3: [] as ReviewRow[],
+      4: [] as ReviewRow[],
+      5: [] as ReviewRow[],
     };
     for (const r of review) {
       if (!r.mobile) g.invalid.push(r);
       else if (r.duplicateOf !== null) g.duplicate.push(r);
-      else if (r.status?.state === "open_uncalled") g.open_uncalled.push(r);
-      else if (r.status?.state === "open_called_earlier") g.open_called_earlier.push(r);
-      else if (r.status?.state === "open_called_today") g.open_called_today.push(r);
-      else if (r.status?.state === "wrong_number") g.wrong_number.push(r);
-      else if (r.status?.state === "resolved") g.resolved.push(r);
-      else g.new.push(r);
+      else g[caseOf(r.status?.state ?? "new")].push(r);
     }
     return g;
   }, [review]);
+
+  /** Case 5 rows nobody has answered yet. Nothing commits while any remain. */
+  const undecided = useMemo(
+    () => review.filter((r) => r.needsDecision),
+    [review],
+  );
 
   /** §5.7: an unrecognised value must not slip past unremarked. */
   const unmatchedSummary = useMemo(() => {
@@ -467,7 +493,12 @@ export function Importer({ masters }: { masters: ImportMasters }) {
 
   function setDecisionFor(rowNumbers: Set<number>, decision: RowDecision) {
     setReview((rows) =>
-      rows.map((r) => (rowNumbers.has(r.rowNumber) ? { ...r, decision } : r)),
+      rows.map((r) =>
+        // Choosing is what answers the question, whichever way it is answered.
+        rowNumbers.has(r.rowNumber)
+          ? { ...r, decision, needsDecision: false }
+          : r,
+      ),
     );
   }
 
@@ -477,11 +508,13 @@ export function Importer({ masters }: { masters: ImportMasters }) {
     return (
       <div className="rounded-lg border border-ok/40 bg-ok-soft/30 px-4 py-4">
         <h2 className="text-[14px] font-semibold text-ink">Import finished</h2>
+        {/* Brief 31: the same five terms the review table used, so the
+            finishing screen and the report read alike. */}
         <ul className="mt-2 text-[13px] text-ink-2">
-          <li>New enquiries: {counts?.imported ?? 0}</li>
-          <li>Re-enquired (source updated, logged): {counts?.re_enquired ?? 0}</li>
-          <li>Replaced (previous closed as superseded): {counts?.duplicate_new_enquiry ?? 0}</li>
-          <li>Dismissed (already called today): {counts?.dismissed ?? 0}</li>
+          <li>New number / Closed call → new enquiry: {counts?.imported ?? 0}</li>
+          <li>Already known → source updated: {counts?.re_enquired ?? 0}</li>
+          <li>New enquiry, previous superseded: {counts?.duplicate_new_enquiry ?? 0}</li>
+          <li>Call done today → dismissed: {counts?.dismissed ?? 0}</li>
           <li>Skipped: {counts?.skipped ?? 0}</li>
         </ul>
         <div className="mt-3 flex gap-2">
@@ -626,11 +659,21 @@ export function Importer({ masters }: { masters: ImportMasters }) {
                 fields will import blank.
               </span>
             ) : null}
+            {/* Brief 31: a case-5 row is a question, and the import does not
+                proceed with a question outstanding. The count is beside the
+                button rather than hidden in a tooltip, because a disabled
+                button with no reason is the worst of both. */}
+            {undecided.length ? (
+              <span className="ml-auto rounded-md border border-warn/40 bg-warn-soft/50 px-2 py-1 text-[12px] font-medium text-warn">
+                {undecided.length} row{undecided.length === 1 ? "" : "s"} need
+                {undecided.length === 1 ? "s" : ""} a decision
+              </span>
+            ) : null}
             <Button
-              className="ml-auto"
+              className={undecided.length ? undefined : "ml-auto"}
               variant="primary"
               onClick={commit}
-              disabled={!!busy}
+              disabled={!!busy || undecided.length > 0}
             >
               Commit the import
             </Button>
@@ -639,55 +682,43 @@ export function Importer({ masters }: { masters: ImportMasters }) {
             </Button>
           </div>
 
+          {/* Case 5 first, and on its own. It is the only block that has to
+              be read: everything below it is already decided. */}
           <Group
-            title="New numbers"
-            tone="ok"
-            rows={groups.new}
-            options={["import", "ignore"]}
-            onBulk={setDecisionFor}
-            onSet={setDecisionFor}
-          />
-          <Group
-            title="Existing — open, not called yet"
-            tone="info"
-            rows={groups.open_uncalled}
-            options={["re_enquire", "supersede", "ignore"]}
-            onBulk={setDecisionFor}
-            onSet={setDecisionFor}
-          />
-          <Group
-            title="Existing — open, last called earlier"
-            tone="info"
-            rows={groups.open_called_earlier}
-            options={["re_enquire", "supersede", "ignore"]}
-            onBulk={setDecisionFor}
-            onSet={setDecisionFor}
-          />
-          <Group
-            title="Existing — already called today"
+            title={CASE_TITLES[5]}
             tone="warn"
-            rows={groups.open_called_today}
-            options={["dismiss", "re_enquire", "ignore"]}
-            // Same decision, different words: here it means overriding a call
-            // a colleague has already made today.
+            rows={groups[5]}
+            options={["dismiss", "re_enquire"]}
             labels={{ re_enquire: "Add to New Calls anyway" }}
-            onBulk={setDecisionFor}
+            confirmDismiss
             onSet={setDecisionFor}
           />
           <Group
-            title="Existing — nothing open"
+            title={CASE_TITLES[1]}
+            tone="ok"
+            rows={groups[1]}
+            options={["import", "ignore"]}
+            onSet={setDecisionFor}
+          />
+          <Group
+            title={CASE_TITLES[2]}
             tone="neutral"
-            rows={groups.resolved}
+            rows={groups[2]}
             options={["import", "ignore"]}
-            onBulk={setDecisionFor}
             onSet={setDecisionFor}
           />
           <Group
-            title="Flagged — previously a wrong number"
-            tone="danger"
-            rows={groups.wrong_number}
-            options={["import", "ignore"]}
-            onBulk={setDecisionFor}
+            title={CASE_TITLES[3]}
+            tone="info"
+            rows={groups[3]}
+            options={["re_enquire", "supersede", "ignore"]}
+            onSet={setDecisionFor}
+          />
+          <Group
+            title={CASE_TITLES[4]}
+            tone="info"
+            rows={groups[4]}
+            options={["re_enquire", "supersede", "ignore"]}
             onSet={setDecisionFor}
           />
           <Group
@@ -695,7 +726,6 @@ export function Importer({ masters }: { masters: ImportMasters }) {
             tone="warn"
             rows={groups.duplicate}
             options={[]}
-            onBulk={setDecisionFor}
             onSet={setDecisionFor}
           />
           <Group
@@ -703,7 +733,6 @@ export function Importer({ masters }: { masters: ImportMasters }) {
             tone="warn"
             rows={groups.invalid}
             options={[]}
-            onBulk={setDecisionFor}
             onSet={setDecisionFor}
           />
         </div>
@@ -727,7 +756,7 @@ function Group({
   rows,
   options,
   labels,
-  onBulk,
+  confirmDismiss,
   onSet,
 }: {
   title: string;
@@ -736,11 +765,27 @@ function Group({
   options: RowDecision[];
   /** Per-group wording for a decision that reads differently here. */
   labels?: Partial<Record<RowDecision, string>>;
-  onBulk: (rowNumbers: Set<number>, d: RowDecision) => void;
+  /** Brief 31: throwing a lead away is asked twice, here as in Quick Add. */
+  confirmDismiss?: boolean;
+  /** One setter for both the per-row control and Apply to all. */
   onSet: (rowNumbers: Set<number>, d: RowDecision) => void;
 }) {
+  const [confirming, setConfirming] = useState<{
+    rows: Set<number>;
+    mobile: string;
+  } | null>(null);
+
   if (!rows.length) return null;
   const all = new Set(rows.map((r) => r.rowNumber));
+
+  /** Dismiss goes through the question; everything else goes straight. */
+  const choose = (target: Set<number>, decision: RowDecision, mobile: string) => {
+    if (confirmDismiss && decision === "dismiss") {
+      setConfirming({ rows: target, mobile });
+      return;
+    }
+    onSet(target, decision);
+  };
 
   return (
     <section className="rounded-lg border border-line bg-surface shadow-card">
@@ -754,7 +799,9 @@ function Group({
               <button
                 key={o}
                 type="button"
-                onClick={() => onBulk(all, o)}
+                onClick={() =>
+                  choose(all, o, `${rows.length} number${rows.length === 1 ? "" : "s"}`)
+                }
                 className="rounded border border-line-2 bg-surface-2 px-1.5 py-0.5 text-ink-2 hover:text-ink"
               >
                 {labels?.[o] ?? DECISION_LABELS[o]}
@@ -777,25 +824,29 @@ function Group({
                   ) : null}
                 </td>
                 <td className="px-2 py-[5px] text-ink-3">
-                  <span className="block">
+                  {/* Brief 31: the same sentence Quick Add shows for this
+                      number, and under it what committing will do to it. The
+                      select on the right can still override that; stating it
+                      is what makes an override a decision rather than a
+                      guess. */}
+                  <span className="block text-ink-2">
                     {r.invalidReason ??
-                      (r.status
-                        ? `${r.status.enquiryCount} enquir${r.status.enquiryCount === 1 ? "y" : "ies"} on file`
-                        : "not seen before")}
+                      (r.status ? describeNumber(r.status).label : "New number")}
                   </span>
-                  {/* §10.1 rule (d): the operator is being asked to decide
-                      whether to disturb a lead somebody has already called
-                      today, so they need to see who and when. */}
-                  {r.status?.state === "open_called_today" && r.status.lastCallAt ? (
-                    <span className="mt-0.5 block text-[11.5px] text-warn">
-                      called today, {formatDateTime(r.status.lastCallAt)}
-                      {r.status.lastCallBy ? ` by ${r.status.lastCallBy}` : ""}
-                    </span>
-                  ) : null}
-                  {r.status?.state === "open_called_earlier" && r.status.lastCallDate ? (
+                  {r.status && !r.invalidReason ? (
                     <span className="mt-0.5 block text-[11.5px] text-ink-3">
-                      last called {formatDate(r.status.lastCallDate)}
-                      {r.status.lastCallBy ? ` by ${r.status.lastCallBy}` : ""}
+                      {r.needsDecision
+                        ? "Nothing until you choose"
+                        : // Case 5 has no rule to fall back on — its own
+                          // sentence says "nothing yet", which stops being
+                          // true the moment somebody answers it. Everywhere
+                          // else an untouched row shows the rule's own words,
+                          // which say where this lead ends up rather than what
+                          // the decision is called.
+                          caseOf(r.status.state) !== 5 &&
+                            r.decision === defaultDecisionFor(r.status.state)
+                          ? describeNumber(r.status).action
+                          : (ACTION_FOR[r.decision] ?? "")}
                     </span>
                   ) : null}
                   {r.unmatched.length ? (
@@ -817,7 +868,30 @@ function Group({
                   ) : null}
                 </td>
                 <td className="px-3 py-[5px] text-right">
-                  {options.length ? (
+                  {confirmDismiss ? (
+                    // Two buttons, no default selected: a select with one
+                    // option already showing is a decision somebody has to
+                    // notice they did not make.
+                    <span className="flex justify-end gap-1.5">
+                      {options.map((o) => (
+                        <button
+                          key={o}
+                          type="button"
+                          onClick={() =>
+                            choose(new Set([r.rowNumber]), o, r.mobile ?? "this number")
+                          }
+                          className={cx(
+                            "rounded-full border px-2 py-[2px] text-[11px]",
+                            !r.needsDecision && r.decision === o
+                              ? "border-accent bg-accent-soft font-medium text-accent"
+                              : "border-line-2 bg-surface text-ink-2 hover:border-ink-3",
+                          )}
+                        >
+                          {labels?.[o] ?? DECISION_LABELS[o]}
+                        </button>
+                      ))}
+                    </span>
+                  ) : options.length ? (
                     <Select
                       aria-label={`Decision for row ${r.rowNumber}`}
                       className={cx("w-[200px]")}
@@ -841,6 +915,40 @@ function Group({
           </tbody>
         </table>
       </div>
+
+      {confirming ? (
+        <ConfirmDismiss
+          mobile={confirming.mobile}
+          onCancel={() => setConfirming(null)}
+          onConfirm={() => {
+            onSet(confirming.rows, "dismiss");
+            setConfirming(null);
+          }}
+        />
+      ) : null}
     </section>
   );
 }
+
+/**
+ * What each decision will do, said in the row.
+ *
+ * The words are §10.1's, not the button's: "Re-enquire" names the mechanism,
+ * and what the person wants to know is where the lead ends up.
+ */
+/** What the rules choose for a row, so an override can be told from a default. */
+function defaultDecisionFor(state: NumberStatus["state"]): RowDecision {
+  const which = caseOf(state);
+  if (which === 3 || which === 4) return "re_enquire";
+  if (which === 5) return "dismiss";
+  return "import";
+}
+
+const ACTION_FOR: Partial<Record<RowDecision, string>> = {
+  import: "New enquiry into New Calls",
+  re_enquire: "Source updated and logged; back into New Calls if it had been called",
+  supersede: "New enquiry; the previous one closed as superseded",
+  dismiss: "Nothing — the call made today stands",
+  ignore: "Nothing; this row is left out",
+  skip: "Skipped",
+};

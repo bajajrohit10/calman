@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 
 import { Badge, Button, ErrorNote, cx } from "@/components/ui";
 import { formatDateTime } from "@/lib/format";
@@ -20,23 +20,71 @@ export type ReportRow = {
   raw: Record<string, string>;
 };
 
-const OUTCOME_LABELS: Record<string, string> = {
-  imported: "Imported",
-  re_enquired: "Re-enquired",
-  dismissed: "Dismissed — called today",
-  duplicate_updated: "Updated existing (before §10.1)",
-  duplicate_new_enquiry: "New enquiry, previous superseded",
+/**
+ * Brief 31 item 3: the report says what the review table said.
+ *
+ * A row's outcome is stored as a mechanism — "re_enquired" — and the review
+ * table spoke in situations: "Already in New Calls", "Already in follow-up
+ * list". Somebody checking afterwards whether the import did what the screen
+ * promised had to translate between the two vocabularies, which is exactly
+ * where a discrepancy hides. So the report is labelled in the same five terms.
+ *
+ * Re-enquiry splits in two because §10.1 does: a lead that had never been
+ * called stays where it is, and one that had been called comes back to the
+ * pool. Which happened is already recorded in the row's own account of itself,
+ * written by the function that did it — so the label is read from that rather
+ * than guessed from the outcome alone.
+ */
+export type ReportCase =
+  | "new_enquiry"
+  | "in_pool"
+  | "in_follow_up"
+  | "dismissed"
+  | "superseded"
+  | "skipped";
+
+const CASE_LABELS: Record<ReportCase, string> = {
+  new_enquiry: "New number / Closed call → new enquiry",
+  in_pool: "Already in New Calls → source updated",
+  in_follow_up: "Already in follow-up list → back into New Calls",
+  dismissed: "Call done today → dismissed",
+  superseded: "New enquiry, previous superseded",
   skipped: "Skipped",
 };
 
-const TONES: Record<string, "ok" | "info" | "accent" | "warn"> = {
-  imported: "ok",
-  re_enquired: "info",
+const CASE_TONES: Record<ReportCase, "ok" | "info" | "accent" | "warn" | "neutral"> = {
+  new_enquiry: "ok",
+  in_pool: "info",
+  in_follow_up: "info",
   dismissed: "warn",
-  duplicate_updated: "info",
-  duplicate_new_enquiry: "accent",
+  superseded: "accent",
   skipped: "warn",
 };
+
+/**
+ * Which of the six a stored row was.
+ *
+ * "Returned to New Calls." is the sentence import_re_enquire returns when it
+ * cleared the follow-up, and it is stored verbatim on the row, so this reads
+ * the record rather than re-deriving a decision that was made at commit time.
+ */
+export function caseOfRow(row: { outcome: string; skip_reason: string | null }): ReportCase {
+  switch (row.outcome) {
+    case "imported":
+      return "new_enquiry";
+    case "duplicate_new_enquiry":
+      return "superseded";
+    case "dismissed":
+      return "dismissed";
+    case "re_enquired":
+    case "duplicate_updated":
+      return row.skip_reason?.startsWith("Returned to New Calls")
+        ? "in_follow_up"
+        : "in_pool";
+    default:
+      return "skipped";
+  }
+}
 
 export function BatchReport({
   rows,
@@ -57,6 +105,29 @@ export function BatchReport({
 
   const visible = onlySkipped ? rows.filter((r) => r.outcome === "skipped") : rows;
 
+  /**
+   * The five-way counts.
+   *
+   * Derived from the rows rather than from the outcome counts the page
+   * computed, because two of the six cases share one outcome and only the row
+   * knows which it was. The page's exact counts still back the total: when the
+   * listing is truncated the note above says so.
+   */
+  const caseCounts = useMemo(() => {
+    const out: Record<ReportCase, number> = {
+      new_enquiry: 0,
+      in_pool: 0,
+      in_follow_up: 0,
+      dismissed: 0,
+      superseded: 0,
+      skipped: 0,
+    };
+    for (const r of rows) out[caseOfRow(r)] += 1;
+    return out;
+  }, [rows]);
+
+  const totalRows = Object.values(counts).reduce((n, v) => n + v, 0);
+
   function act(rowId: number, action: "import" | "handled") {
     setError(null);
     start(async () => {
@@ -69,11 +140,15 @@ export function BatchReport({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        {Object.entries(OUTCOME_LABELS).map(([key, label]) => (
-          <Badge key={key} tone={TONES[key]}>
-            {label}: {counts[key] ?? 0}
+        {(Object.keys(CASE_LABELS) as ReportCase[]).map((key) => (
+          <Badge key={key} tone={CASE_TONES[key]}>
+            {CASE_LABELS[key]}: {caseCounts[key]}
           </Badge>
         ))}
+        {/* The database's own count, beside labels derived from the listing.
+            On a batch big enough to truncate the listing the two disagree,
+            and the note below says why — which is the point of showing both. */}
+        <Badge tone="neutral">Rows: {totalRows}</Badge>
         <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-[12.5px] text-ink-2">
           <input
             type="checkbox"
@@ -140,8 +215,8 @@ export function BatchReport({
                   )}
                 </td>
                 <td className="px-2 py-[5px]">
-                  <Badge tone={TONES[r.outcome] ?? "neutral"}>
-                    {OUTCOME_LABELS[r.outcome] ?? r.outcome}
+                  <Badge tone={CASE_TONES[caseOfRow(r)]}>
+                    {CASE_LABELS[caseOfRow(r)]}
                   </Badge>
                 </td>
                 <td className="max-w-[320px] px-2 py-[5px] text-ink-3">

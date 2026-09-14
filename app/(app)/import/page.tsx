@@ -2,25 +2,48 @@ import Link from "next/link";
 
 import { Badge, PageHeader } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, hoursAgoIso } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 
 import { Importer } from "./importer";
 
 export const metadata = { title: "Import · Calman" };
 
-export default async function Page() {
+type Params = Record<string, string | string[] | undefined>;
+
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<Params>;
+}) {
   await requireUser();
+  const sp = await searchParams;
+  const older = (Array.isArray(sp.older) ? sp.older[0] : sp.older) === "1";
   const supabase = await createClient();
 
-  const [sources, terms, batches] = await Promise.all([
+  // §31.4. A day's worth by default: the list is a working tool for "did this
+  // morning's file go in", not an archive, and a page of last month's uploads
+  // is between the reader and the one batch they came to check. The older ones
+  // are a click away, and none of them is ever deleted — a batch backs its
+  // rows' resolve-later actions and the audit trail that says where a lead
+  // came from.
+  const since = hoursAgoIso(24);
+
+  const [sources, terms, batches, recentCount] = await Promise.all([
     supabase.from("sources").select("id, name").eq("is_active", true).order("name"),
     supabase.from("terms").select("id, name").eq("is_active", true).order("sort_order"),
+    (() => {
+      const q = supabase
+        .from("import_batches")
+        .select("id, filename, uploaded_at, total_rows, uploader:profiles ( full_name )")
+        .order("uploaded_at", { ascending: false })
+        .limit(older ? 100 : 25);
+      return older ? q : q.gte("uploaded_at", since);
+    })(),
     supabase
       .from("import_batches")
-      .select("id, filename, uploaded_at, total_rows, uploader:profiles ( full_name )")
-      .order("uploaded_at", { ascending: false })
-      .limit(25),
+      .select("*", { count: "exact", head: true })
+      .gte("uploaded_at", since),
   ]);
 
   return (
@@ -33,7 +56,19 @@ export default async function Page() {
       <Importer masters={{ sources: sources.data ?? [], terms: terms.data ?? [] }} />
 
       <section>
-        <h2 className="mb-2 text-[13px] font-semibold text-ink">Recent imports</h2>
+        <div className="mb-2 flex flex-wrap items-baseline gap-2">
+          <h2 className="text-[13px] font-semibold text-ink">
+            {older ? "All imports" : "Imports in the last 24 hours"}
+          </h2>
+          <Link
+            href={older ? "/import" : "/import?older=1"}
+            className="text-[12px] text-ink-2 underline-offset-2 hover:underline"
+          >
+            {older
+              ? `← Just the last 24 hours (${recentCount.count ?? 0})`
+              : "Show older"}
+          </Link>
+        </div>
         {batches.data?.length ? (
           <ul className="overflow-hidden rounded-lg border border-line bg-surface shadow-card">
             {batches.data.map((b) => (
@@ -59,7 +94,7 @@ export default async function Page() {
           </ul>
         ) : (
           <p className="rounded-lg border border-dashed border-line-2 px-4 py-6 text-center text-[12.5px] text-ink-3">
-            No imports yet.
+            {older ? "No imports yet." : "Nothing imported in the last 24 hours."}
           </p>
         )}
       </section>

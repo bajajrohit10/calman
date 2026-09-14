@@ -78,6 +78,18 @@ export function dayAfter(date: string): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * An ISO timestamp N hours before now, for "since" filters.
+ *
+ * A helper rather than an inline `Date.now()` because a server component that
+ * reads the clock during render trips the purity rule, and the rule is right
+ * in general even where this particular use is harmless: one render, one
+ * request, one cutoff.
+ */
+export function hoursAgoIso(hours: number): string {
+  return new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+}
+
 export function istNextMonday(): string {
   const parts = istToday().split("-").map(Number);
   const d = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));

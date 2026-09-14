@@ -9,7 +9,10 @@ import type {
   Importance,
   LeadVerification,
 } from "@/lib/enquiry-labels";
+import { lookupNumbers } from "@/app/(app)/import/actions";
+import { describeNumber, type DuplicateCase } from "@/lib/duplicate-rules";
 import { isValidMobile, normaliseMobile } from "@/lib/mobile";
+import { fillBlankStudentName } from "@/lib/student-name";
 import { loadStudentByMobile, type StudentHistory } from "@/lib/students";
 import { createClient } from "@/lib/supabase/server";
 
@@ -210,44 +213,32 @@ export async function createEnquiry(
 }
 
 /* -------------------------------------------------------------------------- */
-/* Add many (§29.3)                                                           */
+/* The grid (§30.1, Brief 31)                                                 */
 /* -------------------------------------------------------------------------- */
 
 export type BulkRowInput = {
   mobile: string;
   name: string | null;
-  /** §30.2. Chosen per row, and it has to survive all the way to the row. */
   type: EnquiryType;
   sourceId: string | null;
   /**
-   * What to do about a number Calman already knows, using the §10.1 rules the
-   * bulk import uses: update the open enquiry, open a second one beside it, or
-   * leave the number alone.
+   * Case 5 only (Brief 31): a number somebody has already called today does
+   * nothing until a person chooses. Every other case is decided by the rules,
+   * so there is nothing here to send.
    */
-  decision: "new" | "update" | "dismiss";
-  /** The open enquiry the decision is about, when there is one. */
-  enquiryId: number | null;
+  decision: "dismiss" | "add_anyway" | null;
 };
 
-/**
- * What became of one row.
- *
- * Per row rather than four counters, because the grid has to be able to say
- * "this number" — the enquiry id is what "Log call now" opens, and an ignored
- * field is only worth reporting if the counsellor can see which line it was
- * on (§30.3).
- */
 export type BulkRowResult = {
   mobile: string;
-  action: "created" | "updated" | "dismissed" | "failed";
+  /** Which of the five, as the server saw it at save time. */
+  case: DuplicateCase | null;
+  action: "created" | "updated" | "returned" | "dismissed" | "failed";
   enquiryId: number | null;
-  /** Why it failed. */
+  /** What happened, in the words the rule uses. */
+  detail?: string;
   reason?: string;
-  /**
-   * Fields this save could not apply, in words. §30.3: a save that quietly
-   * drops what somebody typed is worse than one that refuses, so anything not
-   * written comes back and is shown.
-   */
+  /** Anything typed that this save could not apply (§30.3). */
   ignored?: string[];
 };
 
@@ -256,23 +247,24 @@ export type BulkResult = {
   rows?: BulkRowResult[];
   created?: number;
   updated?: number;
+  returned?: number;
   dismissed?: number;
   failed?: { mobile: string; reason: string }[];
 };
 
 /**
- * Create a screenful of numbers in one action (§29.3).
+ * Save a screenful of numbers under §10.1's rules (Brief 31).
  *
- * A counsellor with a list on a WhatsApp message types them in one at a time
- * today, and the lookup, the decision and the save are three interactions per
- * number. The grid is the same three, done once for the whole list.
+ * The rules are applied here, from a lookup taken now, rather than from
+ * whatever the grid saw when the number was typed. Two reasons: a colleague
+ * may have called the number in the minutes since, and a classification that
+ * arrives from a browser is a classification anybody can send. The grid's job
+ * is to show what will happen and to collect the one decision the rules cannot
+ * make; the deciding is here.
  *
- * Rows are written one at a time rather than in one insert: each may take a
- * different branch — a new student, an existing one gaining a second enquiry,
- * an open enquiry taking a new source — and a single statement that has to
- * express all three is a statement nobody can read. A failure is reported
- * against its number and the rest still go in, which is what somebody halfway
- * through a list wants.
+ * Rows are written one at a time because each takes a different branch — a new
+ * student, an open enquiry taking a source, a follow-up coming back to the
+ * pool — and a failure is reported against its own number while the rest go in.
  */
 export async function createManyEnquiries(
   rows: BulkRowInput[],
@@ -283,6 +275,15 @@ export async function createManyEnquiries(
   if (rows.length > 100) return { error: "That is more than 100 rows. Save in batches." };
 
   const supabase = await createClient();
+
+  // One lookup for the whole grid, taken now.
+  const purchase = rows.filter((r) => r.type !== "after_sale");
+  const { statuses, error: lookupError } = await lookupNumbers(
+    [...new Set(purchase.map((r) => normaliseMobile(r.mobile)).filter(isValidMobile))],
+  );
+  if (lookupError) return { error: lookupError };
+  const known = new Map((statuses ?? []).map((s) => [s.mobile, s]));
+
   const out: BulkRowResult[] = [];
 
   for (const row of rows) {
@@ -290,6 +291,7 @@ export async function createManyEnquiries(
     if (!isValidMobile(mobile)) {
       out.push({
         mobile: row.mobile,
+        case: null,
         action: "failed",
         enquiryId: null,
         reason: "not a valid Indian mobile number",
@@ -297,44 +299,99 @@ export async function createManyEnquiries(
       continue;
     }
 
-    if (row.decision === "dismiss") {
-      out.push({ mobile, action: "dismissed", enquiryId: null });
+    // An after-sale row is not a lead at all: tickets are worked in Tickets,
+    // never in the New Calls pool, so none of the five cases applies to one.
+    if (row.type === "after_sale") {
+      out.push(await createFresh(mobile, row, null));
       continue;
     }
 
-    // Rule (a)/(b): the number is already here and somebody said update.
-    if (row.decision === "update" && row.enquiryId) {
-      out.push(await updateExisting(supabase, mobile, row));
+    const status = known.get(mobile);
+    const verdict = status ? describeNumber(status) : null;
+    const which = verdict?.case ?? 1;
+
+    if (which === 5) {
+      if (row.decision === "dismiss") {
+        out.push({
+          mobile,
+          case: 5,
+          action: "dismissed",
+          enquiryId: status?.openEnquiryId ?? null,
+          detail: "Left alone; the call made today stands.",
+        });
+        continue;
+      }
+      if (row.decision !== "add_anyway") {
+        out.push({
+          mobile,
+          case: 5,
+          action: "failed",
+          enquiryId: null,
+          reason: "somebody called this number today — choose Dismiss or Add to New Calls anyway",
+        });
+        continue;
+      }
+    }
+
+    // Cases 1 and 2: nothing is open, so this is a fresh lead in the pool.
+    if (which === 1 || which === 2) {
+      out.push(await createFresh(mobile, row, which));
       continue;
     }
 
-    const res = await createEnquiry({
-      mobile,
-      name: row.name,
-      type: row.type,
-      sourceId: row.sourceId,
-      productText: null,
-      termId: null,
-      importance: null,
-      leadVerification: null,
-      supersedeEnquiryId: null,
-    });
-
-    if (res.error || !res.enquiry) {
+    // Cases 3, 4 and a case 5 that was waved through: the same enquiry takes
+    // the new source. Case 3 stays exactly where it is; the other two clear
+    // the follow-up and come back to the pool.
+    const enquiryId = status?.openEnquiryId ?? null;
+    if (!enquiryId) {
       out.push({
         mobile,
+        case: which,
         action: "failed",
         enquiryId: null,
-        reason: res.error ?? "could not be saved",
+        reason: "the open enquiry disappeared between the lookup and the save",
       });
       continue;
     }
-    out.push({ mobile, action: "created", enquiryId: res.enquiry.id });
+
+    const returns = which !== 3;
+    const { data, error } = await supabase.rpc("import_re_enquire", {
+      p_enquiry_id: enquiryId,
+      p_source_id: row.sourceId ?? undefined,
+      p_clear_follow_up: returns,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+
+    if (error) {
+      out.push({
+        mobile,
+        case: which,
+        action: "failed",
+        enquiryId: null,
+        reason: error.message,
+      });
+      continue;
+    }
+
+    const ignored: string[] = [];
+    const named = await fillBlankStudentName(supabase, status?.studentId ?? null, row.name);
+    if (named.keptExisting) {
+      ignored.push(`Name stays "${named.keptExisting}" — this number already has one`);
+    }
+    if (named.error) ignored.push(`Name could not be set: ${named.error}`);
+
+    out.push({
+      mobile,
+      case: which,
+      action: returns ? "returned" : "updated",
+      enquiryId,
+      detail: (data as string | null) ?? undefined,
+      ignored: ignored.length ? ignored : undefined,
+    });
   }
 
-  // Everything lands unassigned, which is what puts it in New Calls: the pool
-  // is "open, never called, nobody holding it today" and none of these has a
-  // call or an assignment.
+  // New purchase leads land unassigned, which is what puts them in New Calls:
+  // the pool is "open, never had a fresh call, on nobody's day".
   revalidatePath("/new-calls");
   revalidatePath("/quick-add");
   revalidatePath("/tickets");
@@ -344,6 +401,7 @@ export async function createManyEnquiries(
     rows: out,
     created: out.filter((r) => r.action === "created").length,
     updated: out.filter((r) => r.action === "updated").length,
+    returned: out.filter((r) => r.action === "returned").length,
     dismissed: out.filter((r) => r.action === "dismissed").length,
     failed: out
       .filter((r) => r.action === "failed")
@@ -351,90 +409,32 @@ export async function createManyEnquiries(
   };
 }
 
-/**
- * The "Update existing" branch, and the one place §30.3 is enforced.
- *
- * The bug this replaces was a save that looked like it had worked: changing
- * the type on a known number and pressing save did nothing at all, silently,
- * because an existing enquiry's type is not a thing this path writes. The
- * control is locked in the grid now, so this should never see a different
- * type — and if it ever does, it says so rather than swallowing it.
- *
- * The same rule covers the other two. A name is written when the student has
- * none and reported when it would overwrite one; a source is always recorded
- * as an arrival (§10.1) and additionally becomes the enquiry's own source only
- * when that was blank, which is said out loud rather than left to be noticed.
- */
-async function updateExisting(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+/** Cases 1 and 2, and every after-sale row: a brand-new enquiry. */
+async function createFresh(
   mobile: string,
   row: BulkRowInput,
+  which: DuplicateCase | null,
 ): Promise<BulkRowResult> {
-  const enquiryId = row.enquiryId!;
-  const { data: existing, error: readError } = await supabase
-    .from("enquiries")
-    .select("id, type, source_id, student_id, students ( name )")
-    .eq("id", enquiryId)
-    .maybeSingle();
+  const res = await createEnquiry({
+    mobile,
+    name: row.name,
+    type: row.type,
+    sourceId: row.sourceId,
+    productText: null,
+    termId: null,
+    importance: null,
+    leadVerification: null,
+    supersedeEnquiryId: null,
+  });
 
-  if (readError) return { mobile, action: "failed", enquiryId: null, reason: readError.message };
-  if (!existing) {
+  if (res.error || !res.enquiry) {
     return {
       mobile,
+      case: which,
       action: "failed",
       enquiryId: null,
-      reason: `enquiry #${enquiryId} no longer exists`,
+      reason: res.error ?? "could not be saved",
     };
   }
-
-  const ignored: string[] = [];
-  const currentName = (existing.students as { name: string | null } | null)?.name ?? null;
-
-  if (row.type !== existing.type) {
-    ignored.push(
-      `Type stays ${existing.type === "after_sale" ? "After Sale" : "Purchase"} — ` +
-        "an existing enquiry cannot change type",
-    );
-  }
-
-  const { error: sourceError } = await supabase.from("enquiry_sources").insert({
-    enquiry_id: enquiryId,
-    source_id: row.sourceId,
-    note: "Added again in Quick Add.",
-  });
-  if (sourceError) {
-    return { mobile, action: "failed", enquiryId: null, reason: sourceError.message };
-  }
-
-  if (row.sourceId) {
-    if (existing.source_id) {
-      ignored.push("Source recorded as a new arrival; the enquiry keeps its first source");
-    } else {
-      const { error } = await supabase
-        .from("enquiries")
-        .update({ source_id: row.sourceId })
-        .eq("id", enquiryId);
-      if (error) ignored.push(`Source could not be set: ${error.message}`);
-    }
-  }
-
-  const name = row.name?.trim() || null;
-  if (name) {
-    if (currentName && currentName !== name) {
-      ignored.push(`Name stays "${currentName}" — this number already has one`);
-    } else if (!currentName) {
-      const { error } = await supabase
-        .from("students")
-        .update({ name })
-        .eq("id", existing.student_id);
-      if (error) ignored.push(`Name could not be set: ${error.message}`);
-    }
-  }
-
-  return {
-    mobile,
-    action: "updated",
-    enquiryId,
-    ignored: ignored.length ? ignored : undefined,
-  };
+  return { mobile, case: which, action: "created", enquiryId: res.enquiry.id };
 }

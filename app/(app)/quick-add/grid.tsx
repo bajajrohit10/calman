@@ -4,9 +4,15 @@ import { useRef, useState, useTransition } from "react";
 
 import { Button, ErrorNote, Input, Select, cx } from "@/components/ui";
 import { useUnsavedClaim } from "@/components/unsaved-guard";
+import {
+  describeNumber,
+  dismissQuestion,
+  type DuplicateVerdict,
+  type NumberStatus,
+} from "@/lib/duplicate-rules";
 import type { EnquiryType } from "@/lib/enquiry-labels";
 import { isValidMobile, normaliseMobile } from "@/lib/mobile";
-import { lookupNumbers, type NumberStatus } from "@/app/(app)/import/actions";
+import { lookupNumbers } from "@/app/(app)/import/actions";
 
 import { createManyEnquiries, type BulkResult } from "./actions";
 
@@ -17,8 +23,8 @@ type Row = {
   type: EnquiryType;
   sourceId: string;
   status: NumberStatus | null;
-  /** null until the number is looked up; then the counsellor's answer. */
-  decision: "new" | "update" | "dismiss" | null;
+  /** Case 5 only: what the counsellor chose. */
+  decision: "dismiss" | "add_anyway" | null;
   checking: boolean;
 };
 
@@ -42,48 +48,19 @@ const blank = (): Row => ({
 const blanks = (n: number) => Array.from({ length: n }, blank);
 
 /**
- * The hint on a locked Type control (§30.3).
+ * Quick Add (§30.1) under Brief 31's duplicate rules.
  *
- * Exported because the message is the fix: changing the type of an enquiry
- * that already exists used to be accepted and then quietly dropped, and the
- * cure for a silent no-op is a sentence saying what to do instead.
- */
-export const TYPE_LOCKED_HINT =
-  "Type is fixed for an existing enquiry — use New enquiry, or the after-sale " +
-  "switch in the call window";
-
-/** What each §10.1 state means for somebody typing a list. */
-function describe(s: NumberStatus): { text: string; needsChoice: boolean } {
-  switch (s.state) {
-    case "new":
-      return { text: "New number", needsChoice: false };
-    case "open_uncalled":
-      return { text: "Open, never called", needsChoice: true };
-    case "open_called_earlier":
-      return { text: "Open, called earlier", needsChoice: true };
-    case "open_called_today":
-      return { text: "Open, called today", needsChoice: true };
-    case "wrong_number":
-      return { text: "Marked wrong number", needsChoice: true };
-    case "resolved":
-      return { text: "Closed — won or lost", needsChoice: true };
-  }
-}
-
-/**
- * Quick Add (§30.1): a grid of numbers, and nothing else.
+ * There is no Update / New enquiry / Dismiss choice any more. §10.1 already
+ * says what happens to a number in each of five situations, and offering the
+ * choice meant the counsellor had to know those rules better than the system
+ * did — twenty times per list, with the wrong answer silently making a second
+ * enquiry for somebody who already had one. So the grid states what it found
+ * and what it will do, and asks nothing.
  *
- * It replaced a single-number box with a grid hidden behind a button. The box
- * was built for the phone ringing, but the phone ringing is one row of this —
- * type the number, see what Calman knows, decide — and keeping two screens
- * that do the same thing meant every change had to be made twice and the list
- * case was the one that got forgotten. One row is the ringing phone; twenty
- * are the list somebody was sent.
- *
- * Ten rows to start because a screenful that is already there reads as "type
- * here"; five more arrive as soon as the last one is reached, so the grid is
- * never the thing that runs out. Empty rows are ignored, so leaving seventeen
- * of them untouched costs nothing.
+ * The one exception is a number somebody has already called today. No rule can
+ * decide that: dropping it loses a lead, and pushing it back into the pool
+ * sends a colleague to ring somebody who was rung an hour ago. That row does
+ * nothing until a person chooses, and nothing else can be saved until they do.
  */
 export function QuickAddGrid({
   sources,
@@ -96,18 +73,21 @@ export function QuickAddGrid({
   const [rows, setRows] = useState<Row[]>(() => blanks(OPENING_ROWS));
   const [result, setResult] = useState<BulkResult | null>(null);
   const [pending, start] = useTransition();
-  // Which row's "Log call now" is in flight, so only that button says so.
   const [opening, setOpening] = useState<string | null>(null);
+  /** The row whose Dismiss is waiting on a confirmation. */
+  const [confirming, setConfirming] = useState<Row | null>(null);
   const grownFor = useRef<string | null>(null);
 
   const filled = rows.filter((r) => r.mobile.trim());
   const invalid = filled.filter((r) => !isValidMobile(normaliseMobile(r.mobile)));
-  const undecided = filled.filter(
-    (r) => r.status && describe(r.status).needsChoice && !r.decision,
-  );
-  const saveable = filled.filter(
-    (r) => isValidMobile(normaliseMobile(r.mobile)) && r.decision !== "dismiss",
-  );
+  const verdictOf = (r: Row): DuplicateVerdict | null =>
+    r.status && r.type !== "after_sale" ? describeNumber(r.status) : null;
+  const undecided = filled.filter((r) => {
+    const v = verdictOf(r);
+    return v?.needsDecision && !r.decision;
+  });
+  const saveable = filled.filter((r) => isValidMobile(normaliseMobile(r.mobile)));
+  const blocked = invalid.length > 0 || undecided.length > 0;
 
   useUnsavedClaim({
     isDirty: () => filled.length > 0 && !result,
@@ -128,13 +108,7 @@ export function QuickAddGrid({
     if (!isValidMobile(mobile)) return;
     patch(key, { checking: true });
     const res = await lookupNumbers([mobile]);
-    const status = res.statuses?.[0] ?? null;
-    patch(key, {
-      checking: false,
-      status,
-      // A number nobody has seen needs no decision; the rest wait for one.
-      decision: status && describe(status).needsChoice ? null : "new",
-    });
+    patch(key, { checking: false, status: res.statuses?.[0] ?? null });
   }
 
   /**
@@ -173,7 +147,6 @@ export function QuickAddGrid({
         };
         keys.push(next[at].key);
       });
-      // Always a screenful still waiting at the end.
       if (next[next.length - 1].mobile.trim()) next.push(...blanks(GROW_BY));
       return next;
     });
@@ -184,14 +157,9 @@ export function QuickAddGrid({
     });
   }
 
-  /**
-   * Write every filled row. Returns the result so the callers can read it —
-   * "Log call now" needs the enquiry id of its own row, and the unsaved guard
-   * needs to know whether the save was allowed to happen.
-   */
   async function saveAll(): Promise<BulkResult | null> {
     if (!saveable.length) {
-      setResult({ error: "Nothing to save — every row is empty, invalid or dismissed." });
+      setResult({ error: "Nothing to save — every row is empty or invalid." });
       return null;
     }
     if (invalid.length) {
@@ -202,7 +170,7 @@ export function QuickAddGrid({
     }
     if (undecided.length) {
       setResult({
-        error: `${undecided.length} number${undecided.length === 1 ? "" : "s"} Calman already knows — choose what to do with each.`,
+        error: `${undecided.length} row${undecided.length === 1 ? "" : "s"} need${undecided.length === 1 ? "s" : ""} a decision — somebody called ${undecided.length === 1 ? "that number" : "those numbers"} today.`,
       });
       return null;
     }
@@ -210,12 +178,9 @@ export function QuickAddGrid({
       filled.map((r) => ({
         mobile: r.mobile,
         name: r.name.trim() || null,
-        // §30.2. The row's own choice, all the way through — not a default
-        // applied here because the save happened to be a bulk one.
         type: r.type,
         sourceId: r.sourceId || null,
-        decision: (r.decision ?? "new") as "new" | "update" | "dismiss",
-        enquiryId: r.status?.openEnquiryId ?? null,
+        decision: r.decision,
       })),
     );
     setResult(res);
@@ -244,7 +209,7 @@ export function QuickAddGrid({
       const mine = res.rows?.[index];
       if (!mine || mine.enquiryId == null) {
         setResult({
-          ...(res ?? { error: null }),
+          ...res,
           error:
             mine?.action === "dismissed"
               ? "That row was dismissed, so there is nothing to call."
@@ -256,37 +221,31 @@ export function QuickAddGrid({
     });
   }
 
-  const busy = pending;
-
   return (
     <div className="flex flex-col gap-3">
       {result?.error ? <ErrorNote>{result.error}</ErrorNote> : null}
       {result && !result.error ? <Summary result={result} /> : null}
 
       <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
-        <table className="w-full min-w-[1080px] border-collapse text-[12.5px]">
+        <table className="w-full min-w-[1120px] border-collapse text-[12.5px]">
           <thead>
             <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
               <th className="w-[40px] px-2 py-[7px] text-right">#</th>
-              <th className="w-[155px] px-2 py-[7px]">Mobile</th>
-              <th className="w-[180px] px-2 py-[7px]">Name</th>
-              <th className="w-[135px] px-2 py-[7px]">Type</th>
-              <th className="w-[155px] px-2 py-[7px]">Source</th>
+              <th className="w-[150px] px-2 py-[7px]">Mobile</th>
+              <th className="w-[170px] px-2 py-[7px]">Name</th>
+              <th className="w-[125px] px-2 py-[7px]">Type</th>
+              <th className="w-[145px] px-2 py-[7px]">Source</th>
               <th className="px-2 py-[7px]">Status</th>
-              <th className="w-[130px] px-2 py-[7px]">Action</th>
+              <th className="w-[120px] px-2 py-[7px]">Action</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r, i) => {
               const mobile = normaliseMobile(r.mobile);
               const bad = Boolean(r.mobile.trim()) && !isValidMobile(mobile);
-              const info = r.status ? describe(r.status) : null;
-              // §30.3. An existing enquiry's type cannot be changed, and
-              // import_lookup only ever offers an open *purchase* enquiry to
-              // update — so the locked control is not just disabled, it is
-              // showing the truth.
-              const typeLocked = r.decision === "update";
-              const ready = Boolean(mobile) && !bad && r.decision !== "dismiss" && !r.checking;
+              const verdict = verdictOf(r);
+              const waiting = Boolean(verdict?.needsDecision) && !r.decision;
+              const ready = Boolean(mobile) && !bad && !r.checking && !waiting;
 
               return (
                 <tr
@@ -294,6 +253,7 @@ export function QuickAddGrid({
                   className={cx(
                     "border-b border-line last:border-b-0",
                     bad && "bg-danger-soft/30",
+                    waiting && "bg-warn-soft/30",
                   )}
                   onFocus={() => reached(r.key)}
                 >
@@ -321,22 +281,18 @@ export function QuickAddGrid({
                   </td>
                   <td className="px-2 py-[5px]">
                     <Select
-                      value={typeLocked ? "purchase" : r.type}
+                      value={r.type}
                       aria-label={`Type, row ${i + 1}`}
-                      disabled={typeLocked}
-                      title={typeLocked ? TYPE_LOCKED_HINT : undefined}
                       onChange={(e) =>
-                        patch(r.key, { type: e.target.value as EnquiryType })
+                        patch(r.key, {
+                          type: e.target.value as EnquiryType,
+                          decision: null,
+                        })
                       }
                     >
                       <option value="purchase">Purchase</option>
                       <option value="after_sale">After Sale</option>
                     </Select>
-                    {typeLocked ? (
-                      <span className="mt-0.5 block text-[10.5px] leading-snug text-ink-3">
-                        {TYPE_LOCKED_HINT}
-                      </span>
-                    ) : null}
                   </td>
                   <td className="px-2 py-[5px]">
                     <Select
@@ -353,55 +309,20 @@ export function QuickAddGrid({
                     </Select>
                   </td>
                   <td className="px-2 py-[5px]">
-                    {bad ? (
-                      <span className="text-[12px] font-medium text-danger">
-                        Not a valid number
-                      </span>
-                    ) : r.checking ? (
-                      <span className="text-[12px] text-ink-3">checking…</span>
-                    ) : info ? (
-                      <span className="flex flex-wrap items-center gap-1.5">
-                        <span
-                          className={cx(
-                            "text-[12px]",
-                            info.needsChoice ? "text-warn" : "text-ink-2",
-                          )}
-                        >
-                          {info.text}
-                          {r.status?.studentName ? ` · ${r.status.studentName}` : ""}
-                        </span>
-                        {info.needsChoice
-                          ? (["update", "new", "dismiss"] as const).map((d) => (
-                              <button
-                                key={d}
-                                type="button"
-                                onClick={() => patch(r.key, { decision: d })}
-                                className={cx(
-                                  "rounded-full border px-2 py-[2px] text-[11px]",
-                                  r.decision === d
-                                    ? "border-accent bg-accent-soft font-medium text-accent"
-                                    : "border-line-2 bg-surface text-ink-2 hover:border-ink-3",
-                                )}
-                              >
-                                {d === "update"
-                                  ? "Update existing"
-                                  : d === "new"
-                                    ? "New enquiry"
-                                    : "Dismiss"}
-                              </button>
-                            ))
-                          : null}
-                      </span>
-                    ) : (
-                      <span className="text-[12px] text-ink-3">—</span>
-                    )}
+                    <StatusCell
+                      row={r}
+                      bad={bad}
+                      verdict={verdict}
+                      onAddAnyway={() => patch(r.key, { decision: "add_anyway" })}
+                      onDismiss={() => setConfirming(r)}
+                    />
                   </td>
                   <td className="px-2 py-[5px]">
                     {ready ? (
                       <Button
                         size="sm"
                         variant="secondary"
-                        disabled={busy}
+                        disabled={pending || blocked}
                         title="Saves every filled row first, then opens the call"
                         onClick={() => logCallNow(r)}
                       >
@@ -419,10 +340,10 @@ export function QuickAddGrid({
       <div className="flex flex-wrap items-center gap-2">
         <Button
           variant="primary"
-          disabled={busy}
+          disabled={pending || blocked}
           onClick={() => start(() => void saveAll())}
         >
-          {busy && !opening ? "Saving…" : `Save all (${saveable.length})`}
+          {pending && !opening ? "Saving…" : `Save all (${saveable.length})`}
         </Button>
         <Button
           size="sm"
@@ -431,12 +352,160 @@ export function QuickAddGrid({
         >
           Add {GROW_BY} rows
         </Button>
+        {undecided.length ? (
+          <span className="rounded-md border border-warn/40 bg-warn-soft/50 px-2 py-1 text-[12px] font-medium text-warn">
+            {undecided.length} row{undecided.length === 1 ? "" : "s"} need
+            {undecided.length === 1 ? "s" : ""} a decision
+          </span>
+        ) : null}
         <span className="text-[11.5px] text-ink-3">
           {invalid.length ? `${invalid.length} invalid · ` : ""}
-          {undecided.length ? `${undecided.length} waiting on a choice · ` : ""}
-          Save all sends every filled row to New Calls, unassigned. Log call now
-          saves them all first, then opens that row&apos;s call.
+          What happens to each number is decided by the rules and stated in its
+          row. Log call now saves them all first, then opens that row&apos;s call.
         </span>
+      </div>
+
+      {confirming ? (
+        <ConfirmDismiss
+          mobile={normaliseMobile(confirming.mobile)}
+          onCancel={() => setConfirming(null)}
+          onConfirm={() => {
+            patch(confirming.key, { decision: "dismiss" });
+            setConfirming(null);
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One row's status: the sentence, and under it what saving will do.
+ *
+ * Case 5 is the only one with buttons, and it has no default — a row that
+ * quietly defaulted to Dismiss would drop a lead without anybody deciding to,
+ * and one that defaulted the other way would send a colleague to make a call
+ * that has already been made.
+ */
+function StatusCell({
+  row,
+  bad,
+  verdict,
+  onAddAnyway,
+  onDismiss,
+}: {
+  row: Row;
+  bad: boolean;
+  verdict: DuplicateVerdict | null;
+  onAddAnyway: () => void;
+  onDismiss: () => void;
+}) {
+  if (bad) {
+    return <span className="text-[12px] font-medium text-danger">Not a valid number</span>;
+  }
+  if (row.checking) return <span className="text-[12px] text-ink-3">checking…</span>;
+  if (!row.mobile.trim()) return <span className="text-[12px] text-ink-3">—</span>;
+
+  // An after-sale row is not a lead; the five cases are about the New Calls
+  // pipeline, and a ticket never enters it.
+  if (row.type === "after_sale") {
+    return (
+      <span className="text-[12px] text-ink-2">
+        After-sale enquiry
+        <span className="block text-[11px] text-ink-3">New ticket in Tickets</span>
+      </span>
+    );
+  }
+  if (!verdict) return <span className="text-[12px] text-ink-3">—</span>;
+
+  const tone =
+    verdict.tone === "ok"
+      ? "text-ok"
+      : verdict.tone === "warn"
+        ? "text-warn"
+        : verdict.tone === "info"
+          ? "text-info"
+          : "text-ink-2";
+
+  return (
+    <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <span className="flex flex-col">
+        <span className={cx("text-[12px] font-medium", tone)}>{verdict.label}</span>
+        <span className="text-[11px] text-ink-3">
+          {row.decision === "dismiss"
+            ? "Dismissed — nothing will be written"
+            : row.decision === "add_anyway"
+              ? "Source updated, follow-up cleared, back into New Calls"
+              : verdict.action}
+        </span>
+      </span>
+      {verdict.needsDecision ? (
+        <span className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onDismiss}
+            className={cx(
+              "rounded-full border px-2 py-[2px] text-[11px]",
+              row.decision === "dismiss"
+                ? "border-accent bg-accent-soft font-medium text-accent"
+                : "border-line-2 bg-surface text-ink-2 hover:border-ink-3",
+            )}
+          >
+            Dismiss
+          </button>
+          <button
+            type="button"
+            onClick={onAddAnyway}
+            className={cx(
+              "rounded-full border px-2 py-[2px] text-[11px]",
+              row.decision === "add_anyway"
+                ? "border-accent bg-accent-soft font-medium text-accent"
+                : "border-line-2 bg-surface text-ink-2 hover:border-ink-3",
+            )}
+          >
+            Add to New Calls anyway
+          </button>
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/**
+ * Dismiss asks twice.
+ *
+ * It is the one action here that throws a lead away, and it is offered at the
+ * end of a row on a screen where everything else is decided automatically —
+ * exactly the conditions for clicking it without meaning to.
+ */
+export function ConfirmDismiss({
+  mobile,
+  onCancel,
+  onConfirm,
+}: {
+  mobile: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-40 flex items-start justify-center bg-ink/25 px-4 py-20">
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-label="Dismiss this number"
+        className="w-full max-w-[440px] rounded-lg border border-line bg-surface p-4 shadow-panel"
+      >
+        <p className="text-[13.5px] font-medium text-ink">{dismissQuestion(mobile)}</p>
+        <div className="mt-3 flex gap-2">
+          <Button variant="primary" onClick={onConfirm}>
+            Confirm
+          </Button>
+          <Button variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -453,10 +522,9 @@ function Summary({ result }: { result: BulkResult }) {
   return (
     <div className="rounded-md border border-ok/40 bg-ok-soft px-3 py-1.5 text-[12.5px] text-ok">
       <p>
-        {result.created} created, {result.updated} added to an existing enquiry,{" "}
-        {result.dismissed} left alone
-        {result.failed?.length ? `, ${result.failed.length} failed` : ""}. New
-        purchase leads are waiting in New Calls; after-sale ones are in Tickets.
+        {result.created} new, {result.updated} already waiting and updated,{" "}
+        {result.returned} returned to New Calls, {result.dismissed} left alone
+        {result.failed?.length ? `, ${result.failed.length} failed` : ""}.
       </p>
       {result.failed?.length ? (
         <p className="mt-1 text-[11.5px] text-danger">

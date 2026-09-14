@@ -1732,6 +1732,9 @@ export type Database = {
       import_lookup: {
         Args: { p_mobiles: string[] }
         Returns: {
+          assigned_to: string
+          closed_as: string
+          closed_on: string
           enquiry_count: number
           last_call_at: string
           last_call_by: string

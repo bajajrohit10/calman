@@ -6,7 +6,9 @@ import { revalidatePath } from "next/cache";
 
 import { requireUser } from "@/lib/auth";
 import type { Importance, LeadVerification } from "@/lib/enquiry-labels";
+import type { NumberState, NumberStatus } from "@/lib/duplicate-rules";
 import { isValidMobile, normaliseMobile } from "@/lib/mobile";
+import { fillBlankStudentName } from "@/lib/student-name";
 import { createClient } from "@/lib/supabase/server";
 
 /* -------------------------------------------------------------------------- */
@@ -66,29 +68,12 @@ export async function saveMapping(
 /* -------------------------------------------------------------------------- */
 
 /**
- * §10.1. Six states, because the re-upload rules turn on more than "is there
- * something open": rule (c) needs to know the enquiry was called on an earlier
- * day, and rule (d) needs today's call with its time and counsellor.
+ * §10.1's six states and the facts the five sentences are built from now live
+ * in lib/duplicate-rules, with the wording (Brief 31). Re-exported here
+ * because this is where every caller already imports them from, and moving the
+ * definition should not mean editing eight import lines.
  */
-export type NumberState =
-  | "new"
-  | "open_uncalled"
-  | "open_called_earlier"
-  | "open_called_today"
-  | "wrong_number"
-  | "resolved";
-
-export type NumberStatus = {
-  mobile: string;
-  studentId: string | null;
-  studentName: string | null;
-  state: NumberState;
-  openEnquiryId: number | null;
-  lastCallAt: string | null;
-  lastCallDate: string | null;
-  lastCallBy: string | null;
-  enquiryCount: number;
-};
+export type { NumberState, NumberStatus };
 
 /**
  * What Calman already knows about each number (§5.7 review table).
@@ -128,6 +113,9 @@ export async function lookupNumbers(mobiles: string[]): Promise<{
     last_call_date: string | null;
     last_call_by: string | null;
     enquiry_count: number;
+    closed_on: string | null;
+    closed_as: "won" | "lost" | "wrong_number" | null;
+    assigned_to: string | null;
   };
 
   const byMobile = new Map<string, NumberStatus>();
@@ -142,6 +130,9 @@ export async function lookupNumbers(mobiles: string[]): Promise<{
       lastCallDate: r.last_call_date,
       lastCallBy: r.last_call_by,
       enquiryCount: r.enquiry_count,
+      closedOn: r.closed_on,
+      closedAs: r.closed_as,
+      assignedTo: r.assigned_to,
     });
   }
 
@@ -159,6 +150,9 @@ export async function lookupNumbers(mobiles: string[]): Promise<{
           lastCallDate: null,
           lastCallBy: null,
           enquiryCount: 0,
+          closedOn: null,
+          closedAs: null,
+          assignedTo: null,
         },
     ),
   };
@@ -393,6 +387,16 @@ export async function commitChunk(
         });
       }
     }
+
+    // Brief 31 rule 3: an arriving row fills the name in if there isn't one.
+    // Never overwrites — a name on file was typed by somebody who had the
+    // person on the phone. The same helper Quick Add's grid uses, so the two
+    // paths cannot disagree about what "if blank" means.
+    await Promise.all(
+      updating.map((row) =>
+        fillBlankStudentName(supabase, row.existingStudentId, row.name),
+      ),
+    );
 
     for (const row of updating) {
       const r = status.get(row.existingEnquiryId!) ?? {

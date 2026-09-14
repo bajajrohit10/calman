@@ -102,7 +102,11 @@ export function TeamDayGrid({
               <th className="px-2.5 py-[7px]">Counsellor</th>
               {MY_DAY_TABS.map((t) => (
                 <th key={t.key} className="border-l border-line px-2 py-[7px] text-right">
-                  {t.label}
+                  {/* Named for what it is here. Nothing assigns a ticket, so
+                      this column is the same queue on every row and sits
+                      outside Total; saying so in the heading is cheaper than
+                      a footnote nobody reads. */}
+                  {t.key === "tickets" ? "Tickets (shared)" : t.label}
                 </th>
               ))}
               <th className="border-l border-line px-2 py-[7px] text-right">Total</th>
@@ -186,7 +190,8 @@ export function TeamDayGrid({
         <span className="text-[11.5px] leading-relaxed text-ink-3">
           Each cell is pending / assigned for {formatDate(date)}, and links to
           that counsellor&apos;s tab. Tickets are not assigned to anybody, so
-          that column is the shared queue and reads the same on every row.
+          that column is the shared queue, reads the same on every row, and is
+          not counted in Total.
         </span>
       </div>
 
