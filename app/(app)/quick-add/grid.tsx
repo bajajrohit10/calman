@@ -88,6 +88,14 @@ export function QuickAddGrid({
   });
   const saveable = filled.filter((r) => isValidMobile(normaliseMobile(r.mobile)));
   const blocked = invalid.length > 0 || undecided.length > 0;
+  /**
+   * §32.1. "Log call now" belongs to the single-number case — the phone is
+   * ringing and this row is the call. With a list on screen it is the wrong
+   * offer: it saves every row and then opens one of them, which is not what
+   * anybody means by a button on row four. So it appears only while exactly
+   * one row has a number in it, and comes back if the others are cleared.
+   */
+  const lone = filled.length === 1 ? filled[0] : null;
 
   useUnsavedClaim({
     isDirty: () => filled.length > 0 && !result,
@@ -125,6 +133,24 @@ export function QuickAddGrid({
     if (grownFor.current === key) return;
     grownFor.current = key;
     setRows((rs) => [...rs, ...blanks(GROW_BY)]);
+  }
+
+  /**
+   * §32.1. Enter is Log call now, when there is one row to mean it.
+   *
+   * The single-number box this grid replaced logged a call on Enter, and one
+   * row of the grid is that box. With a list on screen Enter does nothing,
+   * because "which row?" has no answer and saving the lot on a stray keypress
+   * is not a thing to do by accident.
+   */
+  function onEnter(e: React.KeyboardEvent, row: Row) {
+    if (e.key !== "Enter" || e.shiftKey) return;
+    if (filled.length !== 1 || filled[0].key !== row.key) return;
+    if (pending || blocked) return;
+    const mobile = normaliseMobile(row.mobile);
+    if (!isValidMobile(mobile) || row.checking) return;
+    e.preventDefault();
+    logCallNow(row);
   }
 
   /** A pasted column fills rows rather than one cell. */
@@ -266,9 +292,16 @@ export function QuickAddGrid({
                       inputMode="numeric"
                       aria-label={`Mobile, row ${i + 1}`}
                       className={bad ? "border-danger" : undefined}
-                      onChange={(e) => patch(r.key, { mobile: e.target.value })}
+                      // §32.2. Normalised on the way in, not on the way out,
+                      // so what is in the box is always what would be stored:
+                      // pasting "+91 98765-43210" from WhatsApp shows
+                      // 9876543210 at once rather than on blur.
+                      onChange={(e) =>
+                        patch(r.key, { mobile: normaliseMobile(e.target.value) })
+                      }
                       onBlur={(e) => void settleMobile(r.key, e.target.value)}
                       onPaste={(e) => onPaste(e, i)}
+                      onKeyDown={(e) => onEnter(e, r)}
                     />
                   </td>
                   <td className="px-2 py-[5px]">
@@ -277,6 +310,7 @@ export function QuickAddGrid({
                       aria-label={`Name, row ${i + 1}`}
                       placeholder="Optional"
                       onChange={(e) => patch(r.key, { name: e.target.value })}
+                      onKeyDown={(e) => onEnter(e, r)}
                     />
                   </td>
                   <td className="px-2 py-[5px]">
@@ -318,12 +352,12 @@ export function QuickAddGrid({
                     />
                   </td>
                   <td className="px-2 py-[5px]">
-                    {ready ? (
+                    {ready && lone?.key === r.key ? (
                       <Button
                         size="sm"
                         variant="secondary"
                         disabled={pending || blocked}
-                        title="Saves every filled row first, then opens the call"
+                        title="Saves this row and opens the call — Enter does the same"
                         onClick={() => logCallNow(r)}
                       >
                         {opening === r.key ? "Opening…" : "Log call now"}
@@ -361,7 +395,10 @@ export function QuickAddGrid({
         <span className="text-[11.5px] text-ink-3">
           {invalid.length ? `${invalid.length} invalid · ` : ""}
           What happens to each number is decided by the rules and stated in its
-          row. Log call now saves them all first, then opens that row&apos;s call.
+          row.{" "}
+          {lone
+            ? "One number: Enter or Log call now saves it and opens the call."
+            : "Log call now appears when only one row is filled."}
         </span>
       </div>
 

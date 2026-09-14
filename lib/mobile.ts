@@ -48,7 +48,19 @@ export function mobileHint(normalised: string): string | null {
   return "An Indian mobile number starts with 6, 7, 8 or 9.";
 }
 
-/** 9876543210 → 98765 43210, for display only. Never stored this way. */
+/**
+ * A number as it is shown: ten plain digits, nothing in the middle (§32.2).
+ *
+ * It used to render "98765 43210", which is how a person reads a number out
+ * loud and how nobody searches for one. The space defeated the browser's own
+ * Find, so a counsellor hunting a number on a long list got nothing, and
+ * copying a cell pasted a string that would not match anywhere until the
+ * space was picked out by hand.
+ *
+ * Still a function rather than printing the field directly, because it is also
+ * the guarantee: whatever shape a caller holds, the screen shows the stored
+ * form.
+ */
 export function formatMobile(mobile: string): string {
-  return isValidMobile(mobile) ? `${mobile.slice(0, 5)} ${mobile.slice(5)}` : mobile;
+  return normaliseMobile(mobile) || mobile;
 }

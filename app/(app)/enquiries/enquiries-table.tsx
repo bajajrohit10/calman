@@ -20,7 +20,7 @@ import {
   Button,
   ErrorNote,
   ImportanceMark,
-  Input,
+  MobileInput,
   Select,
   cx,
 } from "@/components/ui";
@@ -133,7 +133,13 @@ export function EnquiriesTable({
       <form method="GET" className="rounded-lg border border-line bg-surface shadow-card">
         <div className="flex flex-wrap gap-2 p-2.5">
           <Labelled label="Mobile" wide>
-            <Input name="mobile" defaultValue={selected.mobile} placeholder="any part" />
+            {/* §32.2. Numbers are stored and shown as ten plain digits, so
+                the box somebody pastes into has to produce them. */}
+            <MobileInput
+              name="mobile"
+              defaultValue={selected.mobile}
+              placeholder="any part"
+            />
           </Labelled>
 
           <CommonFilterFields

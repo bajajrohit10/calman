@@ -1,4 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
+import { normaliseMobile } from "@/lib/mobile";
 
 /** Shared primitives. Dense by default — this is a tool, not a landing page. */
 
@@ -137,6 +138,37 @@ const BADGE_TONES = {
  * circle for the pills that name a stage, which is what lets the eye group a
  * column of them without reading any of the words.
  */
+/**
+ * An input that only ever holds a mobile number (§32.2).
+ *
+ * Normalises on the way in — every keystroke and every paste — so what is in
+ * the box is always what would be stored and what is on the screen elsewhere.
+ * Pasting "+91 98765-43210" out of WhatsApp leaves 9876543210 behind, which is
+ * what the filter has to match against and what Find has to find.
+ *
+ * Uncontrolled: it rewrites its own value, so it works inside the plain GET
+ * forms the filter bars are built from without any of them needing state.
+ */
+export function MobileInput(
+  props: React.InputHTMLAttributes<HTMLInputElement>,
+) {
+  const clean = (el: HTMLInputElement) => {
+    const next = normaliseMobile(el.value);
+    if (next !== el.value) el.value = next;
+  };
+  return (
+    <Input
+      {...props}
+      inputMode="numeric"
+      autoComplete="off"
+      onInput={(e) => {
+        clean(e.currentTarget);
+        props.onInput?.(e);
+      }}
+    />
+  );
+}
+
 export function Badge({
   tone = "neutral",
   dot = false,
@@ -149,7 +181,14 @@ export function Badge({
   return (
     <span
       className={cx(
-        "inline-flex h-[17px] items-center gap-1 rounded border px-1.5 text-[10.5px] font-semibold",
+        // whitespace-nowrap and shrink-0 are the whole fix for §32.3. The
+        // height is fixed so a row of pills lines up, but in a flex cell a
+        // pill one pixel short of its text was shrinking, wrapping at the
+        // hyphen in "Follow-up", and having the second line clipped by that
+        // same fixed height — measured on the desk as a 23px scrollHeight
+        // inside a 15px box. A pill is one line by definition; saying so
+        // costs nothing and lets the cell overflow instead.
+        "inline-flex h-[17px] shrink-0 items-center gap-1 whitespace-nowrap rounded border px-1.5 text-[10.5px] font-semibold",
         BADGE_TONES[tone],
       )}
     >
