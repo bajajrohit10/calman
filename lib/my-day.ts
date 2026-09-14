@@ -89,6 +89,12 @@ export type MyDayTicket = {
   last_discussion: string | null;
   issue_category: IssueCategory | null;
   last_caller_name: string | null;
+  last_caller_id: string | null;
+  created_by: string | null;
+  /** §33.4: the reminder has passed and nobody has closed it. */
+  is_overdue: boolean;
+  /** The day it was resolved, for the Resolved tab. */
+  resolved_on: string | null;
   /** An after-sale call logged today. `calls` rows here are after-sale only. */
   called_today: boolean;
 };
@@ -113,7 +119,7 @@ export async function loadMyDay(input: {
   const supabase = await createClient();
   const today = istToday();
 
-  const [day, tickets] = await timed("list", () => Promise.all([
+  const [day, tickets, resolved] = await timed("list", () => Promise.all([
     // Paged even though a day is rarely more than a hundred rows: PostgREST
     // caps an RPC at max_rows without saying so, and a campaign day is exactly
     // the day somebody would notice the list stopping at 1,000.
@@ -126,17 +132,31 @@ export async function loadMyDay(input: {
         } as any)
         .range(from, to) as never,
     ),
+    // §33.3. Two questions, because they are two different questions: every
+    // unresolved ticket regardless of the date, and the ones resolved on the
+    // day being looked at. The first is not date-bound on purpose — a ticket
+    // raised last Tuesday is still somebody's problem today.
     supabase.rpc("tickets_list", {
       p_include_resolved: false,
       p_sort: "reminder",
       p_dir: "asc",
+      p_as_of: input.date,
+      p_limit: TICKET_LIMIT,
+      p_offset: 0,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any),
+    supabase.rpc("tickets_list", {
+      p_resolved_on: input.date,
+      p_sort: "reminder",
+      p_dir: "asc",
+      p_as_of: input.date,
       p_limit: TICKET_LIMIT,
       p_offset: 0,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any),
   ]));
 
-  const ticketRows = (tickets.data ?? []) as unknown as {
+  type RawTicket = {
     enquiry_id: number;
     mobile: string;
     student_name: string | null;
@@ -148,7 +168,15 @@ export async function loadMyDay(input: {
     last_discussion: string | null;
     issue_category: IssueCategory | null;
     last_caller_name: string | null;
-  }[];
+    last_caller_id: string | null;
+    created_by: string | null;
+    is_overdue: boolean;
+    resolved_on: string | null;
+  };
+  const ticketRows = [
+    ...((tickets.data ?? []) as unknown as RawTicket[]),
+    ...((resolved.data ?? []) as unknown as RawTicket[]),
+  ];
 
   // The offers actually on this day, named. Asked only when there are offer
   // rows, so an ordinary day pays nothing for a feature it is not using.
@@ -178,7 +206,7 @@ export async function loadMyDay(input: {
       called_today:
         input.date === today && istDateOf(t.last_call_at) === today,
     })),
-    error: day.error ?? tickets.error?.message ?? null,
+    error: day.error ?? tickets.error?.message ?? resolved.error?.message ?? null,
   };
 }
 

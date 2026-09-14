@@ -301,36 +301,55 @@ export async function createManyEnquiries(
       fail(index, row.mobile, "not a valid Indian mobile number");
       return;
     }
-    const first = seen.get(mobile);
+    // §32.4 refuses the same number twice — but §33.5 makes one number in two
+    // pipelines a legitimate thing to type: a lead and a complaint are
+    // different conversations with different people. So the row is identified
+    // by number *and* type, and only a true repeat is refused.
+    const key = `${mobile}:${row.type}`;
+    const first = seen.get(key);
     if (first !== undefined) {
-      fail(index, mobile, `the same number is on row ${first + 1} of this grid`);
+      fail(
+        index,
+        mobile,
+        `the same number and type is on row ${first + 1} of this grid`,
+      );
       return;
     }
-    seen.set(mobile, index);
+    seen.set(key, index);
     jobs.push({ index, mobile, row });
   });
 
   // One lookup for the whole grid, taken now. Batched, so it costs the same
   // for ten numbers as for one — which is why reusing the grid's own lookup
   // would buy nothing measurable.
-  const toLookUp = jobs.filter((j) => j.row.type !== "after_sale").map((j) => j.mobile);
+  // Every row, whatever its type: an after-sale row needs to know whether a
+  // ticket is already open on the number (§33.5).
+  const toLookUp = jobs.map((j) => j.mobile);
   const { statuses, error: lookupError } = await lookupNumbers([...new Set(toLookUp)]);
   if (lookupError) return { error: lookupError };
   const known = new Map((statuses ?? []).map((s) => [s.mobile, s]));
 
   const creating: Job[] = [];
   const reEnquiring: (Job & { enquiryId: number; returns: boolean; which: DuplicateCase })[] = [];
+  /** §33.5: rows that join an open ticket rather than making anything. */
+  const attaching: (Job & { ticketId: number })[] = [];
 
   for (const job of jobs) {
-    // An after-sale row is not a lead at all: tickets are worked in Tickets,
-    // never in the New Calls pool, so none of the five cases applies to one.
+    const status = known.get(job.mobile);
+
+    // §33.5. An after-sale row meets the ticket rules: if a ticket is already
+    // open on this number, the arrival is logged against it and nothing new is
+    // made. Otherwise it is a new ticket, which is a plain create.
     if (job.row.type === "after_sale") {
-      creating.push(job);
+      if (status?.ticketEnquiryId) {
+        attaching.push({ ...job, ticketId: status.ticketEnquiryId });
+      } else {
+        creating.push(job);
+      }
       continue;
     }
 
-    const status = known.get(job.mobile);
-    const which = status ? describeNumber(status).case : 1;
+    const which = status ? describeNumber(status, "purchase").case : 1;
 
     if (which === 5) {
       if (job.row.decision === "dismiss") {
@@ -375,7 +394,31 @@ export async function createManyEnquiries(
     await reEnquireMany(supabase, reEnquiring, known, out);
   }
 
-  // ---- 3. the new ones, in four --------------------------------------------
+  // ---- 3. the ones joining a ticket ---------------------------------------
+  for (const job of attaching) {
+    const { data, error } = await supabase.rpc("attach_to_ticket", {
+      p_enquiry_id: job.ticketId,
+      p_source_id: job.row.sourceId ?? undefined,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    out[job.index] = error
+      ? {
+          mobile: job.mobile,
+          case: 6,
+          action: "failed",
+          enquiryId: null,
+          reason: error.message,
+        }
+      : {
+          mobile: job.mobile,
+          case: 6,
+          action: "updated",
+          enquiryId: job.ticketId,
+          detail: (data as string | null) ?? undefined,
+        };
+  }
+
+  // ---- 4. the new ones, in four --------------------------------------------
   if (creating.length) {
     await createMany(supabase, creating, viewer.userId ?? null, out);
   }

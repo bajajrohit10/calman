@@ -41,6 +41,8 @@ export type TicketTableRow = {
   last_discussion: string | null;
   issue_category: IssueCategory | null;
   last_caller_name: string | null;
+  /** §33.4: the reminder has passed and nobody has closed it. */
+  is_overdue?: boolean;
 };
 
 /**
@@ -144,8 +146,19 @@ export function TicketTable({
               <td className="px-2 py-[5px] text-ink-2">
                 {r.issue_category ? ISSUE_CATEGORY_LABELS[r.issue_category] : "—"}
               </td>
-              <td className="px-2 py-[5px] whitespace-nowrap tabular-nums text-ink-2">
-                {r.reminder_date ? formatDate(r.reminder_date) : "—"}
+              <td className="flex items-center gap-1.5 px-2 py-[5px] whitespace-nowrap tabular-nums">
+                {/* §33.4. The reminder is shown on every row, and once it has
+                    passed the row says so — a ticket carries itself forward
+                    rather than falling off a day, so "late" is the only thing
+                    that distinguishes one that has been waiting. */}
+                <span className={r.is_overdue ? "text-danger" : "text-ink-2"}>
+                  {r.reminder_date ? formatDate(r.reminder_date) : "—"}
+                </span>
+                {r.is_overdue ? (
+                  <Badge tone="danger">
+                    <span className="whitespace-nowrap">Overdue</span>
+                  </Badge>
+                ) : null}
               </td>
               <td className="px-2 py-[5px] whitespace-nowrap text-ink-3">
                 {r.last_outcome ? (

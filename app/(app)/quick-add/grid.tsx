@@ -80,8 +80,11 @@ export function QuickAddGrid({
 
   const filled = rows.filter((r) => r.mobile.trim());
   const invalid = filled.filter((r) => !isValidMobile(normaliseMobile(r.mobile)));
+  // §33.5. The type is part of the question: an after-sale row meets the
+  // ticket rules, a purchase row meets the purchase rules, and a number can be
+  // in both pipelines at once.
   const verdictOf = (r: Row): DuplicateVerdict | null =>
-    r.status && r.type !== "after_sale" ? describeNumber(r.status) : null;
+    r.status ? describeNumber(r.status, r.type) : null;
   const undecided = filled.filter((r) => {
     const v = verdictOf(r);
     return v?.needsDecision && !r.decision;
@@ -445,16 +448,6 @@ function StatusCell({
   if (row.checking) return <span className="text-[12px] text-ink-3">checking…</span>;
   if (!row.mobile.trim()) return <span className="text-[12px] text-ink-3">—</span>;
 
-  // An after-sale row is not a lead; the five cases are about the New Calls
-  // pipeline, and a ticket never enters it.
-  if (row.type === "after_sale") {
-    return (
-      <span className="text-[12px] text-ink-2">
-        After-sale enquiry
-        <span className="block text-[11px] text-ink-3">New ticket in Tickets</span>
-      </span>
-    );
-  }
   if (!verdict) return <span className="text-[12px] text-ink-3">—</span>;
 
   const tone =
@@ -470,6 +463,14 @@ function StatusCell({
     <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
       <span className="flex flex-col">
         <span className={cx("text-[12px] font-medium", tone)}>{verdict.label}</span>
+        {/* §33.5. Both pipelines at once is allowed, and a purchase row that
+            says nothing about a live complaint is hiding the more urgent of
+            the two. */}
+        {verdict.case !== 6 && row.status?.ticketEnquiryId ? (
+          <span className="text-[11px] text-info">
+            Also has an open ticket (#{row.status.ticketEnquiryId})
+          </span>
+        ) : null}
         <span className="text-[11px] text-ink-3">
           {row.decision === "dismiss"
             ? "Dismissed — nothing will be written"

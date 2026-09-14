@@ -21,31 +21,47 @@ import { Sidebar } from "./sidebar";
  */
 async function NewCallsPill() {
   const supabase = await createClient();
-  const { data } = await timed("pill", () =>
-    supabase.rpc("new_calls_pool", {
-      p_limit: 1,
-      p_offset: 0,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any),
+  // §33.6: purchase plus after-sale — one pool, counted whole.
+  const [purchase, afterSale] = await timed("pill", () =>
+    Promise.all([
+      supabase.rpc("new_calls_pool", {
+        p_limit: 1,
+        p_offset: 0,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any),
+      supabase.rpc("new_calls_after_sale", {
+        p_limit: 1,
+        p_offset: 0,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any),
+    ]),
   );
-  const n = Number(
-    (data as { total_count: number }[] | null)?.[0]?.total_count ?? 0,
-  );
+  const total = (d: unknown) =>
+    Number((d as { total_count: number }[] | null)?.[0]?.total_count ?? 0);
+  const n = total(purchase.data) + total(afterSale.data);
   return <NewCallsAlert initial={n} />;
 }
 
 async function NewCallsCount() {
   const supabase = await createClient();
-  const { data } = await timed("badge", () =>
-    supabase.rpc("new_calls_pool", {
-      p_limit: 1,
-      p_offset: 0,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any),
+  // §33.6: purchase plus after-sale — one pool, counted whole.
+  const [purchase, afterSale] = await timed("badge", () =>
+    Promise.all([
+      supabase.rpc("new_calls_pool", {
+        p_limit: 1,
+        p_offset: 0,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any),
+      supabase.rpc("new_calls_after_sale", {
+        p_limit: 1,
+        p_offset: 0,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any),
+    ]),
   );
-  const n = Number(
-    (data as { total_count: number }[] | null)?.[0]?.total_count ?? 0,
-  );
+  const total = (d: unknown) =>
+    Number((d as { total_count: number }[] | null)?.[0]?.total_count ?? 0);
+  const n = total(purchase.data) + total(afterSale.data);
   // Nothing rather than a zero: the wrapper in the sidebar is `empty:hidden`,
   // so returning null is what makes the pill disappear.
   return n > 0 ? <>{n}</> : null;

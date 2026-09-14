@@ -9,6 +9,7 @@ import {
   ALL_COUNSELLORS,
   ALL_COUNSELLORS_LABEL,
   parseMyDayTab,
+  parseSubTab,
 } from "@/lib/my-day-tabs";
 import { loadRecommended } from "@/lib/recommended";
 import { createClient } from "@/lib/supabase/server";
@@ -129,7 +130,9 @@ export default async function Page({
         date={date}
         initialTab={parseMyDayTab(one(sp.tab))}
         initialView={one(sp.view) === "done" ? "done" : "pending"}
+        initialSubTab={parseSubTab(one(sp.sub))}
         nextWorkingDay={(nextWorkingDay.data as string | null) ?? null}
+        viewerId={viewer.userId ?? null}
         isAdmin={admin}
         counsellorName={viewer.profile?.full_name ?? null}
         counsellorId={counsellorId}

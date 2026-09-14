@@ -463,6 +463,9 @@ export function Importer({ masters }: { masters: ImportMasters }) {
       3: [] as ReviewRow[],
       4: [] as ReviewRow[],
       5: [] as ReviewRow[],
+      // Import rows are always purchase-typed, so case 6 cannot arise here —
+      // the key exists so the grouping is total rather than a cast.
+      6: [] as ReviewRow[],
     };
     for (const r of review) {
       if (!r.mobile) g.invalid.push(r);

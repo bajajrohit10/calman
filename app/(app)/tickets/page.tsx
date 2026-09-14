@@ -2,7 +2,9 @@ import { PageHeader } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import type { EnquiryStatus, IssueCategory } from "@/lib/enquiry-labels";
 import { loadMasters } from "@/lib/masters";
+import { istToday } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
+import { parseTicketTab } from "@/lib/ticket-tabs";
 
 import { TicketsBoard, type TicketRow } from "./tickets-board";
 
@@ -27,7 +29,10 @@ export default async function Page({
   const sp = await searchParams;
 
   const page = Math.max(1, Number(one(sp.page) ?? 1) || 1);
-  const includeResolved = one(sp.resolved) === "1";
+  // §33.3. The queue reads in three states. Open and escalated ignore the
+  // date entirely; resolved is the one that needs one, and defaults to today.
+  const state = parseTicketTab(one(sp.state));
+  const on = one(sp.on) ?? istToday();
   const status = one(sp.status) as EnquiryStatus | null;
   const counsellor = one(sp.counsellor);
   const issue = one(sp.issue) as IssueCategory | null;
@@ -37,16 +42,17 @@ export default async function Page({
   const supabase = await createClient();
 
   const masters = await loadMasters();
-  const [list, staff] = await Promise.all([
+  const [list, staff, counts] = await Promise.all([
     supabase.rpc("tickets_list", {
-      p_include_resolved: includeResolved,
-      p_status: status ?? undefined,
+      p_status: state === "resolved" ? undefined : (status ?? state),
+      p_resolved_on: state === "resolved" ? on : undefined,
       p_counsellor_id: counsellor ?? undefined,
       p_issue_category: issue ?? undefined,
       p_from: one(sp.from) ?? undefined,
       p_to: one(sp.to) ?? undefined,
       p_sort: sort,
       p_dir: dir,
+      p_as_of: on,
       p_limit: PAGE_SIZE,
       p_offset: (page - 1) * PAGE_SIZE,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -56,9 +62,19 @@ export default async function Page({
       .select("id, full_name")
       .eq("is_active", true)
       .order("full_name"),
-    Promise.all([
-    ]),
+    // Counted by the database rather than from the page of rows above, which
+    // is one page of one state.
+    supabase.rpc("tickets_counts", {
+      p_date: on,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any),
   ]);
+
+  const tallies = (counts.data as unknown as {
+    open_count: number;
+    escalated_count: number;
+    resolved_count: number;
+  }[] | null)?.[0] ?? { open_count: 0, escalated_count: 0, resolved_count: 0 };
 
   const rows = (list.data ?? []) as unknown as TicketRow[];
 
@@ -83,7 +99,13 @@ export default async function Page({
         sort={sort}
         dir={dir}
         search={search}
-        includeResolved={includeResolved}
+        state={state}
+        on={on}
+        counts={{
+          open: tallies.open_count,
+          escalated: tallies.escalated_count,
+          resolved: tallies.resolved_count,
+        }}
         counsellorName={viewer.profile?.full_name ?? null}
         roster={(staff.data ?? []).map((p) => ({
           id: p.id,

@@ -15,6 +15,7 @@ import {
   type EnquiryStatus,
   type IssueCategory,
 } from "@/lib/enquiry-labels";
+import { TICKET_TABS, type TicketTabKey } from "@/lib/ticket-tabs";
 
 export type TicketRow = {
   enquiry_id: number;
@@ -44,7 +45,9 @@ export function TicketsBoard({
   sort,
   dir,
   search,
-  includeResolved,
+  state,
+  on,
+  counts,
   counsellorName,
   roster,
   masters,
@@ -58,7 +61,11 @@ export function TicketsBoard({
   sort: string;
   dir: "asc" | "desc";
   search: string;
-  includeResolved: boolean;
+  /** §33.3: which of the three the queue is being read in. */
+  state: TicketTabKey;
+  /** The day Resolved is counted and listed for. */
+  on: string;
+  counts: Record<TicketTabKey, number>;
   counsellorName: string | null;
   roster: { id: string; name: string }[];
   masters: PanelMasters;
@@ -104,8 +111,43 @@ export function TicketsBoard({
     });
   }
 
+  const tabHref = (key: TicketTabKey) => {
+    const params = new URLSearchParams(search);
+    params.set("state", key);
+    params.delete("page");
+    params.delete("status");
+    return `/tickets?${params.toString()}`;
+  };
+
   return (
     <div className="flex flex-col gap-3">
+      {/* §33.3. Open and Escalated are every unresolved ticket there is,
+          whatever the date says; only Resolved is a day's work. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="inline-flex overflow-hidden rounded-md border border-line-2">
+          {TICKET_TABS.map((t) => (
+            <Link
+              key={t.key}
+              href={tabHref(t.key)}
+              aria-current={state === t.key ? "page" : undefined}
+              className={cx(
+                "px-3 py-1 text-[12.5px] transition-colors",
+                state === t.key
+                  ? "bg-accent font-medium text-accent-ink"
+                  : "bg-surface text-ink-2 hover:bg-surface-2",
+              )}
+            >
+              {t.label}
+              <span className="ml-1.5 tabular-nums opacity-80">{counts[t.key]}</span>
+            </Link>
+          ))}
+        </div>
+        <span className="text-[11.5px] text-ink-3">
+          {state === "resolved"
+            ? "Closed on the chosen day."
+            : "Every unresolved ticket, whatever the date — sorted by reminder, the late ones first."}
+        </span>
+      </div>
       <form method="GET" className="rounded-lg border border-line bg-surface shadow-card">
         <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-5 p-2.5">
           <label className="flex flex-col gap-1">
@@ -170,15 +212,18 @@ export function TicketsBoard({
           <Button type="submit" variant="primary" size="sm">
             Apply
           </Button>
-          <label className="flex cursor-pointer items-center gap-1.5 text-[12.5px] text-ink-2">
-            <input
-              type="checkbox"
-              name="resolved"
-              value="1"
-              defaultChecked={includeResolved}
-            />
-            Show resolved
-          </label>
+          {/* §33.3 replaced the "show resolved" checkbox: resolved is not a
+              wider version of the queue, it is a different question with a
+              date attached, and a checkbox could not carry the date. */}
+          {state === "resolved" ? (
+            <label className="flex items-center gap-1.5 text-[12.5px] text-ink-2">
+              Resolved on
+              <Input type="date" name="on" defaultValue={on} className="w-[150px]" />
+            </label>
+          ) : (
+            <input type="hidden" name="on" value={on} />
+          )}
+          <input type="hidden" name="state" value={state} />
           <Link
             href="/tickets"
             className="text-[12.5px] text-ink-3 underline-offset-2 hover:underline"

@@ -1569,6 +1569,10 @@ export type Database = {
           surface: string
         }[]
       }
+      attach_to_ticket: {
+        Args: { p_enquiry_id: number; p_note?: string; p_source_id?: string }
+        Returns: string
+      }
       call_report: {
         Args: {
           p_counsellor_id?: string
@@ -1744,6 +1748,10 @@ export type Database = {
           state: string
           student_id: string
           student_name: string
+          ticket_enquiry_id: number
+          ticket_note_by: string
+          ticket_note_on: string
+          ticket_status: string
         }[]
       }
       import_re_enquire: {
@@ -1821,6 +1829,26 @@ export type Database = {
           tickets_total: number
           total_pending: number
           total_total: number
+        }[]
+      }
+      new_calls_after_sale: {
+        Args: { p_limit?: number; p_offset?: number }
+        Returns: {
+          call_count: number
+          enquiry_id: number
+          is_overdue: boolean
+          issue_category: Database["public"]["Enums"]["issue_category"]
+          last_call_date: string
+          last_caller_name: string
+          last_discussion: string
+          mobile: string
+          never_called: boolean
+          re_enquired_at: string
+          reminder_date: string
+          status: Database["public"]["Enums"]["enquiry_status"]
+          student_id: string
+          student_name: string
+          total_count: number
         }[]
       }
       new_calls_facets: {
@@ -2050,15 +2078,26 @@ export type Database = {
         Returns: number
       }
       supersede_enquiry: { Args: { p_enquiry_id: number }; Returns: undefined }
+      tickets_counts: {
+        Args: { p_date?: string; p_mine_for?: string }
+        Returns: {
+          escalated_count: number
+          open_count: number
+          resolved_count: number
+        }[]
+      }
       tickets_list: {
         Args: {
+          p_as_of?: string
           p_counsellor_id?: string
           p_dir?: string
           p_from?: string
           p_include_resolved?: boolean
           p_issue_category?: Database["public"]["Enums"]["issue_category"]
           p_limit?: number
+          p_mine_for?: string
           p_offset?: number
+          p_resolved_on?: string
           p_sort?: string
           p_status?: Database["public"]["Enums"]["enquiry_status"]
           p_to?: string
@@ -2066,7 +2105,9 @@ export type Database = {
         Returns: {
           call_count: number
           created_at: string
+          created_by: string
           enquiry_id: number
+          is_overdue: boolean
           issue_category: Database["public"]["Enums"]["issue_category"]
           last_call_at: string
           last_caller_id: string
@@ -2075,7 +2116,9 @@ export type Database = {
           last_outcome: Database["public"]["Enums"]["call_outcome"]
           mobile: string
           order_id: string
+          re_enquired_at: string
           reminder_date: string
+          resolved_on: string
           status: Database["public"]["Enums"]["enquiry_status"]
           student_id: string
           student_name: string

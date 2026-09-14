@@ -116,6 +116,10 @@ export async function lookupNumbers(mobiles: string[]): Promise<{
     closed_on: string | null;
     closed_as: "won" | "lost" | "wrong_number" | null;
     assigned_to: string | null;
+    ticket_enquiry_id: number | null;
+    ticket_status: "open" | "escalated" | null;
+    ticket_note_by: string | null;
+    ticket_note_on: string | null;
   };
 
   const byMobile = new Map<string, NumberStatus>();
@@ -133,6 +137,10 @@ export async function lookupNumbers(mobiles: string[]): Promise<{
       closedOn: r.closed_on,
       closedAs: r.closed_as,
       assignedTo: r.assigned_to,
+      ticketEnquiryId: r.ticket_enquiry_id,
+      ticketStatus: r.ticket_status,
+      ticketNoteBy: r.ticket_note_by,
+      ticketNoteOn: r.ticket_note_on,
     });
   }
 
@@ -153,6 +161,10 @@ export async function lookupNumbers(mobiles: string[]): Promise<{
           closedOn: null,
           closedAs: null,
           assignedTo: null,
+          ticketEnquiryId: null,
+          ticketStatus: null,
+          ticketNoteBy: null,
+          ticketNoteOn: null,
         },
     ),
   };

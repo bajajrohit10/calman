@@ -45,6 +45,13 @@ import {
   type MyDayTabKey,
 } from "@/lib/my-day-tabs";
 import type { RecommendedRow } from "@/lib/recommended";
+import {
+  TICKET_OWNER_ALL,
+  TICKET_OWNER_MINE,
+  TICKET_TABS,
+  type TicketOwner,
+  type TicketTabKey,
+} from "@/lib/ticket-tabs";
 
 import { dismissOverdue } from "../assign/actions";
 import { refreshMyDay } from "./actions";
@@ -78,7 +85,9 @@ export function MyDay({
   date,
   initialTab,
   initialView,
+  initialSubTab,
   nextWorkingDay,
+  viewerId,
   isAdmin,
   counsellorName,
   counsellorId,
@@ -92,8 +101,12 @@ export function MyDay({
   /** §30.4: a cell of the team grid links at a tab, so the URL names one. */
   initialTab: MyDayTabKey;
   initialView: "pending" | "done";
+  /** §33.1: the sub-tab survives a date or counsellor change too. */
+  initialSubTab: MyDaySubTab;
   /** §30.6's default target for carrying uncalled work forward. */
   nextWorkingDay: string | null;
+  /** §33.7: who "Mine" means on the shared ticket queue. */
+  viewerId: string | null;
   isAdmin: boolean;
   counsellorName: string | null;
   counsellorId: string;
@@ -124,13 +137,16 @@ export function MyDay({
   // §24. Kept across a save on purpose: a counsellor working the 2/3 rung
   // logs a call and expects to still be on 2/3 with one fewer to do, not
   // thrown back to the whole list to find their place again.
-  const [subTab, setSubTab] = useState<MyDaySubTab>(ALL_SUB_TAB);
+  const [subTab, setSubTab] = useState<MyDaySubTab>(initialSubTab);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   /** §30.6. Which category is being carried forward, once somebody asks. */
   const [carry, setCarry] = useState<{ tab: TabKey | "all"; count: number } | null>(
     null,
   );
+  /** §33.3/§33.7: the Tickets tab has its own state and its own owner. */
+  const [ticketTab, setTicketTab] = useState<TicketTabKey>("open");
+  const [ticketOwner, setTicketOwner] = useState<TicketOwner>(TICKET_OWNER_ALL);
 
   // One button per visible row, in render order, so focus can move to the next
   // row after a call is logged without waiting for the list to come back.
@@ -144,8 +160,12 @@ export function MyDay({
     >;
     for (const t of TABS) {
       if (t.key === "tickets") {
+        // §33.3. Unresolved over everything the queue holds — not "called
+        // today", which is a question about a day and the one thing a ticket
+        // does not have.
+        const unresolved = data.tickets.filter((x) => x.status !== "closed");
         out[t.key] = {
-          pending: data.tickets.filter((x) => !x.called_today).length,
+          pending: unresolved.length,
           total: data.tickets.length,
           rows: [],
           tickets: data.tickets,
@@ -289,12 +309,40 @@ export function MyDay({
     return view === "done" ? [...rows].sort(byCallTimeDesc) : rows;
   }, [current.rows, view, activeSub]);
 
+  /**
+   * §33.3 and §33.7. The ticket queue reads by its own three states, and by
+   * whose it is — never by the date, except for Resolved.
+   *
+   * "Mine" is a ticket I raised or was last to speak on, because nothing
+   * assigns a ticket and those are the two ways somebody ends up holding one.
+   * The default is everybody's: it is a shared queue, and a counsellor opening
+   * it wants to see what is waiting, not only what they have touched.
+   */
+  const ownedTickets = useMemo(
+    () =>
+      data.tickets.filter((t) => {
+        if (ticketOwner === TICKET_OWNER_ALL) return true;
+        const who = ticketOwner === TICKET_OWNER_MINE ? viewerId : ticketOwner;
+        return t.last_caller_id === who || t.created_by === who;
+      }),
+    [data.tickets, ticketOwner, viewerId],
+  );
+
+  const ticketCounts = useMemo(
+    () => ({
+      open: ownedTickets.filter((t) => t.status === "open").length,
+      escalated: ownedTickets.filter((t) => t.status === "escalated").length,
+      resolved: ownedTickets.filter((t) => t.resolved_on === date).length,
+    }),
+    [ownedTickets, date],
+  );
+
   const visibleTickets = useMemo(() => {
-    const rows = current.tickets.filter((t) =>
-      view === "done" ? t.called_today : !t.called_today,
-    );
-    return view === "done" ? [...rows].sort(byCallTimeDesc) : rows;
-  }, [current.tickets, view]);
+    if (ticketTab === "resolved") {
+      return [...ownedTickets.filter((t) => t.resolved_on === date)].sort(byCallTimeDesc);
+    }
+    return ownedTickets.filter((t) => t.status === ticketTab);
+  }, [ownedTickets, ticketTab, date]);
 
   async function openEnquiry(enquiryId: number, index: number) {
     // §27.4. Swapping rows throws away whatever is typed in the panel just as
@@ -455,6 +503,14 @@ export function MyDay({
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end gap-2.5 rounded-lg border border-line bg-surface px-2.5 py-2.5 shadow-card">
         <form method="GET" className="flex flex-wrap items-end gap-2">
+          {/* §33.1. The date picker is a GET form, so the tab a counsellor is
+              working has to travel with it or the reload lands them back on
+              New Calls. It was the Tickets tab that made this obvious — the
+              one tab somebody stays on all day — but it lost the sub-tab and
+              the Pending/Done toggle just as quietly. */}
+          <input type="hidden" name="tab" value={tab} />
+          <input type="hidden" name="view" value={view} />
+          <input type="hidden" name="sub" value={formatSubTab(subTab)} />
           <label className="flex flex-col gap-[3px]">
             <span className={FIELD_LABEL}>Date</span>
             <Input type="date" name="date" defaultValue={date} className="w-[150px]" />
@@ -573,7 +629,11 @@ export function MyDay({
                 <span className="text-[13px] font-normal text-ink-3"> / {g.total}</span>
               </span>
               <span className="block text-[10.5px] text-ink-3">
-                {g.total === 0 ? "nothing today" : "to call / assigned"}
+                {g.total === 0
+                  ? "nothing today"
+                  : t.key === "tickets"
+                    ? "unresolved / seen"
+                    : "to call / assigned"}
               </span>
             </button>
           );
@@ -618,7 +678,60 @@ export function MyDay({
         </div>
       ) : null}
 
-      {/* ---- pending / done ---- */}
+      {/* ---- §33.3: the ticket queue reads by its own three states ---- */}
+      {tab === "tickets" ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex overflow-hidden rounded-md border border-line-2">
+            {TICKET_TABS.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                aria-pressed={ticketTab === t.key}
+                onClick={() => {
+                  setTicketTab(t.key);
+                  setOpen(null);
+                }}
+                className={cx(
+                  "px-3 py-1 text-[12.5px] transition-colors",
+                  ticketTab === t.key
+                    ? "bg-accent font-medium text-accent-ink"
+                    : "bg-surface text-ink-2 hover:bg-surface-2",
+                )}
+              >
+                {t.label}
+                <span className="ml-1.5 tabular-nums opacity-80">
+                  {ticketCounts[t.key]}
+                </span>
+              </button>
+            ))}
+          </div>
+          <label className="flex items-center gap-1.5 text-[12px] text-ink-3">
+            Whose
+            <Select
+              aria-label="Whose tickets"
+              className="w-[170px]"
+              value={ticketOwner}
+              onChange={(e) => setTicketOwner(e.target.value as TicketOwner)}
+            >
+              <option value={TICKET_OWNER_ALL}>Everyone</option>
+              <option value={TICKET_OWNER_MINE}>Mine</option>
+              {isAdmin
+                ? roster.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))
+                : null}
+            </Select>
+          </label>
+          <span className="text-[11.5px] leading-relaxed text-ink-3">
+            {ticketTab === "resolved"
+              ? `Resolved on ${formatDate(date)}.`
+              : "Every unresolved ticket, whatever the date — they carry themselves forward until somebody closes them."}
+            {ticketOwner === TICKET_OWNER_MINE ? " Raised by you, or last spoken on by you." : ""}
+          </span>
+        </div>
+      ) : (
       <div className="flex flex-wrap items-center gap-2">
         <div className="inline-flex overflow-hidden rounded-md border border-line-2">
           {(["pending", "done"] as const).map((v) => (
@@ -685,6 +798,7 @@ export function MyDay({
           />
         </span>
       </div>
+      )}
 
       {open ? (
         <div className="flex flex-col gap-2">
@@ -719,9 +833,11 @@ export function MyDay({
                 );
               }}
               empty={
-                view === "pending"
-                  ? "No open tickets waiting — every one has been called today."
-                  : "No ticket has been called today."
+                ticketTab === "resolved"
+                  ? `Nothing was resolved on ${formatDate(date)}.`
+                  : ticketTab === "escalated"
+                    ? "Nothing is escalated."
+                    : "No open tickets."
               }
             />
           ) : tab === "custom" && labelGroups.length > 1 ? (

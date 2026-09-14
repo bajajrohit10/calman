@@ -99,20 +99,27 @@ export function StudentHistoryView({
   const enquiries = [...student.enquiries].sort((a, b) => b.id - a.id);
   // What "this number" means: the open enquiry, or the most recent when none
   // is open. Two open at once should not happen; the newer wins if it does.
-  const current = enquiries.find((e) => e.status === "open") ?? enquiries[0] ?? null;
-  const previous = enquiries.filter((e) => e.id !== current?.id);
+  /**
+   * §33.8. Every enquiry that is live right now, not one of them.
+   *
+   * A student can be a purchase lead and an after-sale ticket at the same
+   * time, and they are worked by different people on different screens.
+   * Picking "the open one" meant the other was folded away under Previous,
+   * where somebody about to dial would never see it. Escalated counts as live:
+   * it is a ticket somebody else is waiting on.
+   */
+  const nowCards = enquiries.filter(
+    (e) => e.status === "open" || e.status === "escalated",
+  );
+  const current = nowCards[0] ?? enquiries[0] ?? null;
+  const shown = nowCards.length ? nowCards : current ? [current] : [];
+  const previous = enquiries.filter((e) => !shown.some((x) => x.id === e.id));
 
   const rows = unifiedHistory(enquiries);
   const callCount = rows.filter((r) => r.kind === "call").length;
-  const lastCall = rows.find((r) => r.kind === "call");
-  const openItems = current?.enquiry_items.filter((i) => i.status === "open") ?? [];
-  const todays = current?.assignments.find((a) => a.date === today);
-  const resolution =
-    current?.status === "lost" && current.lost_reason
-      ? LOST_REASON_LABELS[current.lost_reason]
-      : current?.status === "closed" && current.close_reason
-        ? CLOSE_REASON_LABELS[current.close_reason]
-        : null;
+  /** The most recent call on one enquiry — each card shows its own. */
+  const lastCallFor = (enquiryId: number) =>
+    rows.find((r) => r.kind === "call" && r.enquiryId === enquiryId) ?? null;
 
   if (!current) {
     return <p className={cx("text-[13px] text-ink-3", className)}>No enquiries yet.</p>;
@@ -120,131 +127,47 @@ export function StudentHistoryView({
 
   return (
     <div className={cx("flex flex-col gap-3", className)}>
-      {/* ---- (a) Now ---- */}
-      <section className="rounded-lg border border-line bg-surface shadow-card">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-line px-4 py-2.5">
-          {showHeader ? (
-            <>
-              <span className="text-[15px] font-semibold text-ink">
-                {student.name || "No name recorded"}
-              </span>
-              <Link
-                href={`/students/${student.mobile}`}
-                className="text-[13px] tabular-nums text-ink-2 underline-offset-2 hover:underline"
-              >
-                {formatMobile(student.mobile)}
-              </Link>
-            </>
-          ) : null}
-          <Badge dot tone={statusTone(current.status)}>
-            {ENQUIRY_STATUS_LABELS[current.status]}
-          </Badge>
-          {resolution ? (
-            <span className="text-[11.5px] text-ink-3">({resolution})</span>
-          ) : null}
-          <Badge tone="neutral">#{current.id}</Badge>
-          <Badge tone="neutral">{ENQUIRY_TYPE_LABELS[current.type]}</Badge>
-          {current.archived_at ? <Badge tone="neutral">Archived</Badge> : null}
-          {current.re_enquired_at ? (
-            <Badge dot tone="warn">Re-enquired {formatDate(current.re_enquired_at)}</Badge>
-          ) : null}
-          <span className="ml-auto text-[11.5px] text-ink-3">
+      {/* ---- (a) Now: one card per open enquiry (§33.8) ---- */}
+      {showHeader ? (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <span className="text-[15px] font-semibold text-ink">
+            {student.name || "No name recorded"}
+          </span>
+          <Link
+            href={`/students/${student.mobile}`}
+            className="text-[13px] tabular-nums text-ink-2 underline-offset-2 hover:underline"
+          >
+            {formatMobile(student.mobile)}
+          </Link>
+          <span className="text-[11.5px] text-ink-3">
             First seen {formatDate(student.created_at)}
           </span>
-          {canUnarchive && current.archived_at ? (
-            <UnarchiveButton enquiryId={current.id} onDone={onEdited} />
-          ) : null}
         </div>
+      ) : null}
 
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 px-4 py-3 sm:grid-cols-3 xl:grid-cols-6">
-          <Fact label="Stage">
-            {/* stageOf() returns the machine key the WhatsApp templates key
-                off; this is the human sentence. */}
-            {current.type === "after_sale"
-              ? "After-sale"
-              : `${current.follow_up_slots_used} of 3 follow-ups`}
-          </Fact>
-          <Fact label="Importance">
-            {current.importance ? IMPORTANCE_LABELS[current.importance] : "—"}
-          </Fact>
-          <Fact label="Lead">
-            {current.lead_verification
-              ? LEAD_VERIFICATION_LABELS[current.lead_verification]
-              : "—"}
-          </Fact>
-          <Fact label="Next follow-up">
-            {current.next_follow_up_date ? formatDate(current.next_follow_up_date) : "—"}
-          </Fact>
-          <Fact label="Assigned today">{todays?.counsellor?.full_name ?? "nobody"}</Fact>
-          <Fact label="Term">{current.term?.name ?? "—"}</Fact>
-        </dl>
-
-        <div className="flex flex-wrap items-center gap-1.5 border-t border-line px-4 py-2.5">
-          {openItems.length ? (
-            openItems.map((i) => (
-              <span
-                key={i.id}
-                className="rounded-full border border-line-2 bg-surface-2 px-2 py-0.5 text-[11.5px] text-ink-2"
-              >
-                {[i.teacher?.name, i.course?.name, i.subject?.name, i.content?.name]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </span>
-            ))
-          ) : (
-            /* §29.2: amber, not grey. A purchase lead with nothing recorded is
-               invisible to the teacher-wise reports, which is a fact about the
-               record rather than an absence of decoration. */
-            <span
-              className={cx(
-                "rounded-full border px-2 py-0.5 text-[11.5px]",
-                current.type === "purchase"
-                  ? "border-warn/50 bg-warn-soft/40 font-medium text-warn"
-                  : "border-line-2 bg-surface-2 italic text-ink-3",
-              )}
-            >
-              {current.type === "purchase"
-                ? "No interests recorded"
-                : "No interests — after-sale"}
-            </span>
-          )}
-          {/* Messaging somebody is a thing you do during the glance, not after
-              reading the history. */}
-          {current.status === "open" ? (
-            <span className="ml-auto">
-              <WhatsAppButton
-                enquiryId={current.id}
-                mobile={student.mobile}
-                studentName={student.name}
-                items={current.enquiry_items.map((i) => ({
-                  teacher: i.teacher?.name ?? null,
-                  course: i.course?.name ?? null,
-                  subject: i.subject?.name ?? null,
-                  content: i.content?.name ?? null,
-                }))}
-                term={current.term?.name ?? null}
-                productText={current.product_text}
-                counsellorName={counsellorName ?? null}
-                stage={stageOf(current.type, current.follow_up_slots_used)}
-              />
-            </span>
-          ) : null}
-        </div>
-
-        {lastCall ? (
-          <div className="border-t border-line bg-sunk/40 px-4 py-2.5">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-              Last note — {formatDateTime(lastCall.at)} · {lastCall.counsellor} ·{" "}
-              {lastCall.outcome}
-            </p>
-            {/* In full, never truncated: it is the one sentence somebody reads
-                before dialling. */}
-            <p className="mt-1 whitespace-pre-wrap text-[12.5px] text-ink">
-              {lastCall.remarks || <span className="italic text-ink-3">no note</span>}
-            </p>
-          </div>
-        ) : null}
-      </section>
+      {/* Side by side, because they are genuinely separate things: a lead and
+          a complaint on the same number have their own status, their own
+          stage or reminder and their own last note, and stacking one on top of
+          the other reads as history rather than as two live conversations. */}
+      <div
+        className={cx(
+          "grid gap-3",
+          shown.length > 1 ? "lg:grid-cols-2" : "grid-cols-1",
+        )}
+      >
+        {shown.map((e) => (
+          <NowCard
+            key={e.id}
+            enquiry={e}
+            student={student}
+            counsellorName={counsellorName}
+            canUnarchive={canUnarchive}
+            today={today}
+            lastCall={lastCallFor(e.id)}
+            onEdited={onEdited}
+          />
+        ))}
+      </div>
 
       {/* ---- (b) one call history, across every enquiry ---- */}
       <section>
@@ -500,4 +423,167 @@ function unifiedHistory(enquiries: HistoryEnquiry[]): UnifiedRow[] {
     }
   }
   return rows.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+}
+
+/**
+ * One live enquiry, at a glance (§33.8).
+ *
+ * Everything the card used to say about "the" enquiry, said about this one —
+ * its status, its stage or reminder, its chips and its own last note. The
+ * student's name sits above the row of cards rather than inside each, because
+ * it is a fact about the number, not about either conversation.
+ */
+function NowCard({
+  enquiry,
+  student,
+  counsellorName,
+  canUnarchive,
+  today,
+  lastCall,
+  onEdited,
+}: {
+  enquiry: StudentHistory["enquiries"][number];
+  student: StudentHistory;
+  counsellorName: string | null | undefined;
+  canUnarchive: boolean | undefined;
+  today: string;
+  lastCall: UnifiedRow | null;
+  onEdited?: () => void;
+}) {
+  const showHeader = false;
+  const openItems = enquiry.enquiry_items.filter((i) => i.status === "open");
+  const todays = enquiry.assignments.find((a) => a.date === today);
+  const resolution =
+    enquiry.status === "lost" && enquiry.lost_reason
+      ? LOST_REASON_LABELS[enquiry.lost_reason]
+      : enquiry.status === "closed" && enquiry.close_reason
+        ? CLOSE_REASON_LABELS[enquiry.close_reason]
+        : null;
+
+  return (
+      <section className="rounded-lg border border-line bg-surface shadow-card">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-line px-4 py-2.5">
+          {showHeader ? (
+            <>
+              <span className="text-[15px] font-semibold text-ink">
+                {student.name || "No name recorded"}
+              </span>
+              <Link
+                href={`/students/${student.mobile}`}
+                className="text-[13px] tabular-nums text-ink-2 underline-offset-2 hover:underline"
+              >
+                {formatMobile(student.mobile)}
+              </Link>
+            </>
+          ) : null}
+          <Badge dot tone={statusTone(enquiry.status)}>
+            {ENQUIRY_STATUS_LABELS[enquiry.status]}
+          </Badge>
+          {resolution ? (
+            <span className="text-[11.5px] text-ink-3">({resolution})</span>
+          ) : null}
+          <Badge tone="neutral">#{enquiry.id}</Badge>
+          <Badge tone="neutral">{ENQUIRY_TYPE_LABELS[enquiry.type]}</Badge>
+          {enquiry.archived_at ? <Badge tone="neutral">Archived</Badge> : null}
+          {enquiry.re_enquired_at ? (
+            <Badge dot tone="warn">Re-enquired {formatDate(enquiry.re_enquired_at)}</Badge>
+          ) : null}
+          <span className="ml-auto text-[11.5px] text-ink-3">
+            First seen {formatDate(student.created_at)}
+          </span>
+          {canUnarchive && enquiry.archived_at ? (
+            <UnarchiveButton enquiryId={enquiry.id} onDone={onEdited} />
+          ) : null}
+        </div>
+
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 px-4 py-3 sm:grid-cols-3 xl:grid-cols-6">
+          <Fact label="Stage">
+            {/* stageOf() returns the machine key the WhatsApp templates key
+                off; this is the human sentence. */}
+            {enquiry.type === "after_sale"
+              ? "After-sale"
+              : `${enquiry.follow_up_slots_used} of 3 follow-ups`}
+          </Fact>
+          <Fact label="Importance">
+            {enquiry.importance ? IMPORTANCE_LABELS[enquiry.importance] : "—"}
+          </Fact>
+          <Fact label="Lead">
+            {enquiry.lead_verification
+              ? LEAD_VERIFICATION_LABELS[enquiry.lead_verification]
+              : "—"}
+          </Fact>
+          <Fact label="Next follow-up">
+            {enquiry.next_follow_up_date ? formatDate(enquiry.next_follow_up_date) : "—"}
+          </Fact>
+          <Fact label="Assigned today">{todays?.counsellor?.full_name ?? "nobody"}</Fact>
+          <Fact label="Term">{enquiry.term?.name ?? "—"}</Fact>
+        </dl>
+
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-line px-4 py-2.5">
+          {openItems.length ? (
+            openItems.map((i) => (
+              <span
+                key={i.id}
+                className="rounded-full border border-line-2 bg-surface-2 px-2 py-0.5 text-[11.5px] text-ink-2"
+              >
+                {[i.teacher?.name, i.course?.name, i.subject?.name, i.content?.name]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            ))
+          ) : (
+            /* §29.2: amber, not grey. A purchase lead with nothing recorded is
+               invisible to the teacher-wise reports, which is a fact about the
+               record rather than an absence of decoration. */
+            <span
+              className={cx(
+                "rounded-full border px-2 py-0.5 text-[11.5px]",
+                enquiry.type === "purchase"
+                  ? "border-warn/50 bg-warn-soft/40 font-medium text-warn"
+                  : "border-line-2 bg-surface-2 italic text-ink-3",
+              )}
+            >
+              {enquiry.type === "purchase"
+                ? "No interests recorded"
+                : "No interests — after-sale"}
+            </span>
+          )}
+          {/* Messaging somebody is a thing you do during the glance, not after
+              reading the history. */}
+          {enquiry.status === "open" ? (
+            <span className="ml-auto">
+              <WhatsAppButton
+                enquiryId={enquiry.id}
+                mobile={student.mobile}
+                studentName={student.name}
+                items={enquiry.enquiry_items.map((i) => ({
+                  teacher: i.teacher?.name ?? null,
+                  course: i.course?.name ?? null,
+                  subject: i.subject?.name ?? null,
+                  content: i.content?.name ?? null,
+                }))}
+                term={enquiry.term?.name ?? null}
+                productText={enquiry.product_text}
+                counsellorName={counsellorName ?? null}
+                stage={stageOf(enquiry.type, enquiry.follow_up_slots_used)}
+              />
+            </span>
+          ) : null}
+        </div>
+
+        {lastCall ? (
+          <div className="border-t border-line bg-sunk/40 px-4 py-2.5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+              Last note — {formatDateTime(lastCall.at)} · {lastCall.counsellor} ·{" "}
+              {lastCall.outcome}
+            </p>
+            {/* In full, never truncated: it is the one sentence somebody reads
+                before dialling. */}
+            <p className="mt-1 whitespace-pre-wrap text-[12.5px] text-ink">
+              {lastCall.remarks || <span className="italic text-ink-3">no note</span>}
+            </p>
+          </div>
+        ) : null}
+      </section>
+  );
 }

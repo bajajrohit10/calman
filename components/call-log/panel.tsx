@@ -31,7 +31,13 @@ import {
 } from "@/lib/enquiry-labels";
 import { EnquiryDetailsEditor } from "@/components/enquiry-details";
 import { EnquiryGlanceLine, InterestChips } from "@/components/enquiry-glance";
-import { formatDate, formatDateTime, istDatePlus, istNextMonday } from "@/lib/format";
+import {
+  formatDate,
+  formatDateTime,
+  istDatePlus,
+  istNextMonday,
+  istToday,
+} from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
 import { useUnsavedClaim } from "@/components/unsaved-guard";
 import { WhatsAppButton } from "@/components/whatsapp/button";
@@ -364,6 +370,7 @@ export function CallLogPanel({
 
   const noteRef = useRef<HTMLTextAreaElement | null>(null);
   const firstTeacherRef = useRef<HTMLInputElement | null>(null);
+  const issueRef = useRef<HTMLSelectElement | null>(null);
 
   const purchased = outcome === "purchased";
   const filledLines = newLines.filter(isComplete);
@@ -389,6 +396,21 @@ export function CallLogPanel({
   const needsAnItem = purchased && openItems.length === 0 && filledLines.length === 0;
   const blocksSave = needsAnItem || (outcome === "competitor" && willHaveNoItems);
   const softPrompt = outcome === "follow_up" && willHaveNoItems && askedAboutItems;
+  /**
+   * §33.2. A ticket without an issue type cannot be saved, and the server has
+   * always refused it — but it refused into an error line below the fold,
+   * which is how "tickets cannot be closed" became a bug report in Brief 26.
+   * The refusal happens here now, on the field itself, so the thing that is
+   * wrong is the thing you are looking at.
+   */
+  const needsIssue = asAfterSale && !issueCategory;
+  const [issueAsked, setIssueAsked] = useState(false);
+
+  function focusIssue() {
+    setIssueAsked(true);
+    issueRef.current?.focus();
+    issueRef.current?.scrollIntoView({ block: "center" });
+  }
 
   function focusInterests() {
     firstTeacherRef.current?.focus();
@@ -417,6 +439,14 @@ export function CallLogPanel({
     // landed. The chips are still there to say otherwise.
     if (next === "call_back" || next === "follow_up") {
       setFollowUpDate(enquiry.defaultFollowUpDate ?? "");
+    } else if (next === "noted") {
+      // §33.4. A ticket's reminder is today, not the next working day. A
+      // purchase lead is a thing to do next; an unresolved complaint is a
+      // thing to do now, and dating it tomorrow was how a ticket raised this
+      // morning disappeared from this morning's queue. It carries itself
+      // forward from here — nothing is date-bound until it is resolved — and
+      // the chips are still there to say "not until Friday".
+      setFollowUpDate(istToday());
     } else {
       setFollowUpDate("");
     }
@@ -461,6 +491,12 @@ export function CallLogPanel({
   function save(forced?: CallOutcome) {
     const outcome = forced ?? outcomeState;
     if (pending) return;
+    // Before anything else: Close ticket is a save too, and closing a ticket
+    // nobody ever categorised is exactly how a queue loses its shape.
+    if (needsIssue) {
+      focusIssue();
+      return;
+    }
     if (blocksSave) {
       focusInterests();
       return;
@@ -536,6 +572,8 @@ export function CallLogPanel({
   }
 
   const chips: { label: string; value: string }[] = [
+    // A ticket can want to be looked at again today; a lead never does.
+    ...(asAfterSale ? [{ label: "Today", value: istToday() }] : []),
     { label: "Tomorrow", value: istDatePlus(1) },
     { label: "+3 days", value: istDatePlus(3) },
     { label: "+7 days", value: istDatePlus(7) },
@@ -631,6 +669,9 @@ export function CallLogPanel({
           asAfterSale={asAfterSale}
           issueCategory={issueCategory}
           setIssueCategory={setIssueCategory}
+          issueRef={issueRef}
+          issueAsked={issueAsked}
+          needsIssue={needsIssue}
           followUpDate={followUpDate}
           setFollowUpDate={setFollowUpDate}
           pending={pending}
@@ -707,10 +748,21 @@ export function CallLogPanel({
 
           {asAfterSale ? (
             <label className="flex min-w-[180px] flex-col gap-1">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+              <span
+                className={cx(
+                  "text-[10px] font-semibold uppercase tracking-[0.045em]",
+                  issueAsked && needsIssue ? "text-warn" : "text-ink-3",
+                )}
+              >
                 Issue category
               </span>
               <Select
+                ref={issueRef}
+                aria-label="Issue category"
+                aria-invalid={issueAsked && needsIssue ? true : undefined}
+                className={
+                  issueAsked && needsIssue ? "border-warn bg-warn-soft/40" : undefined
+                }
                 value={issueCategory}
                 onChange={(e) => setIssueCategory(e.target.value as IssueCategory | "")}
               >
@@ -721,6 +773,11 @@ export function CallLogPanel({
                   </option>
                 ))}
               </Select>
+              {issueAsked && needsIssue ? (
+                <span role="alert" className="text-[11.5px] font-medium text-warn">
+                  Choose an issue type to save this ticket
+                </span>
+              ) : null}
             </label>
           ) : null}
 
@@ -1116,6 +1173,9 @@ function FirstCallFields({
   asAfterSale,
   issueCategory,
   setIssueCategory,
+  issueRef,
+  issueAsked,
+  needsIssue,
   followUpDate,
   setFollowUpDate,
   pending,
@@ -1155,6 +1215,9 @@ function FirstCallFields({
   asAfterSale: boolean;
   issueCategory: IssueCategory | "";
   setIssueCategory: (v: IssueCategory | "") => void;
+  issueRef: React.RefObject<HTMLSelectElement | null>;
+  issueAsked: boolean;
+  needsIssue: boolean;
   followUpDate: string;
   setFollowUpDate: (v: string) => void;
   pending: boolean;
@@ -1368,6 +1431,12 @@ function FirstCallFields({
       {asAfterSale ? (
         <FirstCallField label="Issue category">
           <Select
+            ref={issueRef}
+            aria-label="Issue category"
+            aria-invalid={issueAsked && needsIssue ? true : undefined}
+            className={
+              issueAsked && needsIssue ? "border-warn bg-warn-soft/40" : undefined
+            }
             value={issueCategory}
             onChange={(e) => setIssueCategory(e.target.value as IssueCategory | "")}
           >
@@ -1376,6 +1445,11 @@ function FirstCallFields({
               <option key={v} value={v}>{l}</option>
             ))}
           </Select>
+          {issueAsked && needsIssue ? (
+            <span role="alert" className="text-[11.5px] font-medium text-warn">
+              Choose an issue type to save this ticket
+            </span>
+          ) : null}
         </FirstCallField>
       ) : null}
 

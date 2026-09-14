@@ -18,12 +18,23 @@ export async function newCallsWaiting(): Promise<number | null> {
   if (!viewer.profile) return null;
 
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("new_calls_pool", {
-    p_limit: 1,
-    p_offset: 0,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any);
+  // §33.6. Both halves of the pool. A pill that counted only purchases would
+  // say nothing is waiting while somebody sits in the after-sale queue.
+  const [purchase, afterSale] = await Promise.all([
+    supabase.rpc("new_calls_pool", {
+      p_limit: 1,
+      p_offset: 0,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any),
+    supabase.rpc("new_calls_after_sale", {
+      p_limit: 1,
+      p_offset: 0,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any),
+  ]);
 
-  if (error) return null;
-  return Number((data as { total_count: number }[] | null)?.[0]?.total_count ?? 0);
+  if (purchase.error) return null;
+  const count = (d: unknown) =>
+    Number((d as { total_count: number }[] | null)?.[0]?.total_count ?? 0);
+  return count(purchase.data) + count(afterSale.data);
 }
