@@ -148,6 +148,10 @@ export type PanelPayload = {
   items: {
     id: string;
     status: string;
+    teacherId: string | null;
+    courseId: string | null;
+    subjectId: string | null;
+    contentId: string | null;
     teacher: string | null;
     course: string | null;
     subject: string | null;
@@ -176,7 +180,7 @@ export async function loadPanelEnquiry(
        term:terms ( name ),
        students ( name, mobile ),
        enquiry_items (
-         id, status,
+         id, status, teacher_id, course_id, subject_id, content_id,
          teacher:teachers ( name ),
          course:courses ( name ),
          subject:subjects ( name ),
@@ -283,6 +287,10 @@ export async function loadPanelEnquiry(
       items: (data.enquiry_items ?? []).map((i) => ({
         id: i.id,
         status: i.status,
+        teacherId: i.teacher_id,
+        courseId: i.course_id,
+        subjectId: i.subject_id,
+        contentId: i.content_id,
         teacher: (i.teacher as { name: string } | null)?.name ?? null,
         course: (i.course as { name: string } | null)?.name ?? null,
         subject: (i.subject as { name: string } | null)?.name ?? null,
@@ -515,11 +523,14 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
     // does not target has no copy and is dropped: it was never part of what
     // this call was about.
     const shape = (i: {
-      teacher_id: string;
-      course_id: string;
+      teacher_id: string | null;
+      course_id: string | null;
       subject_id: string | null;
       content_id: string | null;
-    }) => [i.teacher_id, i.course_id, i.subject_id ?? "", i.content_id ?? ""].join("|");
+    }) =>
+      [i.teacher_id ?? "", i.course_id ?? "", i.subject_id ?? "", i.content_id ?? ""].join(
+        "|",
+      );
 
     const [{ data: oldItems }, { data: newItems }] = await Promise.all([
       supabase
@@ -560,16 +571,24 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
   if (input.newItems.length) {
     const rows = [];
     for (const item of input.newItems) {
-      if (!item.teacherId || !item.courseId) {
-        return { error: "Every interest line needs at least a teacher and a course." };
+      // §39.2. Anything at all, not a teacher *and* a course. A subject is the
+      // exception: it belongs to a course, and the table says so too.
+      if (!item.teacherId && !item.courseId && !item.subjectId && !item.contentId) {
+        return {
+          error:
+            "An interest line needs at least one of teacher, course, subject or content.",
+        };
+      }
+      if (item.subjectId && !item.courseId) {
+        return { error: "A subject needs its course chosen too." };
       }
       const amount = parseAmount(item.amount);
       if (amount === "invalid") return { error: "An amount must be a number." };
 
       rows.push({
         enquiry_id: targetEnquiryId,
-        teacher_id: item.teacherId,
-        course_id: item.courseId,
+        teacher_id: item.teacherId || null,
+        course_id: item.courseId || null,
         subject_id: item.subjectId || null,
         content_id: item.contentId || null,
         created_by: viewer.userId,
@@ -880,9 +899,17 @@ export async function addEnquiryItems(input: {
   const viewer = await requireUser();
   if (!viewer.profile) return { error: "Your account is not active." };
 
-  const lines = input.lines.filter((l) => l.teacherId && l.courseId);
+  // §39.2: a line is worth keeping as soon as it names anything.
+  const lines = input.lines.filter(
+    (l) => l.teacherId || l.courseId || l.subjectId || l.contentId,
+  );
   if (!lines.length) {
-    return { error: "Every interest line needs at least a teacher and a course." };
+    return {
+      error: "An interest line needs at least one of teacher, course, subject or content.",
+    };
+  }
+  if (lines.some((l) => l.subjectId && !l.courseId)) {
+    return { error: "A subject needs its course chosen too." };
   }
 
   const supabase = await createClient();
@@ -899,8 +926,8 @@ export async function addEnquiryItems(input: {
   const { error } = await supabase.from("enquiry_items").insert(
     lines.map((l) => ({
       enquiry_id: input.enquiryId,
-      teacher_id: l.teacherId,
-      course_id: l.courseId,
+      teacher_id: l.teacherId || null,
+      course_id: l.courseId || null,
       subject_id: l.subjectId || null,
       content_id: l.contentId || null,
       created_by: viewer.userId,
@@ -918,6 +945,120 @@ export async function addEnquiryItems(input: {
     error: null,
     ok: `Added ${lines.length} interest${lines.length === 1 ? "" : "s"}.`,
   };
+}
+
+/**
+ * Correct a saved interest line, or take it off the lead (§39.3).
+ *
+ * The same four columns it was created with, changeable a week later: §39.2
+ * lets a line be recorded before it is complete, and a line that could never
+ * be completed afterwards would just be a worse version of not recording it.
+ *
+ * Removal closes the line rather than deleting it. An interest somebody
+ * recorded and then withdrew is a fact about the lead — the teacher-wise
+ * reports read closed lines as interest that went nowhere — and a deleted row
+ * takes that with it. It is also the only way an audit trail survives a
+ * correction.
+ *
+ * A won line is refused. It carries an order id and an amount, and rewriting
+ * what was bought after the money is recorded is not a correction.
+ *
+ * The enquiry's own status is not touched here: the trigger on enquiry_items
+ * fires app.recompute_enquiry(), which is the only thing allowed to decide it.
+ */
+export async function updateEnquiryItem(input: {
+  itemId: string;
+  teacherId: string | null;
+  courseId: string | null;
+  subjectId: string | null;
+  contentId: string | null;
+}): Promise<LogCallResult> {
+  const viewer = await requireUser();
+  if (!viewer.profile) return { error: "Your account is not active." };
+
+  const teacherId = input.teacherId || null;
+  const courseId = input.courseId || null;
+  const subjectId = input.subjectId || null;
+  const contentId = input.contentId || null;
+
+  if (!teacherId && !courseId && !subjectId && !contentId) {
+    return {
+      error:
+        "An interest line needs at least one of teacher, course, subject or content. Remove it instead.",
+    };
+  }
+  if (subjectId && !courseId) {
+    return { error: "A subject needs its course chosen too." };
+  }
+
+  const supabase = await createClient();
+  const { data: item, error: findError } = await supabase
+    .from("enquiry_items")
+    .select("id, status, enquiry_id, enquiries ( students ( mobile ) )")
+    .eq("id", input.itemId)
+    .maybeSingle();
+
+  if (findError) return { error: findError.message };
+  if (!item) return { error: "That interest line no longer exists." };
+  if (item.status === "won") {
+    return { error: "A line that was bought cannot be changed." };
+  }
+
+  const { error } = await supabase
+    .from("enquiry_items")
+    .update({
+      teacher_id: teacherId,
+      course_id: courseId,
+      subject_id: subjectId,
+      content_id: contentId,
+    })
+    .eq("id", input.itemId);
+
+  if (error) return { error: `Could not save the line: ${error.message}` };
+
+  const mobile = (
+    item.enquiries as { students: { mobile: string } | null } | null
+  )?.students?.mobile;
+  if (mobile) revalidatePath(`/students/${mobile}`);
+  revalidatePath("/enquiries");
+
+  return { error: null, ok: "Line updated." };
+}
+
+/** Take a line off the lead. Closed, never deleted — see updateEnquiryItem. */
+export async function removeEnquiryItem(input: {
+  itemId: string;
+}): Promise<LogCallResult> {
+  const viewer = await requireUser();
+  if (!viewer.profile) return { error: "Your account is not active." };
+
+  const supabase = await createClient();
+  const { data: item, error: findError } = await supabase
+    .from("enquiry_items")
+    .select("id, status, enquiry_id, enquiries ( students ( mobile ) )")
+    .eq("id", input.itemId)
+    .maybeSingle();
+
+  if (findError) return { error: findError.message };
+  if (!item) return { error: "That interest line no longer exists." };
+  if (item.status === "won") {
+    return { error: "A line that was bought cannot be removed." };
+  }
+
+  const { error } = await supabase
+    .from("enquiry_items")
+    .update({ status: "closed" as const })
+    .eq("id", input.itemId);
+
+  if (error) return { error: `Could not remove the line: ${error.message}` };
+
+  const mobile = (
+    item.enquiries as { students: { mobile: string } | null } | null
+  )?.students?.mobile;
+  if (mobile) revalidatePath(`/students/${mobile}`);
+  revalidatePath("/enquiries");
+
+  return { error: null, ok: "Line removed." };
 }
 
 export type EditCallInput = {

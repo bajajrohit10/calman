@@ -518,7 +518,7 @@ export type Database = {
         Row: {
           amount: number | null
           content_id: string | null
-          course_id: string
+          course_id: string | null
           created_at: string
           created_by: string | null
           enquiry_id: number
@@ -526,13 +526,13 @@ export type Database = {
           order_id: string | null
           status: Database["public"]["Enums"]["item_status"]
           subject_id: string | null
-          teacher_id: string
+          teacher_id: string | null
           won_at: string | null
         }
         Insert: {
           amount?: number | null
           content_id?: string | null
-          course_id: string
+          course_id?: string | null
           created_at?: string
           created_by?: string | null
           enquiry_id: number
@@ -540,13 +540,13 @@ export type Database = {
           order_id?: string | null
           status?: Database["public"]["Enums"]["item_status"]
           subject_id?: string | null
-          teacher_id: string
+          teacher_id?: string | null
           won_at?: string | null
         }
         Update: {
           amount?: number | null
           content_id?: string | null
-          course_id?: string
+          course_id?: string | null
           created_at?: string
           created_by?: string | null
           enquiry_id?: number
@@ -554,7 +554,7 @@ export type Database = {
           order_id?: string | null
           status?: Database["public"]["Enums"]["item_status"]
           subject_id?: string | null
-          teacher_id?: string
+          teacher_id?: string | null
           won_at?: string | null
         }
         Relationships: [

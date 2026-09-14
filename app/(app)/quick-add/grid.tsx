@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 
 import { Button, ErrorNote, Input, Select, cx } from "@/components/ui";
 import { useUnsavedClaim } from "@/components/unsaved-guard";
@@ -36,6 +36,13 @@ type Row = {
 /** How many rows the grid opens with, and how many more it grows by (§30.1). */
 const OPENING_ROWS = 10;
 const GROW_BY = 5;
+/**
+ * §39.1. How long after the last keystroke the number is looked up.
+ *
+ * Long enough that typing ten digits is one question rather than ten, short
+ * enough that a counsellor who stops to read the row is not reading a blank.
+ */
+const LOOKUP_DELAY = 300;
 
 let seq = 0;
 const blank = (): Row => ({
@@ -131,14 +138,91 @@ export function QuickAddGrid({
   const patch = (key: string, next: Partial<Row>) =>
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...next } : r)));
 
-  /** Leaving the mobile cell: normalise, validate, and ask what we know. */
-  async function settleMobile(key: string, raw: string) {
-    const mobile = normaliseMobile(raw);
-    patch(key, { mobile, status: null, decision: null, pipeline: null });
-    if (!isValidMobile(mobile)) return;
+  /**
+   * §39.1. The status has to be about the number as it is typed now.
+   *
+   * It used to be looked up on blur, which meant a counsellor who corrected
+   * the last digit and read the row without clicking away was reading the
+   * verdict on the number they had just replaced — "Existing lead" against a
+   * number nobody has ever called. So every keystroke clears the status first
+   * and the lookup follows 300 ms after the typing stops.
+   *
+   * Two refs do the work a debounce needs. `timers` holds the pending ask per
+   * row, so a further keystroke can cancel it. `asked` holds the number each
+   * row last asked about, and a reply is applied only if it is still that
+   * number — a slow answer about 8334808844 must not land on a row that now
+   * reads 8334808845.
+   */
+  const timers = useRef(new Map<string, number>());
+  const asked = useRef(new Map<string, string>());
+
+  function cancelLookup(key: string) {
+    const t = timers.current.get(key);
+    if (t !== undefined) window.clearTimeout(t);
+    timers.current.delete(key);
+  }
+
+  // Rows are cleared and replaced after a save; a timer that outlived its row
+  // would ask about a number nobody is looking at any more.
+  useEffect(() => {
+    const pendingTimers = timers.current;
+    return () => {
+      for (const t of pendingTimers.values()) window.clearTimeout(t);
+      pendingTimers.clear();
+    };
+  }, []);
+
+  /** Returns the answer, or undefined if a newer number overtook it. */
+  async function lookupRow(key: string, mobile: string): Promise<NumberStatus | null | undefined> {
+    cancelLookup(key);
+    asked.current.set(key, mobile);
     patch(key, { checking: true });
     const res = await lookupNumbers([mobile]);
-    patch(key, { checking: false, status: res.statuses?.[0] ?? null });
+    if (asked.current.get(key) !== mobile) return undefined;
+    const status = res.statuses?.[0] ?? null;
+    patch(key, { checking: false, status });
+    return status;
+  }
+
+  /** Every keystroke in the mobile cell (§39.1). */
+  function typeMobile(key: string, raw: string) {
+    const mobile = normaliseMobile(raw);
+    cancelLookup(key);
+    // Written before the patch so any answer still in flight is already stale.
+    asked.current.set(key, mobile);
+    const valid = isValidMobile(mobile);
+    patch(key, {
+      mobile,
+      status: null,
+      decision: null,
+      pipeline: null,
+      // A cleared status is not a verdict. Without this the row would read
+      // "New number" for the 300 ms before anybody had asked — which is the
+      // same wrong answer this brief is about, just briefer.
+      checking: valid,
+    });
+    if (!valid) return;
+    timers.current.set(
+      key,
+      window.setTimeout(() => void lookupRow(key, mobile), LOOKUP_DELAY),
+    );
+  }
+
+  /** Leaving the mobile cell, or arriving by paste: ask now, not in 300 ms. */
+  function settleMobile(key: string, raw: string) {
+    const mobile = normaliseMobile(raw);
+    if (timers.current.has(key)) {
+      cancelLookup(key);
+      if (isValidMobile(mobile)) void lookupRow(key, mobile);
+      return;
+    }
+    // Typing already asked about this exact number; asking again on the way
+    // out would only replace an answer with the same answer.
+    if (asked.current.get(key) === mobile) return;
+    patch(key, { mobile, status: null, decision: null, pipeline: null });
+    asked.current.set(key, mobile);
+    if (!isValidMobile(mobile)) return;
+    void lookupRow(key, mobile);
   }
 
   /**
@@ -170,8 +254,33 @@ export function QuickAddGrid({
     if (filled.length !== 1 || filled[0].key !== row.key) return;
     if (pending || blocked) return;
     const mobile = normaliseMobile(row.mobile);
-    if (!isValidMobile(mobile) || row.checking) return;
+    if (!isValidMobile(mobile)) return;
     e.preventDefault();
+
+    // §39.1 made the lookup wait 300 ms, and Enter comes straight off the last
+    // digit — so the answer is usually still on its way. Ask now rather than
+    // opening a call on a number nothing is known about. If the answer turns
+    // out to be one of the cases that asks a question, the row asks it and
+    // Enter is not an answer to it.
+    if (row.checking || timers.current.has(row.key)) {
+      void (async () => {
+        const status = await lookupRow(row.key, mobile);
+        if (status === undefined) return;
+        if (status) {
+          const side =
+            row.pipeline === "ticket"
+              ? "after_sale"
+              : row.pipeline === "purchase"
+                ? "purchase"
+                : ticketOnly(status)
+                  ? "after_sale"
+                  : "purchase";
+          if (describeNumber(status, side)?.needsDecision) return;
+        }
+        logCallNow({ ...row, mobile, status });
+      })();
+      return;
+    }
     logCallNow(row);
   }
 
@@ -201,7 +310,7 @@ export function QuickAddGrid({
     parts.forEach((p, i) => {
       const mobile = normaliseMobile(p);
       const key = keys[i];
-      if (key && isValidMobile(mobile)) void settleMobile(key, mobile);
+      if (key && isValidMobile(mobile)) settleMobile(key, mobile);
     });
   }
 
@@ -317,10 +426,8 @@ export function QuickAddGrid({
                       // so what is in the box is always what would be stored:
                       // pasting "+91 98765-43210" from WhatsApp shows
                       // 9876543210 at once rather than on blur.
-                      onChange={(e) =>
-                        patch(r.key, { mobile: normaliseMobile(e.target.value) })
-                      }
-                      onBlur={(e) => void settleMobile(r.key, e.target.value)}
+                      onChange={(e) => typeMobile(r.key, e.target.value)}
+                      onBlur={(e) => settleMobile(r.key, e.target.value)}
                       onPaste={(e) => onPaste(e, i)}
                       onKeyDown={(e) => onEnter(e, r)}
                     />

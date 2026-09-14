@@ -39,10 +39,16 @@ function toInterestItem(item: HistoryEnquiry["enquiry_items"][number]) {
   return {
     id: item.id,
     status: item.status,
-    label:
-      [item.teacher?.name, item.course?.name, item.subject?.name, item.content?.name]
-        .filter(Boolean)
-        .join(" · ") || "—",
+    // §39.3: the drawer edits the line in place, so it carries the ids as well
+    // as the names it reads as.
+    teacherId: item.teacher_id,
+    courseId: item.course_id,
+    subjectId: item.subject_id,
+    contentId: item.content_id,
+    teacher: item.teacher?.name ?? null,
+    course: item.course?.name ?? null,
+    subject: item.subject?.name ?? null,
+    content: item.content?.name ?? null,
     orderId: item.order_id,
     amount: item.amount,
   };

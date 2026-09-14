@@ -5,15 +5,16 @@ import { useRef, useState, useTransition } from "react";
 import { Badge, Button, ErrorNote, Input, Select, Textarea, cx } from "@/components/ui";
 import {
   InterestLineRows,
+  LineFields,
+  SavedLineRows,
   blankLine,
-  isComplete,
+  hasDetail,
   type ItemMaster,
   type NewLine,
   type SubjectMaster,
 } from "@/components/interest-lines";
 import {
   ISSUE_CATEGORY_LABELS,
-  ITEM_STATUS_LABELS,
   IMPORTANCE_LABELS,
   LEAD_VERIFICATION_LABELS,
   OUTCOME_LABELS,
@@ -42,7 +43,13 @@ import { useUnsavedClaim } from "@/components/unsaved-guard";
 import { WhatsAppButton } from "@/components/whatsapp/button";
 import { stageOf } from "@/lib/whatsapp-text";
 
-import { logCall, type LogCallResult, type PanelCall } from "./actions";
+import {
+  logCall,
+  removeEnquiryItem,
+  updateEnquiryItem,
+  type LogCallResult,
+  type PanelCall,
+} from "./actions";
 import { EditCallForm, canEditCall } from "./edit-call";
 
 export type Master = ItemMaster;
@@ -60,6 +67,11 @@ export type PanelMasters = {
 export type PanelItem = {
   id: string;
   status: string;
+  /** §39.3: the drawer edits the line in place, so it needs the ids too. */
+  teacherId: string | null;
+  courseId: string | null;
+  subjectId: string | null;
+  contentId: string | null;
   teacher: string | null;
   course: string | null;
   subject: string | null;
@@ -286,7 +298,18 @@ export function CallLogPanel({
   onCancel?: () => void;
 }) {
   const isPurchase = enquiry.type === "purchase";
-  const openItems = enquiry.items.filter((i) => i.status === "open");
+  /**
+   * §39.3 edits a saved line from inside the panel, and the write lands the
+   * moment Save is pressed rather than waiting for the call. The panel is
+   * handed its enquiry by whichever screen opened it, so the corrected line is
+   * kept here as well — the chip has to change under the counsellor's hand,
+   * and re-fetching the whole enquiry to move one word would blank the form
+   * they are still typing into.
+   */
+  const [items, setItems] = useState<PanelItem[]>(enquiry.items);
+  const [itemBusy, setItemBusy] = useState<string | null>(null);
+  const [itemError, setItemError] = useState<string | null>(null);
+  const openItems = items.filter((i) => i.status === "open");
 
   const [discussion, setDiscussion] = useState("");
   // Graded on the call, not remembered and edited later (Brief 16). Seeded
@@ -332,7 +355,7 @@ export function CallLogPanel({
   const isFirstCall = !enquiry.timeline.some((c) => c.sameEnquiry);
   /** A follow-up on a purchase lead that still has nothing recorded (§29.2). */
   const needsInterests =
-    !isFirstCall && enquiry.type === "purchase" && enquiry.items.length === 0;
+    !isFirstCall && enquiry.type === "purchase" && items.length === 0;
   const [studentName, setStudentName] = useState(enquiry.studentName ?? "");
   const [termId, setTermId] = useState(enquiry.termId ?? "");
   const [sourceId, setSourceId] = useState(enquiry.sourceId ?? "");
@@ -355,7 +378,7 @@ export function CallLogPanel({
 
   function addTeacher(id: string) {
     setNewLines((lines) => [
-      ...lines.filter((l) => isComplete(l)),
+      ...lines.filter((l) => hasDetail(l)),
       {
         ...blankLine(),
         teacherId: id,
@@ -366,6 +389,73 @@ export function CallLogPanel({
     ]);
     setTeacherQuery("");
   }
+  /**
+   * §39.3. A saved line corrected in place, written straight away.
+   *
+   * Not folded into the call save: the line belongs to the lead, not to this
+   * call, and a counsellor who spots that the content is wrong should not have
+   * to finish and save a call to fix it. The local copy is patched from the
+   * masters rather than re-fetched, so the chip changes as they watch.
+   */
+  function saveItem(id: string, line: NewLine) {
+    setItemError(null);
+    setItemBusy(id);
+    startTransition(async () => {
+      const res = await updateEnquiryItem({
+        itemId: id,
+        teacherId: line.teacherId || null,
+        courseId: line.courseId || null,
+        subjectId: line.subjectId || null,
+        contentId: line.contentId || null,
+      });
+      setItemBusy(null);
+      if (res.error) {
+        setItemError(res.error);
+        return;
+      }
+      const nameIn = (list: { id: string; name: string }[], id: string) =>
+        list.find((x) => x.id === id)?.name ?? null;
+      setItems((all) =>
+        all.map((i) =>
+          i.id === id
+            ? {
+                ...i,
+                teacherId: line.teacherId || null,
+                courseId: line.courseId || null,
+                subjectId: line.subjectId || null,
+                contentId: line.contentId || null,
+                teacher: nameIn(masters.teachers, line.teacherId),
+                course: nameIn(masters.courses, line.courseId),
+                subject: nameIn(masters.subjects, line.subjectId),
+                content: nameIn(masters.contents, line.contentId),
+              }
+            : i,
+        ),
+      );
+    });
+  }
+
+  /** Closed, never deleted (§39.3) — the reasoning is in the server action. */
+  function dropItem(id: string) {
+    setItemError(null);
+    setItemBusy(id);
+    startTransition(async () => {
+      const res = await removeEnquiryItem({ itemId: id });
+      setItemBusy(null);
+      if (res.error) {
+        setItemError(res.error);
+        return;
+      }
+      setItems((all) => all.map((i) => (i.id === id ? { ...i, status: "closed" } : i)));
+      // A line that is no longer open cannot carry a decision from this call.
+      setDecisions((d) => {
+        const next = { ...d };
+        delete next[id];
+        return next;
+      });
+    });
+  }
+
   const [askedAboutItems, setAskedAboutItems] = useState(false);
   const [result, setResult] = useState<LogCallResult | null>(null);
   const [pending, startTransition] = useTransition();
@@ -375,7 +465,7 @@ export function CallLogPanel({
   const issueRef = useRef<HTMLSelectElement | null>(null);
 
   const purchased = outcome === "purchased";
-  const filledLines = newLines.filter(isComplete);
+  const filledLines = newLines.filter(hasDetail);
   const tickedCount =
     Object.values(decisions).filter((d) => d.won).length +
     filledLines.filter((l) => l.won).length;
@@ -392,7 +482,7 @@ export function CallLogPanel({
    *              outcome, so it may be saved anyway once asked.
    *   call_back / closed  nothing. Neither says anything about a teacher.
    */
-  const willHaveNoItems = enquiry.items.length === 0 && filledLines.length === 0;
+  const willHaveNoItems = items.length === 0 && filledLines.length === 0;
   // Purchased is stricter still: there must be something *open* to tick, or a
   // new line to tick, not merely an item somewhere in the history.
   const needsAnItem = purchased && openItems.length === 0 && filledLines.length === 0;
@@ -458,7 +548,7 @@ export function CallLogPanel({
       setNewLines((lines) => lines.map((l) => ({ ...l, won: true })));
       focusInterests();
     }
-    if (next === "competitor" && enquiry.items.length === 0) {
+    if (next === "competitor" && items.length === 0) {
       focusInterests();
     }
   }
@@ -472,7 +562,7 @@ export function CallLogPanel({
     isDirty: () =>
       discussion.trim().length > 0 ||
       outcomeState !== "" ||
-      newLines.some(isComplete) ||
+      newLines.some(hasDetail) ||
       (isFirstCall &&
         (studentName !== (enquiry.studentName ?? "") ||
           termId !== (enquiry.termId ?? "") ||
@@ -630,7 +720,7 @@ export function CallLogPanel({
             createdAt: enquiry.createdAt,
           }}
         />
-        <InterestChips items={enquiry.items} />
+        <InterestChips items={items} />
       </div>
 
       {isFirstCall ? (
@@ -653,8 +743,16 @@ export function CallLogPanel({
           setTeacherQuery={setTeacherQuery}
           teacherMatches={teacherMatches}
           addTeacher={addTeacher}
-          lines={newLines.filter(isComplete)}
+          lines={newLines}
           removeLine={(key) => setNewLines((l) => l.filter((x) => x.key !== key))}
+          editLine={(key, patch) =>
+            setNewLines((l) => l.map((x) => (x.key === key ? { ...x, ...patch } : x)))
+          }
+          savedLines={items}
+          onSaveSaved={saveItem}
+          onRemoveSaved={dropItem}
+          savedBusy={itemBusy}
+          savedError={itemError}
           termId={termId}
           setTermId={setTermId}
           sourceId={sourceId}
@@ -882,7 +980,7 @@ export function CallLogPanel({
               enquiryId={enquiry.id}
               mobile={enquiry.mobile}
               studentName={enquiry.studentName}
-              items={enquiry.items}
+              items={items}
               term={enquiry.term}
               productText={enquiry.productText}
               counsellorName={counsellorName ?? null}
@@ -1058,7 +1156,7 @@ export function CallLogPanel({
         summary={
           needsInterests
             ? "No teacher/course recorded — add before saving"
-            : `Edit interests (${enquiry.items.length})`
+            : `Edit interests (${items.length})`
         }
         open={needsInterests}
         warn={needsInterests}
@@ -1073,22 +1171,23 @@ export function CallLogPanel({
         {isPurchase ? (
           <section>
             <h4 className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-              Interests ({enquiry.items.length})
+              Interests ({items.length})
             </h4>
 
             <div className="mt-1.5 rounded-md border border-line bg-sunk/30 px-3 py-2.5">
-              {enquiry.items.length ? (
-                <ul className="mb-2 flex flex-col gap-0.5 text-[12px] text-ink-2">
-                  {enquiry.items.map((i) => (
-                    <li key={i.id} className="flex items-center gap-2">
-                      <span>{itemLabel(i)}</span>
-                      <Badge tone={i.status === "open" ? "info" : "neutral"}>
-                        {ITEM_STATUS_LABELS[i.status as keyof typeof ITEM_STATUS_LABELS] ??
-                          i.status}
-                      </Badge>
-                    </li>
-                  ))}
-                </ul>
+              {items.length ? (
+                <div className="mb-2">
+                  <SavedLineRows
+                    lines={items}
+                    masters={masters}
+                    onSave={saveItem}
+                    onRemove={dropItem}
+                    busy={itemBusy}
+                  />
+                  {itemError ? (
+                    <p className="mt-1 text-[12px] text-danger">{itemError}</p>
+                  ) : null}
+                </div>
               ) : null}
 
               <InterestLineRows
@@ -1181,6 +1280,12 @@ function FirstCallFields({
   addTeacher,
   lines,
   removeLine,
+  editLine,
+  savedLines,
+  onSaveSaved,
+  onRemoveSaved,
+  savedBusy,
+  savedError,
   termId,
   setTermId,
   sourceId,
@@ -1223,6 +1328,14 @@ function FirstCallFields({
   addTeacher: (id: string) => void;
   lines: NewLine[];
   removeLine: (key: string) => void;
+  /** §39.3: a chip is a line, and a line is correctable where it sits. */
+  editLine: (key: string, patch: Partial<NewLine>) => void;
+  /** Lines already in the database — an imported lead can arrive with some. */
+  savedLines: PanelItem[];
+  onSaveSaved: (id: string, line: NewLine) => void;
+  onRemoveSaved: (id: string) => void;
+  savedBusy: string | null;
+  savedError: string | null;
   termId: string;
   setTermId: (v: string) => void;
   sourceId: string;
@@ -1253,6 +1366,12 @@ function FirstCallFields({
     : masters.subjects;
   const nameOf = (list: { id: string; name: string }[], id: string) =>
     list.find((x) => x.id === id)?.name;
+  /** Which chip is open as a row of fields (§39.3). */
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  // A chip is a line that says something; the seeded blank is not a chip. The
+  // one being edited stays on screen even if every field is momentarily
+  // cleared, or the editor would unmount under the counsellor's cursor.
+  const shown = lines.filter((l) => hasDetail(l) || l.key === editingKey);
 
   return (
     <div className="grid gap-x-3 gap-y-2.5 px-4 py-3 md:grid-cols-2 xl:grid-cols-3">
@@ -1382,35 +1501,92 @@ function FirstCallFields({
             </div>
           ) : null}
         </div>
-        {lines.length ? (
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {lines.map((l) => (
-              <span
-                key={l.key}
-                className="inline-flex items-center gap-1.5 rounded-full border border-line-2 bg-surface-2 px-2 py-0.5 text-[11.5px] text-ink-2"
-              >
-                {[
-                  nameOf(masters.teachers, l.teacherId),
-                  nameOf(masters.courses, l.courseId),
-                  nameOf(masters.subjects, l.subjectId),
-                  nameOf(masters.contents, l.contentId),
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-                <button
-                  type="button"
-                  aria-label={`Remove ${nameOf(masters.teachers, l.teacherId) ?? "line"}`}
-                  className="text-ink-3 hover:text-danger"
-                  onClick={() => removeLine(l.key)}
-                >
-                  ×
-                </button>
-              </span>
-            ))}
+        {savedLines.length ? (
+          <div className="mt-1.5 rounded-md border border-line bg-sunk/30 px-2 py-1.5">
+            <SavedLineRows
+              lines={savedLines}
+              masters={masters}
+              onSave={onSaveSaved}
+              onRemove={onRemoveSaved}
+              busy={savedBusy}
+            />
+            {savedError ? (
+              <p className="mt-1 text-[12px] text-danger">{savedError}</p>
+            ) : null}
           </div>
-        ) : (
+        ) : null}
+
+        {shown.length ? (
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {shown.map((l) =>
+              // §39.3. The chips are lines, and a line picked up the course,
+              // subject and content that happened to be set when the teacher
+              // was chosen. Opening one in place is how a counsellor says "not
+              // that one" without deleting the chip and starting again.
+              editingKey === l.key ? (
+                <div
+                  key={l.key}
+                  className="flex w-full flex-wrap items-center gap-2 rounded-md border border-accent/40 bg-surface px-2 py-1.5"
+                >
+                  <LineFields
+                    line={l}
+                    masters={masters}
+                    onChange={(patch) => editLine(l.key, patch)}
+                  />
+                  <button
+                    type="button"
+                    className="text-[11.5px] text-ink-3 hover:text-ink"
+                    onClick={() => setEditingKey(null)}
+                  >
+                    done
+                  </button>
+                  <button
+                    type="button"
+                    className="text-[11.5px] text-ink-3 hover:text-danger"
+                    onClick={() => {
+                      setEditingKey(null);
+                      removeLine(l.key);
+                    }}
+                  >
+                    remove
+                  </button>
+                </div>
+              ) : (
+                <span
+                  key={l.key}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-line-2 bg-surface-2 px-2 py-0.5 text-[11.5px] text-ink-2"
+                >
+                  <button
+                    type="button"
+                    className="underline-offset-2 hover:underline"
+                    aria-label={`Edit ${nameOf(masters.teachers, l.teacherId) ?? "line"}`}
+                    onClick={() => setEditingKey(l.key)}
+                  >
+                    {[
+                      nameOf(masters.teachers, l.teacherId),
+                      nameOf(masters.courses, l.courseId),
+                      nameOf(masters.subjects, l.subjectId),
+                      nameOf(masters.contents, l.contentId),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${nameOf(masters.teachers, l.teacherId) ?? "line"}`}
+                    className="text-ink-3 hover:text-danger"
+                    onClick={() => removeLine(l.key)}
+                  >
+                    ×
+                  </button>
+                </span>
+              ),
+            )}
+          </div>
+        ) : savedLines.length ? null : (
           <p className="mt-1.5 text-[11.5px] italic text-ink-3">
-            No interest lines yet — each teacher you pick becomes one.
+            No interest lines yet — each teacher you pick becomes one. A course on
+            its own is worth keeping too.
           </p>
         )}
       </FirstCallField>

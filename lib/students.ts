@@ -44,6 +44,12 @@ export type HistoryItem = {
   status: ItemStatus;
   order_id: string | null;
   amount: number | null;
+  // §39.3 edits a line where it sits, so the drawer needs the ids it is made
+  // of and not only the names it reads as.
+  teacher_id: string | null;
+  course_id: string | null;
+  subject_id: string | null;
+  content_id: string | null;
   teacher: { name: string } | null;
   course: { name: string } | null;
   subject: { name: string } | null;
@@ -139,6 +145,7 @@ const SELECT = `
     ),
     enquiry_items (
       id, status, order_id, amount,
+      teacher_id, course_id, subject_id, content_id,
       teacher:teachers ( name ),
       course:courses ( name ),
       subject:subjects ( name ),
