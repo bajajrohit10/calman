@@ -238,13 +238,41 @@ export function describeNumber(
         label:
           `Call done today${status.lastCallBy ? ` by ${status.lastCallBy}` : ""}` +
           ` at ${istClock(status.lastCallAt)}`,
-        action: "Nothing yet — Dismiss, or add to New Calls anyway",
+        action: CASE_5_ACTIONS.log_call,
         rule: "decide",
         tone: "warn",
         needsDecision: true,
       };
   }
 }
+
+/**
+ * The three things somebody can do about a number that was called today (§42).
+ *
+ * There used to be two, and both of them changed the lead: Dismiss threw the
+ * arrival away, "Add to New Calls anyway" cleared the follow-up and put the
+ * lead back in the pool. Neither is what usually happened — the student rang
+ * again an hour later, and the counsellor wants to take the call without
+ * undoing the one before it. That is the third option, and it is the common
+ * one, so in Quick Add it is the default.
+ *
+ * Bulk import keeps Dismiss as its default: a spreadsheet row is an arrival
+ * nobody is on the phone to, and "log another call" is a thing a person does,
+ * not a thing a file does.
+ */
+export type Case5Decision = "log_call" | "add_anyway" | "dismiss";
+
+export const CASE_5_ACTIONS: Record<Case5Decision, string> = {
+  log_call: "Another call on the same enquiry; follow-up and assignment untouched",
+  add_anyway: "Source updated, follow-up cleared, back into New Calls",
+  dismiss: "Dismissed — nothing will be written",
+};
+
+export const CASE_5_CHOICES: readonly { id: Case5Decision; label: string }[] = [
+  { id: "log_call", label: "Log another call" },
+  { id: "add_anyway", label: "Add to New Calls anyway" },
+  { id: "dismiss", label: "Dismiss" },
+];
 
 /**
  * The five situations as group headings, where a per-row sentence would be

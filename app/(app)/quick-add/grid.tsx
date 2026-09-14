@@ -6,10 +6,13 @@ import { Button, ErrorNote, Input, Select, cx } from "@/components/ui";
 import { useUnsavedClaim } from "@/components/unsaved-guard";
 import {
   BOTH_OPEN,
+  CASE_5_ACTIONS,
+  CASE_5_CHOICES,
   bothOpen,
   describeNumber,
   dismissQuestion,
   ticketOnly,
+  type Case5Decision,
   type DuplicateVerdict,
   type NumberStatus,
 } from "@/lib/duplicate-rules";
@@ -25,7 +28,7 @@ type Row = {
   sourceId: string;
   status: NumberStatus | null;
   /** Case 5 only: what the counsellor chose. */
-  decision: "dismiss" | "add_anyway" | null;
+  decision: Case5Decision | null;
   /**
    * §38.3. Which pipeline this row goes to when the number is already in one.
    * null is the rule's own answer; the counsellor can send it to the other
@@ -190,7 +193,20 @@ export function QuickAddGrid({
     const res = await lookupNumbers([mobile]);
     if (asked.current.get(key) !== mobile) return undefined;
     const status = res.statuses?.[0] ?? null;
-    patch(key, { checking: false, status });
+    /**
+     * §42. Case 5 arrives with an answer already chosen.
+     *
+     * The three options are not equally likely: a number called an hour ago
+     * that has rung again is almost always the same conversation continuing,
+     * and the counsellor is holding the phone. So "Log another call" — the one
+     * that changes nothing — is preselected, and the two that change the lead
+     * are a click away. Nothing is blocked; the row still says what it will do.
+     */
+    const preset =
+      status && describeNumber(status, "purchase").case === 5
+        ? ("log_call" as const)
+        : null;
+    patch(key, { checking: false, status, decision: preset });
     return status;
   }
 
@@ -481,7 +497,7 @@ export function QuickAddGrid({
                       row={r}
                       bad={bad}
                       verdict={verdict}
-                      onAddAnyway={() => patch(r.key, { decision: "add_anyway" })}
+                      onDecide={(d) => patch(r.key, { decision: d })}
                       onDismiss={() => setConfirming(r)}
                       onPipeline={(p) => patch(r.key, { pipeline: p })}
                     />
@@ -571,14 +587,14 @@ function StatusCell({
   row,
   bad,
   verdict,
-  onAddAnyway,
+  onDecide,
   onDismiss,
   onPipeline,
 }: {
   row: Row;
   bad: boolean;
   verdict: DuplicateVerdict | null;
-  onAddAnyway: () => void;
+  onDecide: (decision: Case5Decision) => void;
   onDismiss: () => void;
   onPipeline: (p: "ticket" | "purchase") => void;
 }) {
@@ -657,11 +673,7 @@ function StatusCell({
           </span>
         ) : null}
         <span className="text-[11px] text-ink-3">
-          {row.decision === "dismiss"
-            ? "Dismissed — nothing will be written"
-            : row.decision === "add_anyway"
-              ? "Source updated, follow-up cleared, back into New Calls"
-              : verdict.action}
+          {row.decision ? CASE_5_ACTIONS[row.decision] : verdict.action}
         </span>
       </span>
       {/* §38.3. Which pipeline this arrival belongs to, when the number is
@@ -712,32 +724,26 @@ function StatusCell({
             })}
         </span>
       ) : null}
+      {/* §42. Three answers, in the order they are reached for. Dismiss is
+          last and still asks twice — it is the only one that throws the
+          arrival away. */}
       {verdict.needsDecision ? (
         <span className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={onDismiss}
-            className={cx(
-              "rounded-full border px-2 py-[2px] text-[11px]",
-              row.decision === "dismiss"
-                ? "border-accent bg-accent-soft font-medium text-accent"
-                : "border-line-2 bg-surface text-ink-2 hover:border-ink-3",
-            )}
-          >
-            Dismiss
-          </button>
-          <button
-            type="button"
-            onClick={onAddAnyway}
-            className={cx(
-              "rounded-full border px-2 py-[2px] text-[11px]",
-              row.decision === "add_anyway"
-                ? "border-accent bg-accent-soft font-medium text-accent"
-                : "border-line-2 bg-surface text-ink-2 hover:border-ink-3",
-            )}
-          >
-            Add to New Calls anyway
-          </button>
+          {CASE_5_CHOICES.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => (c.id === "dismiss" ? onDismiss() : onDecide(c.id))}
+              className={cx(
+                "rounded-full border px-2 py-[2px] text-[11px]",
+                row.decision === c.id
+                  ? "border-accent bg-accent-soft font-medium text-accent"
+                  : "border-line-2 bg-surface text-ink-2 hover:border-ink-3",
+              )}
+            >
+              {c.label}
+            </button>
+          ))}
         </span>
       ) : null}
     </span>
@@ -794,7 +800,12 @@ function Summary({ result }: { result: BulkResult }) {
     <div className="rounded-md border border-ok/40 bg-ok-soft px-3 py-1.5 text-[12.5px] text-ok">
       <p>
         {result.created} new, {result.updated} already waiting and updated,{" "}
-        {result.returned} returned to New Calls, {result.dismissed} left alone
+        {result.returned} returned to New Calls,{" "}
+        {/* §42. Two different kinds of "nothing changed", and they are not the
+            same thing: one is a lead ready for another call, the other is an
+            arrival thrown away. */}
+        {result.untouched ? `${result.untouched} left as they were, ` : ""}
+        {result.dismissed} dismissed
         {result.failed?.length ? `, ${result.failed.length} failed` : ""}.
       </p>
       {result.failed?.length ? (

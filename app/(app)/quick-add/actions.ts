@@ -13,6 +13,7 @@ import { lookupNumbers } from "@/app/(app)/import/actions";
 import {
   describeNumber,
   ticketOnly,
+  type Case5Decision,
   type DuplicateCase,
 } from "@/lib/duplicate-rules";
 import { isValidMobile, normaliseMobile } from "@/lib/mobile";
@@ -224,11 +225,12 @@ export type BulkRowInput = {
   name: string | null;
   sourceId: string | null;
   /**
-   * Case 5 only (Brief 31): a number somebody has already called today does
-   * nothing until a person chooses. Every other case is decided by the rules,
-   * so there is nothing here to send.
+   * Case 5 only (Brief 31, extended by §42): a number somebody has already
+   * called today. Three answers — log another call on the same enquiry and
+   * change nothing else, put it back in New Calls, or throw the arrival away.
+   * Every other case is decided by the rules, so there is nothing to send.
    */
-  decision: "dismiss" | "add_anyway" | null;
+  decision: Case5Decision | null;
   /** §38.3: which pipeline this arrival was sent to, when asked. */
   pipeline?: "ticket" | "purchase" | null;
 };
@@ -237,7 +239,7 @@ export type BulkRowResult = {
   mobile: string;
   /** Which of the five, as the server saw it at save time. */
   case: DuplicateCase | null;
-  action: "created" | "updated" | "returned" | "dismissed" | "failed";
+  action: "created" | "updated" | "returned" | "dismissed" | "untouched" | "failed";
   enquiryId: number | null;
   /** What happened, in the words the rule uses. */
   detail?: string;
@@ -253,6 +255,8 @@ export type BulkResult = {
   updated?: number;
   returned?: number;
   dismissed?: number;
+  /** §42: rows that were opened for another call and otherwise left alone. */
+  untouched?: number;
   failed?: { mobile: string; reason: string }[];
 };
 
@@ -376,11 +380,29 @@ export async function createManyEnquiries(
         };
         continue;
       }
+      /**
+       * §42. The common answer: the student rang again, and the counsellor is
+       * about to take the call. Nothing is written here at all — no source
+       * touch, no re-enquire, no cleared follow-up — because the whole point
+       * of this option is that the earlier call stands and the lead keeps its
+       * place. What happens next is decided by the outcome of the call the
+       * window is about to open, exactly as on any other day.
+       */
+      if (job.row.decision === "log_call") {
+        out[job.index] = {
+          mobile: job.mobile,
+          case: 5,
+          action: "untouched",
+          enquiryId: status?.openEnquiryId ?? null,
+          detail: "Left exactly as it was; ready for another call.",
+        };
+        continue;
+      }
       if (job.row.decision !== "add_anyway") {
         fail(
           job.index,
           job.mobile,
-          "somebody called this number today — choose Dismiss or Add to New Calls anyway",
+          "somebody called this number today — choose Log another call, Add to New Calls anyway, or Dismiss",
           5,
         );
         continue;
@@ -492,6 +514,7 @@ export async function createManyEnquiries(
     updated: done.filter((r) => r.action === "updated").length,
     returned: done.filter((r) => r.action === "returned").length,
     dismissed: done.filter((r) => r.action === "dismissed").length,
+    untouched: done.filter((r) => r.action === "untouched").length,
     failed: done
       .filter((r) => r.action === "failed")
       .map((r) => ({ mobile: r.mobile, reason: r.reason ?? "could not be saved" })),
