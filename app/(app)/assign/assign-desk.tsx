@@ -6,6 +6,8 @@ import { StudentLink } from "@/components/student-link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
+import { SmartAssignPanel } from "./smart-assign";
+
 import { ExportButton } from "@/components/export-button";
 import { MultiSelect } from "@/components/multi-select";
 import {
@@ -204,6 +206,8 @@ export function AssignDesk({
 }) {
   const router = useRouter();
   const [picked, setPicked] = useState<Map<number, AssignmentBucket>>(new Map());
+  /** §34: the Smart assign panel, which takes over the screen while open. */
+  const [smart, setSmart] = useState(false);
   const [counsellor, setCounsellor] = useState("");
   const [result, setResult] = useState<{ error: string | null; ok?: string } | null>(null);
   const [pending, start] = useTransition();
@@ -294,6 +298,24 @@ export function AssignDesk({
   }));
   const allMatchingSelected = total > 0 && picked.size === total;
 
+  // §34. The panel replaces the desk rather than sitting beside it: it is the
+  // same question asked a different way, and two live copies of "which leads"
+  // on one screen would be two things to keep in step and one to misread.
+  if (smart) {
+    return (
+      <SmartAssignPanel
+        date={selected.date || date}
+        roster={roster.map((r) => ({ id: r.id, name: r.name }))}
+        masters={{
+          teachers: masters.teachers,
+          institutes: masters.institutes,
+          contents: masters.contents,
+        }}
+        onClose={() => setSmart(false)}
+      />
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4 xl:flex-row">
       {/* ------------------------------- left ------------------------------- */}
@@ -342,6 +364,16 @@ export function AssignDesk({
               >
                 More filters {showMore ? "−" : "+"}
               </Link>
+              {/* §34. Beside More filters, because it is the other way in to
+                  the same set — and the one that does not need you to know
+                  what you are looking for before you look. */}
+              <button
+                type="button"
+                onClick={() => setSmart(true)}
+                className="inline-flex h-[26px] items-center rounded-md border border-accent/50 bg-accent-soft px-2.5 text-[12.5px] font-medium text-accent hover:border-accent"
+              >
+                Smart assign
+              </button>
               {/* What is hidden, when it is hidden. A filter you cannot see is
                   a filter you forget you set. */}
               {!showMore && activeChips.length

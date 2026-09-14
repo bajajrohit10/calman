@@ -67,6 +67,8 @@ export type RecommendedFilters = {
   subjectId?: string | null;
   contentIds?: string[] | null;
   instituteId?: string | null;
+  /** Brief 34: institute as a column of options rather than one choice. */
+  instituteIds?: string[] | null;
   stages?: string[] | null;
   lastCalledFrom?: string | null;
   lastCalledTo?: string | null;
@@ -83,6 +85,8 @@ export type RecommendedFilters = {
   /** 'unassigned' | 'assigned' | null for any. Brief 17; the desk defaults to unassigned. */
   assignment?: string | null;
   lastCalledBy?: string[] | null;
+  /** Brief 34: include the leads nobody has ever called. */
+  neverCalled?: boolean | null;
   lastOutcomes?: string[] | null;
   /** Facet names whose "No detail" option is selected. */
   noDetail?: string[] | null;
@@ -115,6 +119,7 @@ function args(f: RecommendedFilters): Args {
     p_subject_id: clean(f.subjectId),
     p_content_ids: list(f.contentIds),
     p_institute_id: clean(f.instituteId),
+    p_institute_ids: list(f.instituteIds),
     p_stages: f.stages?.length ? f.stages : undefined,
     p_last_called_from: clean(f.lastCalledFrom),
     p_last_called_to: clean(f.lastCalledTo),
@@ -130,6 +135,7 @@ function args(f: RecommendedFilters): Args {
     p_discussion: clean(f.discussion),
     p_assignment: clean(f.assignment),
     p_last_called_by: list(f.lastCalledBy),
+    p_never_called: f.neverCalled ?? undefined,
     p_last_outcomes: list(f.lastOutcomes),
     p_no_detail: list(f.noDetail),
     p_bucket: clean(f.bucket),

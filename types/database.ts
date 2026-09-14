@@ -1980,11 +1980,13 @@ export type Database = {
           p_importance?: Database["public"]["Enums"]["importance"][]
           p_include_not_due?: boolean
           p_institute_id?: string
+          p_institute_ids?: string[]
           p_last_called_by?: string[]
           p_last_called_from?: string
           p_last_called_to?: string
           p_last_outcomes?: string[]
           p_limit?: number
+          p_never_called?: boolean
           p_no_detail?: string[]
           p_offer_ids?: string[]
           p_offer_statuses?: string[]
@@ -2051,10 +2053,12 @@ export type Database = {
           p_importance?: Database["public"]["Enums"]["importance"][]
           p_include_not_due?: boolean
           p_institute_id?: string
+          p_institute_ids?: string[]
           p_last_called_by?: string[]
           p_last_called_from?: string
           p_last_called_to?: string
           p_last_outcomes?: string[]
+          p_never_called?: boolean
           p_no_detail?: string[]
           p_offer_ids?: string[]
           p_offer_statuses?: string[]
