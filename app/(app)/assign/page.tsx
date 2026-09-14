@@ -1,7 +1,7 @@
 import { PageHeader } from "@/components/ui";
 import { requireAdminProfile } from "@/lib/auth";
 import { facetsAgreeWithList, loadDeskFacets } from "@/lib/facets";
-import { loadRecommended } from "@/lib/recommended";
+import { loadAssignmentCounts, loadRecommended } from "@/lib/recommended";
 import { loadMasters } from "@/lib/masters";
 import { loadOfferOptions } from "@/lib/offers";
 import { logServerTiming } from "@/lib/server-timing";
@@ -53,10 +53,12 @@ export default async function Page({
   // The facet counts are a second query over the same scope, issued alongside
   // the list rather than after it, so the page waits for the slower of the two
   // and not for their sum.
-  const [list, facetResult, staff, offers] =
+  const [list, facetResult, counts, staff, offers] =
     await Promise.all([
       loadRecommended(filters),
       loadDeskFacets(filters),
+      // §36.1: the three headline figures, under whatever filters are set.
+      loadAssignmentCounts(filters),
       supabase
         .from("profiles")
         .select("id, full_name, role")
@@ -105,6 +107,7 @@ export default async function Page({
         rows={list.rows}
         total={list.total}
         error={list.error}
+        counts={counts}
         facets={facetsAgreeWithList(facetResult.facets, list.total) ?? undefined}
         facetError={
           facetResult.error ??

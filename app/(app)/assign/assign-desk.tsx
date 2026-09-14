@@ -167,6 +167,7 @@ export function AssignDesk({
   page,
   pageSize,
   includeNotDue,
+  counts,
   roster,
   masters,
   selected,
@@ -189,6 +190,8 @@ export function AssignDesk({
   page: number;
   pageSize: number;
   includeNotDue: boolean;
+  /** §36.1: the day's three headline figures, under the current filters. */
+  counts: { needs: number; pending: number; done: number; error: string | null };
   roster: RosterEntry[];
   masters: DeskMasters;
   selected: Record<string, string>;
@@ -317,6 +320,30 @@ export function AssignDesk({
   }
 
   return (
+    <div className="flex flex-col gap-4">
+      {/* §36.1. The state of the day, before the controls that change it. A
+          manager arrives at this screen with one question — how much is
+          unhanded-out — and it was previously answerable only by reading the
+          list's own total and knowing which filter was set. The three move
+          with the filters, so they always describe the board on screen. */}
+      <div className="flex flex-wrap items-end gap-6 rounded-lg border border-line bg-surface px-4 py-3 shadow-card">
+        {[
+          { label: "Needs assignment", value: counts.needs, tone: "text-accent" },
+          { label: "Pending", value: counts.pending, tone: "text-ink" },
+          { label: "Done", value: counts.done, tone: "text-ink-2" },
+        ].map((c) => (
+          <div key={c.label}>
+            <p className={cx("text-[30px] font-semibold leading-none tabular-nums", c.tone)}>
+              {c.value}
+            </p>
+            <p className="mt-1 text-[11.5px] text-ink-3">{c.label}</p>
+          </div>
+        ))}
+        <p className="ml-auto pb-1 text-[11.5px] text-ink-3">
+          For {formatDate(selected.date || date)}, under the filters below.
+        </p>
+      </div>
+
     <div className="flex flex-col gap-4 xl:flex-row">
       {/* ------------------------------- left ------------------------------- */}
       <div className="min-w-0 flex-1 flex flex-col gap-3">
@@ -795,6 +822,7 @@ export function AssignDesk({
           </p>
         ) : null}
       </aside>
+      </div>
     </div>
   );
 }

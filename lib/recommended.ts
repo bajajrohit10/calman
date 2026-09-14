@@ -203,3 +203,33 @@ export async function loadAllMatching(
 
   return { rows: out, total: probe.total, error: null };
 }
+
+/**
+ * The three headline counts for a day (§36.1): how much work needs handing
+ * out, how much is out and still to call, and how much is done.
+ *
+ * Three calls to the same function the list uses, each asking for one row and
+ * reading the window count off it. It would be cheaper as a bespoke query, and
+ * that bespoke query would be a fourth definition of "needs assignment" to
+ * keep in step with the list, the facets and Smart Assign. Three round trips
+ * in parallel is the price of the numbers being the same numbers.
+ *
+ * Every other filter is passed through unchanged, so the figures move with the
+ * filters rather than describing a board nobody is looking at.
+ */
+export async function loadAssignmentCounts(
+  filters: RecommendedFilters,
+): Promise<{ needs: number; pending: number; done: number; error: string | null }> {
+  const [needs, pending, done] = await Promise.all(
+    (["needs", "pending", "done"] as const).map((assignment) =>
+      loadRecommended({ ...filters, assignment, limit: 1, offset: 0 }),
+    ),
+  );
+
+  return {
+    needs: needs.total,
+    pending: pending.total,
+    done: done.total,
+    error: needs.error ?? pending.error ?? done.error,
+  };
+}
