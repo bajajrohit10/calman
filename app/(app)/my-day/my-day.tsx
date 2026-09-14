@@ -543,6 +543,13 @@ export function MyDay({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* §40.2. Everything from here to the panel is the *list's* controls —
+          the date, the five buckets, the slot ladder, the Pending/Done toggle.
+          A call panel replaces the list, so on a 768px laptop these were 269
+          pixels of steering wheel above a screen with no list to steer, and
+          the Save button was under the fold because of it. `contents` while
+          the list is up, so the layout is exactly what it was. */}
+      <div className={open ? "hidden" : "contents"}>
       <div className="flex flex-wrap items-end gap-2.5 rounded-lg border border-line bg-surface px-2.5 py-2.5 shadow-card">
         <form method="GET" className="flex flex-wrap items-end gap-2">
           {/* §33.1. The date picker is a GET form, so the tab a counsellor is
@@ -841,6 +848,7 @@ export function MyDay({
         </span>
       </div>
       )}
+      </div>
 
       {open ? (
         <div className="flex flex-col gap-2">

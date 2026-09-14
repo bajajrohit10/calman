@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import type { ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 
 import { syncBlink } from "@/components/blink";
 import { Button, cx } from "@/components/ui";
@@ -19,6 +19,11 @@ type Item = {
   adminOnly?: boolean;
   /** Key into the counts prop, for a live badge. */
   badge?: "newCalls" | "myDay";
+  /**
+   * A second way into the same area, shown under it (§40.1). One level only:
+   * a rail that grows a tree is a rail nobody reads.
+   */
+  sub?: { href: string; label: string; hint: string }[];
 };
 
 // Spec §2. Every item except Settings is available to all four roles; Settings
@@ -49,6 +54,13 @@ const ITEMS: Item[] = [
     hint: "Plan and hand out the day",
     icon: "▤",
     adminOnly: true,
+    sub: [
+      {
+        href: "/assign/smart",
+        label: "Smart",
+        hint: "The whole board as columns of options",
+      },
+    ],
   },
   { href: "/reports", label: "Reports", hint: "Daily and team reports", icon: "◔" },
 ];
@@ -93,20 +105,55 @@ export function Sidebar({
   const confirmLeave = useConfirmLeave();
   // The pill's polled figure, once it has one. Until then the server's.
   const newCalls = useNewCallsCount();
+  const collapsed = useRailCollapsed();
   const items = showSettings
     ? [...ITEMS, SETTINGS]
     : ITEMS.filter((item) => !item.adminOnly);
 
+  /** Hidden while the rail is icons-only, back on hover. */
+  const label = collapsed ? "hidden group-hover:block" : "";
+
   return (
-    <nav
-      aria-label="Main"
-      className="flex w-[208px] shrink-0 flex-col bg-rail py-3 text-rail-ink"
+    // §40.2. The rail keeps its place in the row at whatever width it is at
+    // rest, and the nav floats above that place so hovering it does not shove
+    // the page sideways. Below 1366 that resting width is 56px — icons — and
+    // the labels come back on hover, which is what makes the collapsed state
+    // usable without the toggle.
+    <div
+      className={cx(
+        "relative shrink-0 transition-[width] duration-150",
+        collapsed ? "w-[56px]" : "w-[208px]",
+      )}
     >
-      <div className="mb-2 border-b border-rail-line px-4 pb-3.5">
-        <div className="text-[14px] font-semibold tracking-[-0.01em] text-white">
-          Calman
+      <nav
+        aria-label="Main"
+        className={cx(
+          "group absolute inset-y-0 left-0 z-30 flex flex-col overflow-hidden bg-rail py-3 text-rail-ink transition-[width] duration-150",
+          collapsed ? "w-[56px] hover:w-[208px] hover:shadow-2xl" : "w-[208px]",
+        )}
+      >
+      <div
+        className={cx(
+          "mb-2 flex items-start border-b border-rail-line pb-3",
+          collapsed ? "px-2.5" : "px-4",
+        )}
+      >
+        <div className="min-w-0 flex-1">
+          <div className="text-[14px] font-semibold tracking-[-0.01em] text-white">
+            {collapsed ? (
+              <>
+                <span className="group-hover:hidden">C</span>
+                <span className="hidden group-hover:inline">Calman</span>
+              </>
+            ) : (
+              "Calman"
+            )}
+          </div>
+          <div className={cx("text-[11px] text-rail-ink-2", label)}>
+            Zeroinfy counselling
+          </div>
         </div>
-        <div className="text-[11px] text-rail-ink-2">Zeroinfy counselling</div>
+        <RailToggle collapsed={collapsed} />
       </div>
 
       <ul className="flex flex-1 flex-col gap-px px-2">
@@ -148,7 +195,7 @@ export function Sidebar({
                 >
                   {item.icon}
                 </span>
-                <span className="truncate">{item.label}</span>
+                <span className={cx("truncate", label)}>{item.label}</span>
                 {item.badge ? (
                   // empty:hidden is what lets the count stream in. While the
                   // boundary is still pending — and when the count is zero,
@@ -180,28 +227,159 @@ export function Sidebar({
                   </span>
                 ) : null}
               </Link>
+
+              {/* §40.1. One indented line under its parent: a second way into
+                  the same area, which only makes sense next to the first. */}
+              {item.sub?.length ? (
+                <ul className={cx("mt-px flex flex-col gap-px", label)}>
+                  {item.sub.map((child) => (
+                    <li key={child.href}>
+                      <Link
+                        href={child.href}
+                        title={child.hint}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          void confirmLeave().then((ok: boolean) => {
+                            if (ok) router.push(child.href);
+                          });
+                        }}
+                        aria-current={pathname === child.href ? "page" : undefined}
+                        className={cx(
+                          "ml-[24px] block truncate rounded-md px-2 py-1 text-[11.5px] transition-colors",
+                          pathname === child.href
+                            ? "bg-rail-hover font-medium text-white"
+                            : "text-rail-ink-2 hover:bg-rail-hover hover:text-white",
+                        )}
+                      >
+                        {child.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </li>
           );
         })}
       </ul>
 
-      <div className="mt-auto border-t border-rail-line px-4 pt-2.5">
-        <div className="truncate text-[12px] font-medium text-white" title={fullName}>
+      <div
+        className={cx(
+          "mt-auto border-t border-rail-line pt-2.5",
+          collapsed ? "px-2.5" : "px-4",
+        )}
+      >
+        <div
+          className={cx("truncate text-[12px] font-medium text-white", label)}
+          title={fullName}
+        >
           {fullName}
         </div>
-        <div className="text-[11.5px] text-rail-ink-2" data-testid="viewer-role">
+        <div
+          className={cx("text-[11.5px] text-rail-ink-2", label)}
+          data-testid="viewer-role"
+        >
           {roleLabel}
         </div>
-        <form action={signOut} className="mt-2">
+        <form action={signOut} className={collapsed ? "" : "mt-2"}>
           <Button
             type="submit"
             size="sm"
+            title="Sign out"
             className="w-full justify-start border-0 bg-transparent px-2 text-rail-ink-2 hover:bg-rail-hover hover:text-white"
           >
-            Sign out
+            {collapsed ? (
+              <>
+                <span aria-hidden className="group-hover:hidden">
+                  ⏻
+                </span>
+                <span className="hidden group-hover:inline">Sign out</span>
+              </>
+            ) : (
+              "Sign out"
+            )}
           </Button>
         </form>
       </div>
-    </nav>
+      </nav>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+
+const RAIL_KEY = "calman.rail";
+/** Below this the rail is icons unless somebody has said otherwise (§40.2). */
+const RAIL_BREAKPOINT = 1366;
+
+/**
+ * Whether the rail is icons-only.
+ *
+ * Two rules, in order: what this person last chose, and failing that the width
+ * of the window. A 1280 laptop loses 208px of a 1280px screen to eight links
+ * somebody learned in a day, which is most of a column of the desk; a 1920
+ * monitor can afford them. The choice is remembered because a rail that
+ * reopens itself every morning is a rail you close every morning.
+ *
+ * Starts expanded on the server and on the first client render, because
+ * neither knows the width — the effect settles it before paint matters.
+ */
+function useRailCollapsed() {
+  const narrow = useSyncExternalStore(
+    subscribeWidth,
+    () => window.innerWidth < RAIL_BREAKPOINT,
+    () => false,
+  );
+  const choice = useSyncExternalStore(subscribeChoice, readChoice, () => null);
+  return choice === null ? narrow : choice === "icons";
+}
+
+function subscribeWidth(onChange: () => void) {
+  window.addEventListener("resize", onChange);
+  return () => window.removeEventListener("resize", onChange);
+}
+
+function subscribeChoice(onChange: () => void) {
+  window.addEventListener("calman:rail", onChange);
+  // Another tab's choice is this tab's choice: one person, one rail.
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener("calman:rail", onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
+
+/** Returns the same string each time it is unchanged, which is what the store wants. */
+function readChoice(): "icons" | "open" | null {
+  try {
+    const v = window.localStorage.getItem(RAIL_KEY);
+    return v === "icons" || v === "open" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The one control that overrides the width rule, and remembers it. */
+function RailToggle({ collapsed }: { collapsed: boolean }) {
+  return (
+    <button
+      type="button"
+      title={collapsed ? "Expand the sidebar" : "Collapse to icons"}
+      aria-label={collapsed ? "Expand the sidebar" : "Collapse to icons"}
+      onClick={() => {
+        const next = !collapsed;
+        try {
+          window.localStorage.setItem(RAIL_KEY, next ? "icons" : "open");
+        } catch {
+          /* a rail that will not persist still has to open. */
+        }
+        window.dispatchEvent(new CustomEvent("calman:rail", { detail: next }));
+      }}
+      className={cx(
+        "shrink-0 rounded p-0.5 text-[13px] leading-none text-rail-ink-2 hover:bg-rail-hover hover:text-white",
+        collapsed ? "hidden group-hover:block" : "",
+      )}
+    >
+      {collapsed ? "»" : "«"}
+    </button>
   );
 }

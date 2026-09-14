@@ -76,13 +76,13 @@ export function TicketTable({
       <table className="w-full min-w-[900px] border-collapse text-[12.5px]">
         <thead>
           <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-            <th className="px-2 py-[7px]">Student</th>
-            <th className="px-2 py-[7px]">Status</th>
-            <th className="px-2 py-[7px]">Issue</th>
+            <th className="px-1.5 py-[7px]">Student</th>
+            <th className="px-1.5 py-[7px]">Status</th>
+            <th className="px-1.5 py-[7px]">Issue</th>
             {TICKET_SORTABLE.map((col) => {
               if (!sortable) {
                 return (
-                  <th key={col.key} className="px-2 py-[7px]">
+                  <th key={col.key} className="px-1.5 py-[7px]">
                     {col.label}
                   </th>
                 );
@@ -90,7 +90,7 @@ export function TicketTable({
               const active = sort === col.key;
               const nextDir = active && dir === "asc" ? "desc" : "asc";
               return (
-                <th key={col.key} className="px-2 py-[7px]">
+                <th key={col.key} className="px-1.5 py-[7px]">
                   <Link
                     href={hrefFor!(col.key, nextDir)}
                     className="inline-flex items-center gap-1 hover:text-ink"
@@ -101,8 +101,8 @@ export function TicketTable({
                 </th>
               );
             })}
-            <th className="px-2 py-[7px]">Last note</th>
-            <th className="px-2 py-[7px]">Last called by</th>
+            <th className="px-1.5 py-[7px]">Last note</th>
+            <th className="px-1.5 py-[7px]">Last called by</th>
           </tr>
         </thead>
         <tbody>
@@ -119,7 +119,7 @@ export function TicketTable({
                   "bg-accent-pick shadow-[inset_3px_0_0_var(--accent)]",
               )}
             >
-              <td className="px-2 py-[5px]">
+              <td className="px-1.5 py-[5px]">
                 <span className="text-ink">{r.student_name || "No name"}</span>
                 <StudentLink
                   mobile={r.mobile}
@@ -129,7 +129,7 @@ export function TicketTable({
                   {formatMobile(r.mobile)}
                 </StudentLink>
               </td>
-              <td className="px-2 py-[5px]">
+              <td className="px-1.5 py-[5px]">
                 <Badge
                   dot
                   tone={
@@ -143,10 +143,10 @@ export function TicketTable({
                   {r.status === "closed" ? "Resolved" : ENQUIRY_STATUS_LABELS[r.status]}
                 </Badge>
               </td>
-              <td className="px-2 py-[5px] text-ink-2">
+              <td className="px-1.5 py-[5px] text-ink-2">
                 {r.issue_category ? ISSUE_CATEGORY_LABELS[r.issue_category] : "—"}
               </td>
-              <td className="flex items-center gap-1.5 px-2 py-[5px] whitespace-nowrap tabular-nums">
+              <td className="flex items-center gap-1.5 px-1.5 py-[5px] whitespace-nowrap tabular-nums">
                 {/* §33.4. The reminder is shown on every row, and once it has
                     passed the row says so — a ticket carries itself forward
                     rather than falling off a day, so "late" is the only thing
@@ -160,7 +160,7 @@ export function TicketTable({
                   </Badge>
                 ) : null}
               </td>
-              <td className="px-2 py-[5px] whitespace-nowrap text-ink-3">
+              <td className="px-1.5 py-[5px] whitespace-nowrap text-ink-3">
                 {r.last_outcome ? (
                   <>
                     {OUTCOME_SHORT[r.last_outcome]} {formatDate(r.last_call_at)}
@@ -169,13 +169,13 @@ export function TicketTable({
                   "never"
                 )}
               </td>
-              <td className="px-2 py-[5px] whitespace-nowrap text-ink-3">
+              <td className="px-1.5 py-[5px] whitespace-nowrap text-ink-3">
                 {formatDate(r.created_at)}
               </td>
-              <td className="max-w-[280px] truncate px-2 py-[5px] text-ink-3">
+              <td className="max-w-[280px] truncate px-1.5 py-[5px] text-ink-3">
                 {r.last_discussion ?? "—"}
               </td>
-              <td className="px-2 py-[5px] text-ink-3">{r.last_caller_name ?? "—"}</td>
+              <td className="px-1.5 py-[5px] text-ink-3">{r.last_caller_name ?? "—"}</td>
             </tr>
           ))}
           {rows.length === 0 ? (

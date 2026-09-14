@@ -111,10 +111,14 @@ export function Labelled({
   wide?: boolean;
 }) {
   return (
+    // §40.2. min-w-[11rem] was a floor the flex basis could not go under, so a
+    // row of filters that did not quite fit pushed a scrollbar under the whole
+    // bar rather than wrapping. The basis still asks for 11rem; it may now
+    // give some back.
     <label
       className={cx(
-        "flex min-w-[11rem] flex-col gap-[3px]",
-        wide ? "flex-[2_1_16rem]" : "flex-[1_1_11rem]",
+        "flex min-w-0 flex-col gap-[3px]",
+        wide ? "flex-[2_1_15rem]" : "flex-[1_1_10rem]",
       )}
     >
       <span className={FIELD_LABEL}>{label}</span>
@@ -290,14 +294,12 @@ export function CommonFilterFields({
       {/* Paired with Stage on purpose: "fresh call yesterday and nothing
           since" is one stage plus one date. */}
       <Labelled label="Last called between" wide>
-        <div className="flex items-center gap-1.5">
-          <Input
-            type="date"
-            name="lastCalledFrom"
+        <div className="flex min-w-0 items-center gap-1.5">
+          <Input className="min-w-0 flex-1" type="date" name="lastCalledFrom"
             defaultValue={selected.lastCalledFrom ?? ""}
           />
           <span className="text-[12px] text-ink-3">→</span>
-          <Input type="date" name="lastCalledTo" defaultValue={selected.lastCalledTo ?? ""} />
+          <Input className="min-w-0 flex-1" type="date" name="lastCalledTo" defaultValue={selected.lastCalledTo ?? ""} />
         </div>
       </Labelled>
 
@@ -306,18 +308,18 @@ export function CommonFilterFields({
       </Labelled>
 
       <Labelled label="Enquired between" wide>
-        <div className="flex items-center gap-1.5">
-          <Input type="date" name="createdFrom" defaultValue={selected.createdFrom ?? ""} />
+        <div className="flex min-w-0 items-center gap-1.5">
+          <Input className="min-w-0 flex-1" type="date" name="createdFrom" defaultValue={selected.createdFrom ?? ""} />
           <span className="text-[12px] text-ink-3">→</span>
-          <Input type="date" name="createdTo" defaultValue={selected.createdTo ?? ""} />
+          <Input className="min-w-0 flex-1" type="date" name="createdTo" defaultValue={selected.createdTo ?? ""} />
         </div>
       </Labelled>
 
       <Labelled label="Follow-up between" wide>
-        <div className="flex items-center gap-1.5">
-          <Input type="date" name="followUpFrom" defaultValue={selected.followUpFrom ?? ""} />
+        <div className="flex min-w-0 items-center gap-1.5">
+          <Input className="min-w-0 flex-1" type="date" name="followUpFrom" defaultValue={selected.followUpFrom ?? ""} />
           <span className="text-[12px] text-ink-3">→</span>
-          <Input type="date" name="followUpTo" defaultValue={selected.followUpTo ?? ""} />
+          <Input className="min-w-0 flex-1" type="date" name="followUpTo" defaultValue={selected.followUpTo ?? ""} />
         </div>
       </Labelled>
     </>

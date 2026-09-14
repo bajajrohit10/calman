@@ -15,7 +15,7 @@ export function SkeletonFilters({ fields = 10 }: { fields?: number }) {
     <div className="rounded-lg border border-line bg-surface shadow-card">
       <div className="flex flex-wrap gap-2 p-2.5">
         {Array.from({ length: fields }).map((_, i) => (
-          <div key={i} className="flex min-w-[11rem] flex-1 flex-col gap-[3px]">
+          <div key={i} className="flex min-w-0 flex-1 flex-col gap-[3px]">
             <div className="h-[10px] w-16 rounded bg-sunk" />
             <div className="h-[30px] rounded-md border border-line-2 bg-surface-2/60" />
           </div>

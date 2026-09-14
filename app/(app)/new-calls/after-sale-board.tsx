@@ -115,12 +115,12 @@ export function AfterSaleBoard({
         <table className="w-full min-w-[980px] border-collapse text-[12.5px]">
           <thead>
             <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-              <th className="px-2 py-[7px]">Student</th>
-              <th className="px-2 py-[7px]">Status</th>
-              <th className="px-2 py-[7px]">Issue</th>
-              <th className="px-2 py-[7px]">Reminder</th>
-              <th className="px-2 py-[7px]">Last remark</th>
-              <th className="px-2 py-[7px] text-right">Call</th>
+              <th className="px-1.5 py-[7px]">Student</th>
+              <th className="px-1.5 py-[7px]">Status</th>
+              <th className="px-1.5 py-[7px]">Issue</th>
+              <th className="px-1.5 py-[7px]">Reminder</th>
+              <th className="px-1.5 py-[7px]">Last remark</th>
+              <th className="px-1.5 py-[7px] text-right">Call</th>
             </tr>
           </thead>
           <tbody>
@@ -132,7 +132,7 @@ export function AfterSaleBoard({
                   r.status === "escalated" && "bg-accent-soft/40",
                 )}
               >
-                <td className="px-2 py-[5px]">
+                <td className="px-1.5 py-[5px]">
                   <span className="text-ink">{r.student_name || "No name"}</span>
                   <StudentLink
                     mobile={r.mobile}
@@ -141,7 +141,7 @@ export function AfterSaleBoard({
                     {formatMobile(r.mobile)}
                   </StudentLink>
                 </td>
-                <td className="px-2 py-[5px]">
+                <td className="px-1.5 py-[5px]">
                   <span className="flex flex-wrap items-center gap-1.5">
                     <Badge dot tone={r.status === "escalated" ? "accent" : "info"}>
                       {ENQUIRY_STATUS_LABELS[r.status]}
@@ -154,10 +154,10 @@ export function AfterSaleBoard({
                     ) : null}
                   </span>
                 </td>
-                <td className="px-2 py-[5px] text-ink-2">
+                <td className="px-1.5 py-[5px] text-ink-2">
                   {r.issue_category ? ISSUE_CATEGORY_LABELS[r.issue_category] : "—"}
                 </td>
-                <td className="px-2 py-[5px] whitespace-nowrap tabular-nums">
+                <td className="px-1.5 py-[5px] whitespace-nowrap tabular-nums">
                   <span className={r.is_overdue ? "text-danger" : "text-ink-2"}>
                     {r.reminder_date ? formatDate(r.reminder_date) : "—"}
                   </span>
@@ -167,7 +167,7 @@ export function AfterSaleBoard({
                     </span>
                   ) : null}
                 </td>
-                <td className="max-w-[340px] px-2 py-[5px] text-ink-3">
+                <td className="max-w-[340px] px-1.5 py-[5px] text-ink-3">
                   {r.last_discussion ? (
                     <span className="block truncate" title={r.last_discussion}>
                       {r.last_discussion}
@@ -182,7 +182,7 @@ export function AfterSaleBoard({
                     </span>
                   ) : null}
                 </td>
-                <td className="px-2 py-[5px] text-right">
+                <td className="px-1.5 py-[5px] text-right">
                   <Button
                     size="sm"
                     variant="primary"

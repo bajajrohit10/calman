@@ -384,15 +384,15 @@ export function QuickAddGrid({
       {result && !result.error ? <Summary result={result} /> : null}
 
       <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
-        <table className="w-full min-w-[1120px] border-collapse text-[12.5px]">
+        <table className="w-full min-w-[1040px] border-collapse text-[12.5px]">
           <thead>
             <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-              <th className="w-[40px] px-2 py-[7px] text-right">#</th>
-              <th className="w-[150px] px-2 py-[7px]">Mobile</th>
-              <th className="w-[200px] px-2 py-[7px]">Name</th>
-              <th className="w-[165px] px-2 py-[7px]">Source</th>
-              <th className="px-2 py-[7px]">Status</th>
-              <th className="w-[120px] px-2 py-[7px]">Action</th>
+              <th className="w-[40px] px-1.5 py-[7px] text-right">#</th>
+              <th className="w-[150px] px-1.5 py-[7px]">Mobile</th>
+              <th className="w-[200px] px-1.5 py-[7px]">Name</th>
+              <th className="w-[165px] px-1.5 py-[7px]">Source</th>
+              <th className="px-1.5 py-[7px]">Status</th>
+              <th className="w-[120px] px-1.5 py-[7px]">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -413,10 +413,10 @@ export function QuickAddGrid({
                   )}
                   onFocus={() => reached(r.key)}
                 >
-                  <td className="px-2 py-[5px] text-right text-[11px] tabular-nums text-ink-3">
+                  <td className="px-1.5 py-[5px] text-right text-[11px] tabular-nums text-ink-3">
                     {i + 1}
                   </td>
-                  <td className="px-2 py-[5px]">
+                  <td className="px-1.5 py-[5px]">
                     <Input
                       value={r.mobile}
                       inputMode="numeric"
@@ -432,7 +432,7 @@ export function QuickAddGrid({
                       onKeyDown={(e) => onEnter(e, r)}
                     />
                   </td>
-                  <td className="px-2 py-[5px]">
+                  <td className="px-1.5 py-[5px]">
                     <Input
                       value={r.name}
                       aria-label={`Name, row ${i + 1}`}
@@ -441,7 +441,7 @@ export function QuickAddGrid({
                       onKeyDown={(e) => onEnter(e, r)}
                     />
                   </td>
-                  <td className="px-2 py-[5px]">
+                  <td className="px-1.5 py-[5px]">
                     <Select
                       value={r.sourceId}
                       aria-label={`Source, row ${i + 1}`}
@@ -455,7 +455,7 @@ export function QuickAddGrid({
                       ))}
                     </Select>
                   </td>
-                  <td className="px-2 py-[5px]">
+                  <td className="px-1.5 py-[5px]">
                     <StatusCell
                       row={r}
                       bad={bad}
@@ -465,7 +465,7 @@ export function QuickAddGrid({
                       onPipeline={(p) => patch(r.key, { pipeline: p })}
                     />
                   </td>
-                  <td className="px-2 py-[5px]">
+                  <td className="px-1.5 py-[5px]">
                     {ready && lone?.key === r.key ? (
                       <Button
                         size="sm"

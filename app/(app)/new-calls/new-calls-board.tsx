@@ -329,7 +329,7 @@ export function NewCallsBoard({
         <table className="w-full min-w-[900px] border-collapse text-[12.5px]">
           <thead>
             <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-              <th className="w-8 px-2 py-[7px]">
+              <th className="w-8 px-1.5 py-[7px]">
                 <input
                   type="checkbox"
                   aria-label="Select all on this page"
@@ -341,14 +341,14 @@ export function NewCallsBoard({
                   }
                 />
               </th>
-              <th className="px-2 py-[7px]">Student</th>
-              <th className="px-2 py-[7px]">Imp</th>
-              <th className="px-2 py-[7px]">Source</th>
-              <th className="px-2 py-[7px]">Term</th>
-              <th className="px-2 py-[7px]">Teachers</th>
-              <th className="px-2 py-[7px]">Product</th>
-              <th className="px-2 py-[7px]">Arrived</th>
-              <th className="px-2 py-[7px] text-right">Take</th>
+              <th className="px-1.5 py-[7px]">Student</th>
+              <th className="px-1.5 py-[7px]">Imp</th>
+              <th className="px-1.5 py-[7px]">Source</th>
+              <th className="px-1.5 py-[7px]">Term</th>
+              <th className="px-1.5 py-[7px]">Teachers</th>
+              <th className="px-1.5 py-[7px]">Product</th>
+              <th className="px-1.5 py-[7px]">Arrived</th>
+              <th className="px-1.5 py-[7px] text-right">Take</th>
             </tr>
           </thead>
           <tbody>
@@ -361,7 +361,7 @@ export function NewCallsBoard({
                     "bg-accent-pick shadow-[inset_3px_0_0_var(--accent)]",
                 )}
               >
-                <td className="px-2 py-[5px]">
+                <td className="px-1.5 py-[5px]">
                   <input
                     type="checkbox"
                     aria-label={`Select enquiry ${r.enquiry_id}`}
@@ -369,7 +369,7 @@ export function NewCallsBoard({
                     onChange={() => toggle(r.enquiry_id)}
                   />
                 </td>
-                <td className="px-2 py-[5px]">
+                <td className="px-1.5 py-[5px]">
                   <span className="text-ink">{r.student_name || "No name"}</span>
                   <StudentLink
                     mobile={r.mobile}
@@ -378,20 +378,20 @@ export function NewCallsBoard({
                     {formatMobile(r.mobile)}
                   </StudentLink>
                 </td>
-                <td className="px-2 py-[5px]">
+                <td className="px-1.5 py-[5px]">
                   {r.importance ? (
                     <ImportanceMark grade={r.importance} />
                   ) : (
                     <span className="text-ink-3">—</span>
                   )}
                 </td>
-                <td className="px-2 py-[5px] text-ink-2">{r.source_name ?? "—"}</td>
-                <td className="px-2 py-[5px] text-ink-2">{r.term_name ?? "—"}</td>
-                <td className="px-2 py-[5px] text-ink-2">{r.teacher_names ?? "—"}</td>
-                <td className="max-w-[260px] truncate px-2 py-[5px] text-ink-3">
+                <td className="px-1.5 py-[5px] text-ink-2">{r.source_name ?? "—"}</td>
+                <td className="px-1.5 py-[5px] text-ink-2">{r.term_name ?? "—"}</td>
+                <td className="px-1.5 py-[5px] text-ink-2">{r.teacher_names ?? "—"}</td>
+                <td className="max-w-[260px] truncate px-1.5 py-[5px] text-ink-3">
                   {r.product_text ?? "—"}
                 </td>
-                <td className="px-2 py-[5px] whitespace-nowrap text-ink-3">
+                <td className="px-1.5 py-[5px] whitespace-nowrap text-ink-3">
                   {/* The list sorts by arrival, and for a re-enquired lead that
                       is the day it came back — so the column has to say so, or
                       the order reads as a bug. */}
@@ -409,7 +409,7 @@ export function NewCallsBoard({
                     formatDate(r.created_at)
                   )}
                 </td>
-                <td className="px-2 py-[5px] text-right">
+                <td className="px-1.5 py-[5px] text-right">
                   <Button
                     type="button"
                     size="sm"

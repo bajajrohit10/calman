@@ -6,7 +6,6 @@ import { StudentLink } from "@/components/student-link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-import { SmartAssignPanel } from "./smart-assign";
 
 import { ExportButton } from "@/components/export-button";
 import { MultiSelect } from "@/components/multi-select";
@@ -224,8 +223,6 @@ export function AssignDesk({
 }) {
   const router = useRouter();
   const [picked, setPicked] = useState<Map<number, AssignmentBucket>>(new Map());
-  /** §34: the Smart assign panel, which takes over the screen while open. */
-  const [smart, setSmart] = useState(false);
   const [counsellor, setCounsellor] = useState("");
   const [result, setResult] = useState<{ error: string | null; ok?: string } | null>(null);
   const [pending, start] = useTransition();
@@ -248,6 +245,14 @@ export function AssignDesk({
   // The panel toggle is a link to this same page with `more` flipped, so the
   // open/closed state rides in the URL rather than in storage the server
   // cannot see (§17.1).
+  /** §40.1. Smart Assign's URL, carrying this view home again. */
+  const smartHref = (() => {
+    const params = new URLSearchParams();
+    params.set("date", selected.date || date);
+    if (search) params.set("back", search);
+    return `/assign/smart?${params.toString()}`;
+  })();
+
   const toggleMore = (() => {
     const params = new URLSearchParams(search);
     if (showMore) params.delete("more");
@@ -328,24 +333,6 @@ export function AssignDesk({
   }));
   const allMatchingSelected = total > 0 && picked.size === total;
 
-  // §34. The panel replaces the desk rather than sitting beside it: it is the
-  // same question asked a different way, and two live copies of "which leads"
-  // on one screen would be two things to keep in step and one to misread.
-  if (smart) {
-    return (
-      <SmartAssignPanel
-        date={selected.date || date}
-        roster={roster.map((r) => ({ id: r.id, name: r.name }))}
-        masters={{
-          teachers: masters.teachers,
-          institutes: masters.institutes,
-          contents: masters.contents,
-        }}
-        onClose={() => setSmart(false)}
-      />
-    );
-  }
-
   return (
     <div className="flex flex-col gap-4">
       {/* §36.1. The state of the day, before the controls that change it. A
@@ -418,13 +405,16 @@ export function AssignDesk({
               {/* §34. Beside More filters, because it is the other way in to
                   the same set — and the one that does not need you to know
                   what you are looking for before you look. */}
-              <button
-                type="button"
-                onClick={() => setSmart(true)}
+              {/* §40.1. A link, not a boolean: it has its own URL now, so it
+                  can be linked to from the rail, bookmarked, and left with
+                  the browser's own Back button. `back` carries this view so
+                  returning lands on the list somebody left. */}
+              <Link
+                href={smartHref}
                 className="inline-flex h-[26px] items-center rounded-md border border-accent/50 bg-accent-soft px-2.5 text-[12.5px] font-medium text-accent hover:border-accent"
               >
                 Smart assign
-              </button>
+              </Link>
               {/* §36.3. The chips are the filter card now: what is set, always
                   visible, each one removable where it is read. They used to
                   appear only while the panel was shut, which meant the moment
@@ -580,10 +570,10 @@ export function AssignDesk({
         ) : null}
 
         <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
-          <table className="w-full min-w-[900px] border-collapse text-[12.5px]">
+          <table className="w-full min-w-[820px] border-collapse text-[12.5px]">
             <thead>
               <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-                <th className="w-8 px-2 py-[6px]">
+                <th className="w-8 px-1.5 py-[6px]">
                   <input
                     type="checkbox"
                     aria-label="Select all on this page"
@@ -597,13 +587,13 @@ export function AssignDesk({
                     }
                   />
                 </th>
-                <th className="px-2 py-[6px]">Student</th>
+                <th className="px-1.5 py-[6px]">Student</th>
                 <th className="w-[34px] px-1 py-[6px]">Imp</th>
-                <th className="px-2 py-[6px]">Interests</th>
-                <th className="w-[80px] px-2 py-[6px]">Term</th>
-                <th className="w-[95px] px-2 py-[6px]">Follow-up</th>
-                <th className="w-[60px] px-2 py-[6px]">Slots</th>
-                <th className="px-2 py-[6px]">Assigned to</th>
+                <th className="px-1.5 py-[6px]">Interests</th>
+                <th className="w-[80px] px-1.5 py-[6px]">Term</th>
+                <th className="w-[95px] px-1.5 py-[6px]">Follow-up</th>
+                <th className="w-[60px] px-1.5 py-[6px]">Slots</th>
+                <th className="px-1.5 py-[6px]">Assigned to</th>
               </tr>
             </thead>
             <tbody>
@@ -629,7 +619,7 @@ export function AssignDesk({
                       "bg-accent-pick shadow-[inset_3px_0_0_var(--accent)]",
                   )}
                 >
-                  <td className="px-2 py-[5px]">
+                  <td className="px-1.5 py-[5px]">
                     <input
                       type="checkbox"
                       aria-label={`Select enquiry ${r.enquiry_id}`}
@@ -637,7 +627,7 @@ export function AssignDesk({
                       onChange={() => toggle(r)}
                     />
                   </td>
-                  <td className="px-2 py-[4px] whitespace-nowrap">
+                  <td className="px-1.5 py-[4px] whitespace-nowrap">
                     {/* The bucket in words, for anyone the colour does not
                         reach. Read out with the row, invisible on screen. */}
                     <span className="sr-only">{BUCKET_LABELS[r.bucket]}. </span>
@@ -681,7 +671,7 @@ export function AssignDesk({
                   <td className="px-1 py-[4px]">
                     {r.importance ? <ImportanceMark grade={r.importance} /> : "—"}
                   </td>
-                  <td className="px-2 py-[4px]">
+                  <td className="px-1.5 py-[4px]">
                     {/* One chip per teacher rather than a comma list: at this
                         density the commas ran together and a lead with three
                         teachers read as one long name. */}
@@ -700,7 +690,7 @@ export function AssignDesk({
                       <span className="text-[11.5px] italic text-ink-3">no interests</span>
                     )}
                   </td>
-                  <td className="px-2 py-[4px] whitespace-nowrap text-ink-2">
+                  <td className="px-1.5 py-[4px] whitespace-nowrap text-ink-2">
                     {r.term_name ?? "—"}
                   </td>
                   <td
@@ -711,10 +701,10 @@ export function AssignDesk({
                   >
                     {r.next_follow_up_date ? formatDate(r.next_follow_up_date) : "—"}
                   </td>
-                  <td className="px-2 py-[4px] tabular-nums text-ink-2">
+                  <td className="px-1.5 py-[4px] tabular-nums text-ink-2">
                     {r.follow_up_slots_used}/3
                   </td>
-                  <td className="px-2 py-[4px] whitespace-nowrap text-ink-2">
+                  <td className="px-1.5 py-[4px] whitespace-nowrap text-ink-2">
                     {r.assigned_to_name ?? "—"}
                   </td>
                 </tr>
@@ -751,7 +741,10 @@ export function AssignDesk({
       </div>
 
       {/* ------------------------------- right ------------------------------ */}
-      <aside className="flex w-full shrink-0 flex-col gap-3 xl:w-[320px]">
+      {/* §40.2. 320px of rail out of the 1118 a 1366 laptop has left the list
+          column too narrow for its own table. Narrower here, and back to full
+          width on a monitor that can spare it. */}
+      <aside className="flex w-full shrink-0 flex-col gap-3 xl:w-[272px] 2xl:w-[320px]">
         <section className="rounded-lg border border-line bg-surface shadow-card">
           <header className="border-b border-line px-3 py-2">
             <h2 className="text-[13px] font-semibold text-ink">

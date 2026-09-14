@@ -127,7 +127,7 @@ export function OffersView({
       ) : null}
 
       <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
-        <table className="w-full min-w-[1060px] border-collapse text-[12.5px]">
+        <table className="w-full min-w-[1000px] border-collapse text-[12.5px]">
           <thead>
             <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
               <th className="px-2 py-[7px]">Offer</th>

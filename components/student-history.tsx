@@ -192,24 +192,24 @@ export function StudentHistoryView({
                   enquiry number and the stage are reference, so they sit at
                   the end where reference belongs. */}
               <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-                <th className="w-[130px] px-2 py-[7px]">Date/time</th>
-                <th className="w-[110px] px-2 py-[7px]">Counsellor</th>
-                <th className="px-2 py-[7px]">Remarks</th>
-                <th className="w-[110px] px-2 py-[7px]">Outcome</th>
-                <th className="w-[95px] px-2 py-[7px]">Follow-up</th>
-                <th className="w-[70px] px-2 py-[7px]">Enquiry #</th>
-                <th className="w-[110px] px-2 py-[7px]">Stage</th>
-                <th className="w-[90px] px-2 py-[7px]">Edits</th>
+                <th className="w-[130px] px-1.5 py-[7px]">Date/time</th>
+                <th className="w-[110px] px-1.5 py-[7px]">Counsellor</th>
+                <th className="px-1.5 py-[7px]">Remarks</th>
+                <th className="w-[110px] px-1.5 py-[7px]">Outcome</th>
+                <th className="w-[95px] px-1.5 py-[7px]">Follow-up</th>
+                <th className="w-[70px] px-1.5 py-[7px]">Enquiry #</th>
+                <th className="w-[110px] px-1.5 py-[7px]">Stage</th>
+                <th className="w-[90px] px-1.5 py-[7px]">Edits</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.key} className="border-b border-line last:border-b-0">
-                  <td className="px-2 py-[5px] whitespace-nowrap text-ink-2">
+                  <td className="px-1.5 py-[5px] whitespace-nowrap text-ink-2">
                     {formatDateTime(r.at)}
                   </td>
-                  <td className="px-2 py-[5px] text-ink-2">{r.counsellor}</td>
-                  <td className="px-2 py-[5px] text-ink-2">
+                  <td className="px-1.5 py-[5px] text-ink-2">{r.counsellor}</td>
+                  <td className="px-1.5 py-[5px] text-ink-2">
                     {r.remarks || "—"}
                     {r.call ? (
                       <EditCallRow
@@ -222,13 +222,13 @@ export function StudentHistoryView({
                       />
                     ) : null}
                   </td>
-                  <td className="px-2 py-[5px] text-ink">{r.outcome}</td>
-                  <td className="px-2 py-[5px] whitespace-nowrap text-ink-3">
+                  <td className="px-1.5 py-[5px] text-ink">{r.outcome}</td>
+                  <td className="px-1.5 py-[5px] whitespace-nowrap text-ink-3">
                     {r.followUp}
                   </td>
-                  <td className="px-2 py-[5px] tabular-nums text-ink-3">#{r.enquiryId}</td>
-                  <td className="px-2 py-[5px] text-ink-3">{r.stage || "—"}</td>
-                  <td className="px-2 py-[5px]">
+                  <td className="px-1.5 py-[5px] tabular-nums text-ink-3">#{r.enquiryId}</td>
+                  <td className="px-1.5 py-[5px] text-ink-3">{r.stage || "—"}</td>
+                  <td className="px-1.5 py-[5px]">
                     {r.call ? (
                       <CallEdits
                         callId={r.call.id}
@@ -264,25 +264,25 @@ export function StudentHistoryView({
             <table className="w-full min-w-[720px] border-collapse text-[12.5px]">
               <thead>
                 <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-                  <th className="w-[130px] px-2 py-[7px]">Date/time</th>
-                  <th className="w-[110px] px-2 py-[7px]">Event</th>
-                  <th className="px-2 py-[7px]">Details</th>
-                  <th className="w-[120px] px-2 py-[7px]">By</th>
-                  <th className="w-[70px] px-2 py-[7px]">Enquiry #</th>
+                  <th className="w-[130px] px-1.5 py-[7px]">Date/time</th>
+                  <th className="w-[110px] px-1.5 py-[7px]">Event</th>
+                  <th className="px-1.5 py-[7px]">Details</th>
+                  <th className="w-[120px] px-1.5 py-[7px]">By</th>
+                  <th className="w-[70px] px-1.5 py-[7px]">Enquiry #</th>
                 </tr>
               </thead>
               <tbody>
                 {events.map((e) => (
                   <tr key={e.key} className="border-b border-line last:border-b-0">
-                    <td className="px-2 py-[5px] whitespace-nowrap text-ink-2">
+                    <td className="px-1.5 py-[5px] whitespace-nowrap text-ink-2">
                       {formatDateTime(e.at)}
                     </td>
-                    <td className="px-2 py-[5px] whitespace-nowrap text-ink">
+                    <td className="px-1.5 py-[5px] whitespace-nowrap text-ink">
                       {e.event}
                     </td>
-                    <td className="px-2 py-[5px] text-ink-2">{e.details}</td>
-                    <td className="px-2 py-[5px] text-ink-3">{e.by}</td>
-                    <td className="px-2 py-[5px] tabular-nums text-ink-3">
+                    <td className="px-1.5 py-[5px] text-ink-2">{e.details}</td>
+                    <td className="px-1.5 py-[5px] text-ink-3">{e.by}</td>
+                    <td className="px-1.5 py-[5px] tabular-nums text-ink-3">
                       #{e.enquiryId}
                     </td>
                   </tr>

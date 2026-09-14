@@ -64,31 +64,31 @@ function ReportTable({
     <section>
       <h2 className="mb-1.5 text-[13px] font-semibold text-ink">{caption}</h2>
       <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
-        <table className="w-full min-w-[1180px] border-collapse text-[12.5px]">
+        <table className="w-full min-w-[980px] border-collapse text-[11.5px]">
           <thead>
             {/* The group band. The two totals sit at the end of their own
                 group, so which columns add up to which total is visible
                 rather than something you have to be told. */}
-            <tr className="border-b border-line bg-surface-2 text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-              <th className="px-1.5 py-[6px]" />
+            <tr className="border-b border-line bg-surface-2 text-[9.5px] font-semibold uppercase text-ink-3">
+              <th className="px-1 py-[5px]" />
               {CALL_REPORT_GROUPS.map((g) => (
                 <th
                   key={g.id}
                   colSpan={g.columns.length}
-                  className="border-l border-line px-1.5 py-[6px] text-center"
+                  className="border-l border-line px-1 py-[5px] text-center"
                 >
                   {g.label}
                 </th>
               ))}
             </tr>
-            <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-              <th className="px-2 py-[7px] whitespace-nowrap">{firstHeader}</th>
+            <tr className="border-b border-line-2 bg-surface-2 text-left text-[9.5px] font-semibold uppercase text-ink-3">
+              <th className="px-1 py-[6px] whitespace-nowrap">{firstHeader}</th>
               {CALL_REPORT_GROUPS.map((g) =>
                 g.columns.map((c, i) => (
                   <th
                     key={c.key}
                     className={cx(
-                      "px-1.5 py-[7px] text-right",
+                      "px-1 py-[6px] text-right",
                       i === 0 && "border-l border-line",
                       c.isTotal && "text-ink-2",
                     )}
@@ -105,7 +105,7 @@ function ReportTable({
                 key={row.grain_key ?? labelOf(row)}
                 className="border-b border-line last:border-b-0"
               >
-                <td className="px-2 py-[5px] whitespace-nowrap text-ink">
+                <td className="px-1 py-[4px] whitespace-nowrap text-ink">
                   {labelOf(row)}
                 </td>
                 {CALL_REPORT_GROUPS.map((g) =>
@@ -113,7 +113,7 @@ function ReportTable({
                     <td
                       key={c.key}
                       className={cx(
-                        "px-1.5 py-[5px] text-right tabular-nums",
+                        "px-1 py-[4px] text-right tabular-nums",
                         i === 0 && "border-l border-line",
                         // One colour class per cell: two of them have equal
                         // specificity and Tailwind's own ordering would decide
@@ -151,13 +151,13 @@ function ReportTable({
           {total ? (
             <tfoot>
               <tr className="border-t-2 border-line bg-sunk/30">
-                <td className="px-2 py-[6px] font-semibold text-ink">Total</td>
+                <td className="px-1 py-[5px] font-semibold text-ink">Total</td>
                 {CALL_REPORT_GROUPS.map((g) =>
                   g.columns.map((c, i) => (
                     <td
                       key={c.key}
                       className={cx(
-                        "px-1.5 py-[6px] text-right font-semibold tabular-nums",
+                        "px-1 py-[5px] text-right font-semibold tabular-nums",
                         i === 0 && "border-l border-line",
                         c.isTotal && total.mismatch ? "text-danger" : "text-ink",
                       )}

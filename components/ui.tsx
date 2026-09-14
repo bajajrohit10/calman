@@ -242,11 +242,14 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <header className="flex items-start justify-between gap-4 border-b border-line pb-3">
+    // §40.2. One step down on both lines and a shorter rule under them. The
+    // title is still the biggest thing on the page; it no longer costs forty
+    // pixels of a list to say so.
+    <header className="flex items-start justify-between gap-4 border-b border-line pb-2">
       <div className="min-w-0">
-        <h1 className="text-[17px] font-semibold tracking-[-0.015em] text-ink">{title}</h1>
+        <h1 className="text-[15.5px] font-semibold tracking-[-0.015em] text-ink">{title}</h1>
         {description ? (
-          <p className="mt-0.5 max-w-2xl text-[12.5px] text-ink-2">{description}</p>
+          <p className="mt-0.5 max-w-2xl text-[12px] text-ink-2">{description}</p>
         ) : null}
       </div>
       {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}

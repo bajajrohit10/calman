@@ -144,8 +144,11 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
             roleLabel={ROLE_LABELS[profile.role]}
             signOut={signOut}
           />
-          <main className="min-w-0 flex-1 px-5 pt-4 pb-7">
-            <div className="mx-auto flex max-w-[1400px] flex-col gap-3">
+          {/* §40.2. The frame every screen pays for, on a 768px-tall laptop:
+              this used to spend 16 + 28 vertical and 40 horizontal before a
+              single row. Trimmed, not removed — the page still needs an edge. */}
+          <main className="min-w-0 flex-1 px-4 pt-3 pb-5">
+            <div className="mx-auto flex max-w-[1400px] flex-col gap-2.5">
               {/* §29.1. Above the page, on every route: the sidebar badge is a
                 number in a rail, and after an hour nobody looks at the rail. */}
               <div className="flex justify-end empty:hidden">

@@ -101,7 +101,7 @@ export function TeamDayGrid({
             <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
               <th className="px-2.5 py-[7px]">Counsellor</th>
               {MY_DAY_TABS.map((t) => (
-                <th key={t.key} className="border-l border-line px-2 py-[7px] text-right">
+                <th key={t.key} className="border-l border-line px-1.5 py-[7px] text-right">
                   {/* Named for what it is here. Nothing assigns a ticket, so
                       this column is the same queue on every row and sits
                       outside Total; saying so in the heading is cheaper than
@@ -109,7 +109,7 @@ export function TeamDayGrid({
                   {t.key === "tickets" ? "Tickets (shared)" : t.label}
                 </th>
               ))}
-              <th className="border-l border-line px-2 py-[7px] text-right">Total</th>
+              <th className="border-l border-line px-1.5 py-[7px] text-right">Total</th>
             </tr>
           </thead>
           <tbody>
@@ -124,7 +124,7 @@ export function TeamDayGrid({
                   return (
                     <td
                       key={t.key}
-                      className="border-l border-line px-2 py-[6px] text-right"
+                      className="border-l border-line px-1.5 py-[6px] text-right"
                     >
                       <span className="inline-flex items-center justify-end gap-1.5">
                         {movable ? (
@@ -162,7 +162,7 @@ export function TeamDayGrid({
                     </td>
                   );
                 })}
-                <td className="border-l border-line px-2 py-[6px] text-right font-semibold tabular-nums text-ink">
+                <td className="border-l border-line px-1.5 py-[6px] text-right font-semibold tabular-nums text-ink">
                   {r.total.pending}
                   <span className="font-normal text-ink-3"> / {r.total.total}</span>
                 </td>

@@ -150,14 +150,14 @@ function PanelDrawer({
     >
       <summary
         className={cx(
-          "cursor-pointer list-none px-4 py-2 text-[12px]",
+          "cursor-pointer list-none px-3 py-1.5 text-[12px]",
           warn ? "font-medium text-warn" : "text-ink-2 hover:text-ink",
         )}
       >
         <span className="inline-block w-3 text-ink-3 group-open:rotate-90">›</span>
         {summary}
       </summary>
-      <div className="px-4 pb-3">{children}</div>
+      <div className="px-3 pb-2.5">{children}</div>
     </details>
   );
 }
@@ -193,7 +193,7 @@ function PanelTimeline({
 
   if (!calls.length) {
     return (
-      <div className="border-t border-line px-4 py-2.5 text-[12px] italic text-ink-3">
+      <div className="border-t border-line px-3 py-2 text-[12px] italic text-ink-3">
         No calls on this number yet.
       </div>
     );
@@ -202,7 +202,7 @@ function PanelTimeline({
   const shown = showAll ? calls : calls.slice(0, TIMELINE_PREVIEW);
 
   return (
-    <section className="border-t border-line px-4 py-2.5">
+    <section className="border-t border-line px-3 py-2">
       <h4 className="mb-1 flex items-baseline gap-2 text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
         Previous calls
         <span className="tabular-nums text-ink-2">{calls.length}</span>
@@ -755,7 +755,7 @@ export function CallLogPanel({
           take in who this is; the form below is for afterwards. Skipped on a
           first call, where every one of those facts is blank and the form
           below is where they get filled in (§26.2). */}
-      <div className={cx("flex-col gap-2 border-b border-line px-4 py-2.5", isFirstCall ? "hidden" : "flex")}>
+      <div className={cx("flex-col gap-1.5 border-b border-line px-3 py-2", isFirstCall ? "hidden" : "flex")}>
         <EnquiryGlanceLine
           glance={{
             id: enquiry.id,
@@ -844,7 +844,7 @@ export function CallLogPanel({
       ) : null}
 
       {isFirstCall ? null : (
-      <div className="flex flex-col gap-3 px-4 py-3">
+      <div className="flex flex-col gap-2.5 px-3 py-2.5">
         <label className="flex flex-col gap-1">
           <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
             Discussion note
@@ -1443,7 +1443,11 @@ function FirstCallFields({
     : "applies to every line";
 
   return (
-    <div className="grid gap-x-3 gap-y-2.5 px-4 py-3 md:grid-cols-2 xl:grid-cols-3">
+    // §40.2. Four across from 1280 rather than three. A Select of course names
+    // is perfectly legible at 260px, and the fourth column takes a whole row
+    // off the form — which is the difference between the Save button being on
+    // a 768px screen and being under it.
+    <div className="grid gap-x-2.5 gap-y-2 px-3 py-2.5 md:grid-cols-2 xl:grid-cols-4">
       <FirstCallField label="Name">
         <Input
           autoFocus

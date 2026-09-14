@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import { Button, ErrorNote, Input, Select, cx } from "@/components/ui";
@@ -68,12 +69,13 @@ export function SmartAssignPanel({
   date,
   roster,
   masters,
-  onClose,
+  backHref,
 }: {
   date: string;
   roster: Master[];
   masters: { teachers: Master[]; institutes: Master[]; contents: Master[] };
-  onClose: () => void;
+  /** §40.1: the desk, with the view somebody left still on it. */
+  backHref: string;
 }) {
   const [campaign, setCampaign] = useState(false);
   /** Per column: the ids explicitly cleared. Empty means "all of them". */
@@ -311,9 +313,12 @@ export function SmartAssignPanel({
           <span className="text-[11px] text-ink-3">(ignore the due date)</span>
         </label>
         {pending ? <span className="text-[11.5px] text-ink-3">counting…</span> : null}
-        <Button size="sm" variant="ghost" className="ml-auto" onClick={onClose}>
-          Close
-        </Button>
+        <Link
+          href={backHref}
+          className="ml-auto text-[12.5px] text-ink-2 underline-offset-2 hover:text-ink hover:underline"
+        >
+          ← Back to the desk
+        </Link>
       </div>
 
       {error ? <ErrorNote>{error}</ErrorNote> : null}
@@ -386,7 +391,11 @@ export function SmartAssignPanel({
                   </div>
                 ) : null}
 
-                <ul className="max-h-[420px] min-h-0 flex-1 overflow-y-auto py-1">
+                {/* §40.2. Bound to the window, not to a number that happened
+                    to fit one: on a 720px-tall laptop a fixed 420 plus the
+                    chrome above it is what would push the page into a scroll.
+                    The column scrolls; the page never does. */}
+                <ul className="max-h-[min(420px,calc(100dvh-320px))] min-h-0 flex-1 overflow-y-auto py-1">
                   {col.visible.map((o) => {
                     const on = !gone.has(o.id);
                     const zero = o.count === 0;
@@ -441,7 +450,7 @@ export function SmartAssignPanel({
         </div>
 
         {/* ---- the rail ---- */}
-        <aside className="flex w-[290px] shrink-0 flex-col gap-2.5 rounded-lg border border-line bg-surface px-3 py-3 shadow-card">
+        <aside className="flex w-[260px] shrink-0 flex-col gap-2.5 rounded-lg border border-line bg-surface px-3 py-3 shadow-card 2xl:w-[290px]">
           <div>
             <p className="text-[26px] font-semibold leading-none tabular-nums text-ink">
               {total ?? "—"}
@@ -451,7 +460,7 @@ export function SmartAssignPanel({
             </p>
           </div>
 
-          <div className="max-h-[210px] overflow-y-auto rounded-md border border-line">
+          <div className="max-h-[min(210px,calc(100dvh-560px))] min-h-[88px] overflow-y-auto rounded-md border border-line">
             {preview.map((r) => (
               <div
                 key={r.enquiryId}
