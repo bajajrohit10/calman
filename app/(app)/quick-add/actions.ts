@@ -229,6 +229,8 @@ export type BulkRowInput = {
    * so there is nothing here to send.
    */
   decision: "dismiss" | "add_anyway" | null;
+  /** §38.3: which pipeline this arrival was sent to, when asked. */
+  pipeline?: "ticket" | "purchase" | null;
 };
 
 export type BulkRowResult = {
@@ -330,17 +332,34 @@ export async function createManyEnquiries(
   const reEnquiring: (Job & { enquiryId: number; returns: boolean; which: DuplicateCase })[] = [];
   /** §33.5: rows that join an open ticket rather than making anything. */
   const attaching: (Job & { ticketId: number })[] = [];
+  /** §38.3: rows asked for a ticket on a number that has none. */
+  const openingTicket: Job[] = [];
 
   for (const job of jobs) {
     const status = known.get(job.mobile);
 
-    // §35.1. Nothing here asks what kind of enquiry this is: a row is a
-    // purchase lead, and what it turns out to be is decided when somebody
-    // speaks to them. The one exception is §33.5's case 6 — a number whose
-    // only live conversation is an open ticket. That arrival belongs to the
-    // ticket, so it joins it and nothing new is made.
-    if (status && ticketOnly(status)) {
-      attaching.push({ ...job, ticketId: status.ticketEnquiryId! });
+    // §35.1 and §38.3. A row is a purchase lead unless the number's only live
+    // conversation is a ticket, in which case the arrival joins that ticket.
+    // Either way the counsellor can say otherwise: "New purchase enquiry" on a
+    // ticket, "Log ticket instead" on a lead. A number can hold one of each.
+    const wants = job.row.pipeline ?? null;
+    const rule = status && ticketOnly(status) ? "ticket" : "purchase";
+    const side = wants ?? rule;
+
+    if (status?.ticketEnquiryId && side === "ticket") {
+      attaching.push({ ...job, ticketId: status.ticketEnquiryId });
+      continue;
+    }
+    if (side === "ticket" && !status?.ticketEnquiryId) {
+      // Asked for a ticket on a number that has none: make one beside the
+      // lead rather than touching the lead.
+      openingTicket.push(job);
+      continue;
+    }
+    if (wants === "purchase" && status && ticketOnly(status)) {
+      // Asked for a lead on a number whose only record is a ticket: a plain
+      // new purchase enquiry, and the ticket is not touched.
+      creating.push(job);
       continue;
     }
 
@@ -410,6 +429,36 @@ export async function createManyEnquiries(
           action: "updated",
           enquiryId: job.ticketId,
           detail: (data as string | null) ?? undefined,
+        };
+  }
+
+  // ---- 3b. rows that want a ticket where none exists -----------------------
+  for (const job of openingTicket) {
+    const res = await createEnquiry({
+      mobile: job.mobile,
+      name: job.row.name,
+      type: "after_sale",
+      sourceId: job.row.sourceId,
+      productText: null,
+      termId: null,
+      importance: null,
+      leadVerification: null,
+      supersedeEnquiryId: null,
+    });
+    out[job.index] = res.error || !res.enquiry
+      ? {
+          mobile: job.mobile,
+          case: null,
+          action: "failed",
+          enquiryId: null,
+          reason: res.error ?? "could not be saved",
+        }
+      : {
+          mobile: job.mobile,
+          case: null,
+          action: "created",
+          enquiryId: res.enquiry.id,
+          detail: "Opened as a ticket beside the existing enquiry.",
         };
   }
 

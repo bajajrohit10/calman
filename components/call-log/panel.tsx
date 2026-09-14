@@ -27,7 +27,6 @@ import {
   type Importance,
   type IssueCategory,
   type LeadVerification,
-  ENQUIRY_STATUS_LABELS,
 } from "@/lib/enquiry-labels";
 import { EnquiryDetailsEditor } from "@/components/enquiry-details";
 import { EnquiryGlanceLine, InterestChips } from "@/components/enquiry-glance";
@@ -315,7 +314,10 @@ export function CallLogPanel({
    * one switch rather than each being remembered separately.
    */
   const [toAfterSale, setToAfterSale] = useState(false);
-  const asAfterSale = enquiry.type === "after_sale" || toAfterSale;
+  /** §38.2: the same switch from the after-sale side. */
+  const [toPurchase, setToPurchase] = useState(false);
+  const asAfterSale =
+    (enquiry.type === "after_sale" || toAfterSale) && !toPurchase;
   const [orderId, setOrderId] = useState("");
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
   // Seeded with one blank row so the table always has something to type into.
@@ -525,6 +527,7 @@ export function CallLogPanel({
         nextFollowUpDate: outcomeTakesDate(outcome) ? followUpDate || null : null,
         issueCategory: asAfterSale ? issueCategory : null,
         convertToAfterSale: toAfterSale,
+        convertToPurchase: toPurchase,
         ...(isFirstCall
           ? { studentName, termId: termId || null, sourceId: sourceId || null }
           : {}),
@@ -696,10 +699,11 @@ export function CallLogPanel({
         </label>
 
         <div className="flex flex-wrap items-end gap-3">
-          {/* §25. Above the outcome because it changes what the outcomes
-              are: a counsellor who rang about a sale and found a problem
-              flips this first and the rest of the form follows. Purchase
-              enquiries only — the reverse is not a thing anybody asked for. */}
+          {/* §25, rewritten by §38. Above the outcome because it changes what
+              the outcomes are: a counsellor who rang about a sale and found a
+              problem flips this first and the rest of the form follows. It no
+              longer converts anything — the two conversations coexist — so the
+              sentence is now the same whatever state this enquiry is in. */}
           {isPurchase ? (
             <label className="flex w-full cursor-pointer items-center gap-2 rounded-md border border-line-2 bg-surface-2 px-2.5 py-1.5 text-[12.5px] text-ink-2">
               <input
@@ -717,13 +721,34 @@ export function CallLogPanel({
               </span>
               {toAfterSale ? (
                 <span className="text-[11.5px] text-ink-3">
-                  {/* Three outcomes, and the counsellor should know which one
-                      they are about to get before they save it. */}
-                  {enquiry.status !== "open"
-                    ? `This enquiry is ${ENQUIRY_STATUS_LABELS[enquiry.status].toLowerCase()} and stays exactly as it is; saving opens a separate ticket for the student.`
-                    : enquiry.slotsUsed > 0 || enquiry.timeline.some((c) => c.sameEnquiry)
-                      ? "This enquiry has calls on it, so saving closes it and opens a ticket for the student."
-                      : "Saving turns this enquiry into a ticket and drops its interests."}
+                  Saving opens a separate ticket; the purchase enquiry stays as
+                  it is.
+                </span>
+              ) : null}
+            </label>
+          ) : null}
+
+          {/* §38.2. The mirror, which never existed: somebody rings about a
+              delivery and asks what is coming for the next paper. The ticket
+              is not finished and must not be touched. */}
+          {enquiry.type === "after_sale" ? (
+            <label className="flex w-full cursor-pointer items-center gap-2 rounded-md border border-line-2 bg-surface-2 px-2.5 py-1.5 text-[12.5px] text-ink-2">
+              <input
+                type="checkbox"
+                checked={toPurchase}
+                onChange={(e) => {
+                  setToPurchase(e.target.checked);
+                  setOutcome("");
+                }}
+              />
+              <span>
+                This is a <strong className="text-ink">purchase</strong> enquiry
+              </span>
+              {toPurchase ? (
+                <span className="text-[11.5px] text-ink-3">
+                  Saving logs this on the student&apos;s purchase enquiry — the
+                  open one if they have it, a new one if not. The ticket stays
+                  as it is.
                 </span>
               ) : null}
             </label>

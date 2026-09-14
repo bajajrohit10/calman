@@ -57,6 +57,8 @@ export type LogCallInput = {
    * logged against whichever enquiry the conversion decides on.
    */
   convertToAfterSale?: boolean;
+  /** §38.2: the mirror — this ticket call is really a sales conversation. */
+  convertToPurchase?: boolean;
   /**
    * §26.2. The first-call form has the student's name and the term on it,
    * because on a first call there is nothing else to look at and hiding them
@@ -360,6 +362,26 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
     }
     type = "after_sale";
     const newId = Number(converted);
+    if (newId !== input.enquiryId) {
+      targetEnquiryId = newId;
+      convertedTo = newId;
+    }
+  }
+
+  // §38.2. The same move from the other side: the ticket stays exactly as it
+  // is and the call goes to the student's purchase enquiry — the open one if
+  // they have it, a new one if they do not.
+  if (input.convertToPurchase && type === "after_sale") {
+    const { data: opened, error: openError } = await supabase.rpc(
+      "convert_to_purchase",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { p_enquiry_id: input.enquiryId } as any,
+    );
+    if (openError) {
+      return { error: `Could not open a purchase enquiry: ${openError.message}` };
+    }
+    type = "purchase";
+    const newId = Number(opened);
     if (newId !== input.enquiryId) {
       targetEnquiryId = newId;
       convertedTo = newId;
@@ -753,9 +775,15 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
   revalidatePath("/new-calls");
 
   if (convertedTo) {
+    // §38. Nothing was converted, so nothing says it was. The message names
+    // both records, because the counsellor is now looking at a different one
+    // from the one they opened and should not have to work that out.
     return {
       error: null,
-      ok: `Call logged as an after-sale ticket. Enquiry #${input.enquiryId} had sales calls on it, so it was closed as converted and this call opened ticket #${convertedTo}.`,
+      ok:
+        input.convertToPurchase
+          ? `Call logged on purchase enquiry #${convertedTo}. Ticket #${input.enquiryId} is untouched and still open.`
+          : `Call logged on ticket #${convertedTo}. Purchase enquiry #${input.enquiryId} is untouched.`,
       convertedTo,
     };
   }

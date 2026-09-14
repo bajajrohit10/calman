@@ -24,6 +24,12 @@ type Row = {
   status: NumberStatus | null;
   /** Case 5 only: what the counsellor chose. */
   decision: "dismiss" | "add_anyway" | null;
+  /**
+   * §38.3. Which pipeline this row goes to when the number is already in one.
+   * null is the rule's own answer; the counsellor can send it to the other
+   * side instead, and a number can end up with one of each.
+   */
+  pipeline: "ticket" | "purchase" | null;
   checking: boolean;
 };
 
@@ -39,6 +45,7 @@ const blank = (): Row => ({
   sourceId: "",
   status: null,
   decision: null,
+  pipeline: null,
   checking: false,
 });
 
@@ -85,10 +92,18 @@ export function QuickAddGrid({
    * already has an open ticket, in which case the arrival belongs to that
    * conversation and the row joins it (§33.5, case 6).
    */
-  const verdictOf = (r: Row): DuplicateVerdict | null =>
-    r.status
-      ? describeNumber(r.status, ticketOnly(r.status) ? "after_sale" : "purchase")
-      : null;
+  const verdictOf = (r: Row): DuplicateVerdict | null => {
+    if (!r.status) return null;
+    const side =
+      r.pipeline === "ticket"
+        ? "after_sale"
+        : r.pipeline === "purchase"
+          ? "purchase"
+          : ticketOnly(r.status)
+            ? "after_sale"
+            : "purchase";
+    return describeNumber(r.status, side);
+  };
   const undecided = filled.filter((r) => {
     const v = verdictOf(r);
     return v?.needsDecision && !r.decision;
@@ -119,7 +134,7 @@ export function QuickAddGrid({
   /** Leaving the mobile cell: normalise, validate, and ask what we know. */
   async function settleMobile(key: string, raw: string) {
     const mobile = normaliseMobile(raw);
-    patch(key, { mobile, status: null, decision: null });
+    patch(key, { mobile, status: null, decision: null, pipeline: null });
     if (!isValidMobile(mobile)) return;
     patch(key, { checking: true });
     const res = await lookupNumbers([mobile]);
@@ -213,6 +228,7 @@ export function QuickAddGrid({
         name: r.name.trim() || null,
         sourceId: r.sourceId || null,
         decision: r.decision,
+        pipeline: r.pipeline,
       })),
     );
     setResult(res);
@@ -339,6 +355,7 @@ export function QuickAddGrid({
                       verdict={verdict}
                       onAddAnyway={() => patch(r.key, { decision: "add_anyway" })}
                       onDismiss={() => setConfirming(r)}
+                      onPipeline={(p) => patch(r.key, { pipeline: p })}
                     />
                   </td>
                   <td className="px-2 py-[5px]">
@@ -422,12 +439,14 @@ function StatusCell({
   verdict,
   onAddAnyway,
   onDismiss,
+  onPipeline,
 }: {
   row: Row;
   bad: boolean;
   verdict: DuplicateVerdict | null;
   onAddAnyway: () => void;
   onDismiss: () => void;
+  onPipeline: (p: "ticket" | "purchase") => void;
 }) {
   if (bad) {
     return <span className="text-[12px] font-medium text-danger">Not a valid number</span>;
@@ -466,6 +485,44 @@ function StatusCell({
               : verdict.action}
         </span>
       </span>
+      {/* §38.3. Which pipeline this arrival belongs to, when the number is
+          already in one. The rule's answer is the default and the other side
+          is one click away — a number can legitimately end up with an open
+          lead and an open ticket, so the screen has to let somebody say so. */}
+      {!verdict.needsDecision && (row.status?.ticketEnquiryId || row.status?.openEnquiryId) ? (
+        <span className="flex items-center gap-1.5">
+          {(
+            [
+              { id: "ticket" as const, label: "Continue ticket", when: Boolean(row.status?.ticketEnquiryId) },
+              { id: "purchase" as const, label: "New purchase enquiry", when: Boolean(row.status?.ticketEnquiryId) && !row.status?.openEnquiryId },
+              { id: "ticket2" as const, label: "Log ticket instead", when: Boolean(row.status?.openEnquiryId) && !row.status?.ticketEnquiryId },
+            ] as const
+          )
+            .filter((o) => o.when)
+            .map((o) => {
+              const value = o.id === "ticket2" ? "ticket" : o.id;
+              const on =
+                row.pipeline === value ||
+                (row.pipeline === null &&
+                  value === (ticketOnly(row.status!) ? "ticket" : "purchase"));
+              return (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => onPipeline(value)}
+                  className={cx(
+                    "rounded-full border px-2 py-[2px] text-[11px]",
+                    on
+                      ? "border-accent bg-accent-soft font-medium text-accent"
+                      : "border-line-2 bg-surface text-ink-2 hover:border-ink-3",
+                  )}
+                >
+                  {o.label}
+                </button>
+              );
+            })}
+        </span>
+      ) : null}
       {verdict.needsDecision ? (
         <span className="flex items-center gap-1.5">
           <button

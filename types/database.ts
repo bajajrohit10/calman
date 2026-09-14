@@ -1637,6 +1637,7 @@ export type Database = {
       }
       confirm_batch_export: { Args: { p_batch_id: string }; Returns: undefined }
       convert_to_after_sale: { Args: { p_enquiry_id: number }; Returns: number }
+      convert_to_purchase: { Args: { p_enquiry_id: number }; Returns: number }
       enquiries_table: {
         Args: {
           p_close_reason?: Database["public"]["Enums"]["close_reason"]
