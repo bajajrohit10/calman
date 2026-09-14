@@ -274,6 +274,38 @@ export function ticketOnly(status: NumberStatus): boolean {
   return Boolean(status.ticketEnquiryId) && !status.openEnquiryId;
 }
 
+/**
+ * Is this number live on both sides at once? (§41.1)
+ *
+ * The one case the rule refuses to answer. Everywhere else Quick Add decides
+ * what an arrival means and says so; here the two readings are equally good —
+ * the student is mid-sale and mid-complaint, and which conversation this call
+ * belongs to is a fact about the call, not about the number. Guessing would
+ * file half of them wrong and say nothing about having guessed.
+ */
+export function bothOpen(status: NumberStatus): boolean {
+  return Boolean(status.openEnquiryId && status.ticketEnquiryId);
+}
+
+/**
+ * The words for that choice, in one place like the rest of them.
+ *
+ * No default. A highlighted option is an answer, and the whole point of this
+ * state is that the screen does not have one.
+ */
+export const BOTH_OPEN = {
+  label: "Open lead + open ticket",
+  action: "Nothing yet — say which conversation this call belongs to",
+  choices: [
+    { id: "purchase", label: "Log as purchase" },
+    { id: "ticket", label: "Log as ticket" },
+  ],
+} as const satisfies {
+  label: string;
+  action: string;
+  choices: readonly { id: "purchase" | "ticket"; label: string }[];
+};
+
 /** The confirmation Dismiss asks for, in both places it is offered. */
 export function dismissQuestion(mobile: string): string {
   return `Dismiss ${mobile}? The call made today stays as it is.`;

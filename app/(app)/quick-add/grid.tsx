@@ -5,6 +5,8 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { Button, ErrorNote, Input, Select, cx } from "@/components/ui";
 import { useUnsavedClaim } from "@/components/unsaved-guard";
 import {
+  BOTH_OPEN,
+  bothOpen,
   describeNumber,
   dismissQuestion,
   ticketOnly,
@@ -115,8 +117,16 @@ export function QuickAddGrid({
     const v = verdictOf(r);
     return v?.needsDecision && !r.decision;
   });
+  /**
+   * §41.1. A number that is a live lead *and* a live ticket has no default.
+   * Until somebody says which conversation this call belongs to, the row
+   * cannot be saved and neither can the ones beside it — a grid that saved
+   * nine rows and left the tenth unanswered would be a grid you had to
+   * re-read to find out what it did.
+   */
+  const unchosen = filled.filter((r) => r.status && bothOpen(r.status) && !r.pipeline);
   const saveable = filled.filter((r) => isValidMobile(normaliseMobile(r.mobile)));
-  const blocked = invalid.length > 0 || undecided.length > 0;
+  const blocked = invalid.length > 0 || undecided.length > 0 || unchosen.length > 0;
   /**
    * §32.1. "Log call now" belongs to the single-number case — the phone is
    * ringing and this row is the call. With a list on screen it is the wrong
@@ -331,6 +341,12 @@ export function QuickAddGrid({
       });
       return null;
     }
+    if (unchosen.length) {
+      setResult({
+        error: `${unchosen.length} row${unchosen.length === 1 ? " has" : "s have"} both an open lead and an open ticket. Choose "Log as purchase" or "Log as ticket" on ${unchosen.length === 1 ? "it" : "each"} first.`,
+      });
+      return null;
+    }
     const res = await createManyEnquiries(
       filled.map((r) => ({
         mobile: r.mobile,
@@ -401,7 +417,12 @@ export function QuickAddGrid({
               const bad = Boolean(r.mobile.trim()) && !isValidMobile(mobile);
               const verdict = verdictOf(r);
               const waiting = Boolean(verdict?.needsDecision) && !r.decision;
-              const ready = Boolean(mobile) && !bad && !r.checking && !waiting;
+              // §41.1. Live on both sides and unanswered: the row is not ready
+              // for either button, and a disabled button says so better than an
+              // error message after the click.
+              const unpicked = Boolean(r.status && bothOpen(r.status) && !r.pipeline);
+              const ready =
+                Boolean(mobile) && !bad && !r.checking && !waiting && !unpicked;
 
               return (
                 <tr
@@ -409,7 +430,7 @@ export function QuickAddGrid({
                   className={cx(
                     "border-b border-line last:border-b-0",
                     bad && "bg-danger-soft/30",
-                    waiting && "bg-warn-soft/30",
+                    (waiting || unpicked) && "bg-warn-soft/30",
                   )}
                   onFocus={() => reached(r.key)}
                 >
@@ -506,6 +527,12 @@ export function QuickAddGrid({
             {undecided.length === 1 ? "s" : ""} a decision
           </span>
         ) : null}
+        {unchosen.length ? (
+          <span className="rounded-md border border-warn/40 bg-warn-soft/50 px-2 py-1 text-[12px] font-medium text-warn">
+            {unchosen.length} row{unchosen.length === 1 ? "" : "s"} on both sides —
+            purchase or ticket?
+          </span>
+        ) : null}
         <span className="text-[11.5px] text-ink-3">
           {invalid.length ? `${invalid.length} invalid · ` : ""}
           What happens to each number is decided by the rules and stated in its
@@ -561,6 +588,44 @@ function StatusCell({
   if (row.checking) return <span className="text-[12px] text-ink-3">checking…</span>;
   if (!row.mobile.trim()) return <span className="text-[12px] text-ink-3">—</span>;
 
+  const both = Boolean(row.status && bothOpen(row.status));
+
+  /**
+   * §41.1. Live on both sides, and nobody has said which one this is.
+   *
+   * Rendered before the verdict rather than beside it, because there is no
+   * verdict to render: the purchase reading and the ticket reading are
+   * different sentences with different consequences, and showing one of them
+   * with a chooser underneath would be showing an answer and calling it a
+   * question. Whichever is picked, the call window still carries the switch to
+   * the other side, so this is a starting point and not a commitment.
+   */
+  if (row.status && bothOpen(row.status) && !row.pipeline) {
+    return (
+      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="flex flex-col">
+          <span className="text-[12px] font-medium text-warn">{BOTH_OPEN.label}</span>
+          <span className="text-[11px] text-ink-3">
+            Lead #{row.status.openEnquiryId} · ticket #{row.status.ticketEnquiryId}
+          </span>
+          <span className="text-[11px] text-ink-3">{BOTH_OPEN.action}</span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          {BOTH_OPEN.choices.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => onPipeline(c.id)}
+              className="rounded-full border border-line-2 bg-surface px-2 py-[2px] text-[11px] text-ink-2 hover:border-accent hover:text-accent"
+            >
+              {c.label}
+            </button>
+          ))}
+        </span>
+      </span>
+    );
+  }
+
   if (!verdict) return <span className="text-[12px] text-ink-3">—</span>;
 
   const tone =
@@ -584,6 +649,13 @@ function StatusCell({
             Also has an open ticket (#{row.status.ticketEnquiryId})
           </span>
         ) : null}
+        {/* §41.1. Chosen, and the other side is still open — say so, because
+            the row now reads as one conversation and there are two. */}
+        {both && row.pipeline === "ticket" && row.status?.openEnquiryId ? (
+          <span className="text-[11px] text-info">
+            Also has an open lead (#{row.status.openEnquiryId})
+          </span>
+        ) : null}
         <span className="text-[11px] text-ink-3">
           {row.decision === "dismiss"
             ? "Dismissed — nothing will be written"
@@ -600,14 +672,24 @@ function StatusCell({
         <span className="flex items-center gap-1.5">
           {(
             [
-              { id: "ticket" as const, label: "Continue ticket", when: Boolean(row.status?.ticketEnquiryId) },
+              // §41.1. On a number that is live on both sides these are the
+              // two words the choice was made with, so they are the two words
+              // it can be changed with.
+              { id: "purchase2" as const, label: "Log as purchase", when: both },
+              { id: "ticket3" as const, label: "Log as ticket", when: both },
+              { id: "ticket" as const, label: "Continue ticket", when: !both && Boolean(row.status?.ticketEnquiryId) },
               { id: "purchase" as const, label: "New purchase enquiry", when: Boolean(row.status?.ticketEnquiryId) && !row.status?.openEnquiryId },
               { id: "ticket2" as const, label: "Log ticket instead", when: Boolean(row.status?.openEnquiryId) && !row.status?.ticketEnquiryId },
             ] as const
           )
             .filter((o) => o.when)
             .map((o) => {
-              const value = o.id === "ticket2" ? "ticket" : o.id;
+              const value =
+                o.id === "ticket2" || o.id === "ticket3"
+                  ? ("ticket" as const)
+                  : o.id === "purchase2"
+                    ? ("purchase" as const)
+                    : o.id;
               const on =
                 row.pipeline === value ||
                 (row.pipeline === null &&
