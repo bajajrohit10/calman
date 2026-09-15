@@ -315,6 +315,7 @@ export function StudentHistoryView({
           <Collapsed summary="Edit enquiry details">
             <EnquiryDetailsEditor
               enquiryId={current.id}
+              isTicket={current.type === "after_sale"}
               masters={masters}
               initial={{
                 studentName: student.name,
@@ -322,6 +323,14 @@ export function StudentHistoryView({
                 termId: current.term_id,
                 sourceId: current.source_id,
                 leadVerification: current.lead_verification,
+                orderId: current.order_id,
+                productText: current.product_text,
+                teacherId: current.teacher_id,
+                // §47.2. The ticket's category is whatever its most recent
+                // call carrying one says — the same reading the call panel
+                // does, so the editor opens on the value the screen shows.
+                issueCategory:
+                  current.calls.find((c) => c.issue_category)?.issue_category ?? null,
               }}
               onSaved={onEdited}
             />

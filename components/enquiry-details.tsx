@@ -2,12 +2,26 @@
 
 import { useState, useTransition } from "react";
 
-import { updateEnquiryDetails } from "@/components/call-log/actions";
+import {
+  updateEnquiryDetails,
+  updateTicketFields,
+} from "@/components/call-log/actions";
+import { TeacherPicker } from "@/components/interest-lines";
 import { Button, ErrorNote, Input, Select } from "@/components/ui";
-import type { Importance, LeadVerification } from "@/lib/enquiry-labels";
+import {
+  ISSUE_CATEGORY_LABELS,
+  type Importance,
+  type IssueCategory,
+  type LeadVerification,
+} from "@/lib/enquiry-labels";
 
 export type DetailMaster = { id: string; name: string };
-export type DetailMasters = { terms: DetailMaster[]; sources: DetailMaster[] };
+export type DetailMasters = {
+  terms: DetailMaster[];
+  sources: DetailMaster[];
+  /** §47.2: only a ticket shows the teacher box, so only it needs the list. */
+  teachers?: DetailMaster[];
+};
 
 /**
  * Term, source and the student's name — the details a counsellor corrects
@@ -32,6 +46,7 @@ export function EnquiryDetailsEditor({
   masters,
   initial,
   onSaved,
+  isTicket = false,
 }: {
   enquiryId: number;
   masters: DetailMasters;
@@ -41,8 +56,19 @@ export function EnquiryDetailsEditor({
     termId: string | null;
     sourceId: string | null;
     leadVerification: LeadVerification | null;
+    /** §47.2. Only read on a ticket. */
+    orderId?: string | null;
+    productText?: string | null;
+    teacherId?: string | null;
+    issueCategory?: IssueCategory | null;
   };
   onSaved?: () => void;
+  /**
+   * §47.2. A ticket carries four more fields worth correcting — the order it
+   * is about, what was bought, whose material it is and what went wrong — and
+   * they are written through a different door from the three above.
+   */
+  isTicket?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState({
@@ -52,12 +78,35 @@ export function EnquiryDetailsEditor({
     sourceId: initial.sourceId ?? "",
     leadVerification: (initial.leadVerification ?? "") as LeadVerification | "",
   });
+  const [ticket, setTicket] = useState({
+    orderId: initial.orderId ?? "",
+    productText: initial.productText ?? "",
+    teacherId: initial.teacherId ?? "",
+    issueCategory: (initial.issueCategory ?? "") as IssueCategory | "",
+  });
   const [result, setResult] = useState<{ error: string | null; ok?: string } | null>(null);
   const [pending, start] = useTransition();
 
   function save() {
     setResult(null);
     start(async () => {
+      // §47.2. Two writes because they go through two doors — the column grant
+      // on enquiries for the first, a security-definer function for the
+      // second. The ticket half goes first: if it is refused, the counsellor
+      // sees that rather than a success message for the other three.
+      if (isTicket) {
+        const t = await updateTicketFields({
+          enquiryId,
+          orderId: ticket.orderId,
+          product: ticket.productText,
+          teacherId: ticket.teacherId || null,
+          issueCategory: ticket.issueCategory,
+        });
+        if (t.error) {
+          setResult(t);
+          return;
+        }
+      }
       const res = await updateEnquiryDetails({
         enquiryId,
         importance: values.importance,
@@ -141,6 +190,74 @@ export function EnquiryDetailsEditor({
             ))}
           </Select>
         </label>
+
+        {/* §47.2. A ticket's own four, beside the three every enquiry has.
+            The institute is not among them: it follows the teacher through
+            teachers.institute_id, so writing it would be storing a second
+            answer to a question that already has one. */}
+        {isTicket ? (
+          <>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+                Order ID
+              </span>
+              <Input
+                aria-label="Order ID"
+                value={ticket.orderId}
+                onChange={(e) => setTicket((v) => ({ ...v, orderId: e.target.value }))}
+                placeholder="Not recorded"
+              />
+            </label>
+
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+                Product
+              </span>
+              <Input
+                aria-label="Product"
+                value={ticket.productText}
+                onChange={(e) =>
+                  setTicket((v) => ({ ...v, productText: e.target.value }))
+                }
+                placeholder="Not recorded"
+              />
+            </label>
+
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+                Teacher
+              </span>
+              <TeacherPicker
+                teachers={masters.teachers ?? []}
+                value={ticket.teacherId}
+                onChange={(id) => setTicket((v) => ({ ...v, teacherId: id }))}
+              />
+            </div>
+
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+                Issue category
+              </span>
+              <Select
+                aria-label="Issue category"
+                value={ticket.issueCategory}
+                onChange={(e) =>
+                  setTicket((v) => ({
+                    ...v,
+                    issueCategory: e.target.value as IssueCategory | "",
+                  }))
+                }
+              >
+                <option value="">—</option>
+                {Object.entries(ISSUE_CATEGORY_LABELS).map(([id, label]) => (
+                  <option key={id} value={id}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+            </label>
+          </>
+        ) : null}
 
         <div className="flex items-end gap-2">
           <Button

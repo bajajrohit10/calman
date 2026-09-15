@@ -1295,3 +1295,58 @@ export async function loadCallEdits(
     })),
   };
 }
+
+/**
+ * The ticket's own fields, corrected after the fact (§47.2).
+ *
+ * Separate from updateEnquiryDetails because the two write through different
+ * doors. That one goes straight at `enquiries`, which grants UPDATE on exactly
+ * four columns; these four are not among them, so they go through
+ * set_ticket_fields, which is security definer and checks app.is_staff()
+ * itself. "Any staff" is the brief's phrase and that function is where it is
+ * enforced — not here, and not by the button being on screen.
+ *
+ * p_replace is what makes this an editor rather than an appender: the panel
+ * sends the fields a call touched and means "leave the rest", this sends the
+ * whole set and means it, so a wrong order id can be cleared and not just
+ * overwritten.
+ */
+export async function updateTicketFields(input: {
+  enquiryId: number;
+  orderId: string | null;
+  product: string | null;
+  teacherId: string | null;
+  issueCategory: IssueCategory | "" | null;
+}): Promise<LogCallResult> {
+  const viewer = await requireUser();
+  if (!viewer.profile) return { error: "Your account is not active." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_ticket_fields", {
+    p_enquiry_id: input.enquiryId,
+    p_order_id: input.orderId?.trim() || null,
+    p_product: input.product?.trim() || null,
+    p_teacher_id: input.teacherId || null,
+    p_replace: true,
+    // The category is on the call, so it is only touched when one was chosen.
+    // Sending null with the flag set would blank a category rather than leave
+    // it, which is not what an untouched select means.
+    p_touch_issue: Boolean(input.issueCategory),
+    p_issue_category: (input.issueCategory || null) as IssueCategory | null,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any);
+
+  if (error) return { error: `Could not save the ticket details: ${error.message}` };
+
+  const { data: enquiry } = await supabase
+    .from("enquiries")
+    .select("students ( mobile )")
+    .eq("id", input.enquiryId)
+    .maybeSingle();
+  const mobile = (enquiry?.students as { mobile: string } | null)?.mobile;
+  if (mobile) revalidatePath(`/students/${mobile}`);
+  revalidatePath("/tickets");
+  revalidatePath("/my-day");
+
+  return { error: null, ok: "Ticket details saved." };
+}

@@ -1356,13 +1356,22 @@ export function CallLogPanel({
       <PanelDrawer summary="Edit enquiry details">
         <EnquiryDetailsEditor
           enquiryId={enquiry.id}
-          masters={{ terms: masters.terms, sources: masters.sources }}
+          isTicket={enquiry.type === "after_sale"}
+          masters={{
+            terms: masters.terms,
+            sources: masters.sources,
+            teachers: masters.teachers,
+          }}
           initial={{
             studentName: enquiry.studentName,
             importance: enquiry.importance,
             termId: enquiry.termId,
             sourceId: enquiry.sourceId,
             leadVerification: enquiry.leadVerification,
+            orderId: enquiry.orderId,
+            productText: enquiry.productText,
+            teacherId: enquiry.teacherId,
+            issueCategory: enquiry.issueCategory,
           }}
         />
       </PanelDrawer>
