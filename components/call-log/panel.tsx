@@ -39,6 +39,7 @@ import {
   istNextMonday,
   istToday,
 } from "@/lib/format";
+import { interestShape } from "@/lib/interest-shape";
 import { formatMobile } from "@/lib/mobile";
 import { useUnsavedClaim } from "@/components/unsaved-guard";
 import { WhatsAppButton } from "@/components/whatsapp/button";
@@ -390,12 +391,15 @@ export function CallLogPanel({
   const [defSubject, setDefSubject] = useState("");
   const [defContent, setDefContent] = useState("");
 
+  // §47.1. Every match, including teachers already on the lead. Hiding a name
+  // that had been used once made "FR and Audit from the same teacher"
+  // unrecordable — the second line could not be started. What stops an actual
+  // duplicate is the full combination, checked in addTeacher below.
   const teacherMatches = (() => {
     const q = teacherQuery.trim().toLowerCase();
     if (!q) return [];
-    const taken = new Set(newLines.map((l) => l.teacherId));
     return masters.teachers
-      .filter((t) => t.name.toLowerCase().includes(q) && !taken.has(t.id))
+      .filter((t) => t.name.toLowerCase().includes(q))
       .slice(0, 6);
   })();
 
@@ -440,16 +444,26 @@ export function CallLogPanel({
   }
 
   function addTeacher(id: string) {
-    setNewLines((lines) => [
-      ...lines.filter((l) => hasDetail(l)),
-      {
+    setNewLines((lines) => {
+      const kept = lines.filter((l) => hasDetail(l));
+      const line = {
         ...blankLine(),
         teacherId: id,
         courseId: defCourse,
         subjectId: defSubject,
         contentId: defContent,
-      },
-    ]);
+      };
+      // §47.1. The same teacher again is a new line whenever anything else
+      // about it differs. Only an exact repeat of all four columns is
+      // refused, and silently — the counsellor asked for a line that is
+      // already there, and they now have it.
+      const here = new Set(kept.map(interestShape));
+      const already = items.some(
+        (i) => i.status === "open" && interestShape(i) === interestShape(line),
+      );
+      if (here.has(interestShape(line)) || already) return kept;
+      return [...kept, line];
+    });
     setTeacherQuery("");
   }
   /**

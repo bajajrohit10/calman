@@ -2368,6 +2368,7 @@ export type Database = {
         | "escalated"
         | "pending_institute"
         | "resolved"
+        | "not_interested"
       close_reason: "wrong_number" | "superseded" | "converted"
       enquiry_status:
         | "open"
@@ -2394,7 +2395,7 @@ export type Database = {
         | "other"
       item_status: "open" | "won" | "competitor" | "closed"
       lead_verification: "yes_with_proof" | "yes_without_proof" | "no"
-      lost_reason: "competitor" | "max_followups" | "dropped"
+      lost_reason: "competitor" | "max_followups" | "dropped" | "not_interested"
       template_stage:
         | "fresh"
         | "followup_1"
@@ -2551,6 +2552,7 @@ export const Constants = {
         "escalated",
         "pending_institute",
         "resolved",
+        "not_interested",
       ],
       close_reason: ["wrong_number", "superseded", "converted"],
       enquiry_status: [
@@ -2581,7 +2583,7 @@ export const Constants = {
       ],
       item_status: ["open", "won", "competitor", "closed"],
       lead_verification: ["yes_with_proof", "yes_without_proof", "no"],
-      lost_reason: ["competitor", "max_followups", "dropped"],
+      lost_reason: ["competitor", "max_followups", "dropped", "not_interested"],
       template_stage: [
         "fresh",
         "followup_1",

@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
+import { dropDuplicateLines, rowShape } from "@/lib/interest-shape";
+
 import { isAdmin, requireUser } from "@/lib/auth";
 import { istToday } from "@/lib/format";
 import {
@@ -567,16 +569,9 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
     // decision is re-pointed at its copy by what the line *is* — the same
     // teacher, course, subject and content. A decision whose line the offer
     // does not target has no copy and is dropped: it was never part of what
-    // this call was about.
-    const shape = (i: {
-      teacher_id: string | null;
-      course_id: string | null;
-      subject_id: string | null;
-      content_id: string | null;
-    }) =>
-      [i.teacher_id ?? "", i.course_id ?? "", i.subject_id ?? "", i.content_id ?? ""].join(
-        "|",
-      );
+    // this call was about. The same four columns §47.1 de-dupes on, from the
+    // one helper, so "the same line" means one thing across the app.
+    const shape = rowShape;
 
     const [{ data: oldItems }, { data: newItems }] = await Promise.all([
       supabase
@@ -615,8 +610,22 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
 
   // ---- 1. New interest lines from "Edit interests" -------------------------
   if (input.newItems.length) {
+    // §47.1. Against what the target lead already holds, and within the batch.
+    // A won line is never dropped as a duplicate: it carries the order and the
+    // amount, and silently discarding a sale would be the worst possible way
+    // to be tidy.
+    const { data: present } = await supabase
+      .from("enquiry_items")
+      .select("teacher_id, course_id, subject_id, content_id")
+      .eq("enquiry_id", targetEnquiryId)
+      .eq("status", "open");
+    const seen = new Set((present ?? []).map(rowShape));
+    const incoming = input.newItems.filter(
+      (i) => i.won || dropDuplicateLines([i], seen).length > 0,
+    );
+
     const rows = [];
-    for (const item of input.newItems) {
+    for (const item of incoming) {
       // §39.2. Anything at all, not a teacher *and* a course. A subject is the
       // exception: it belongs to a course, and the table says so too.
       if (!item.teacherId && !item.courseId && !item.subjectId && !item.contentId) {
@@ -982,17 +991,32 @@ export async function addEnquiryItems(input: {
 
   const supabase = await createClient();
 
-  const { data: enquiry, error: findError } = await supabase
-    .from("enquiries")
-    .select("id, students ( mobile )")
-    .eq("id", input.enquiryId)
-    .maybeSingle();
+  const [{ data: enquiry, error: findError }, { data: present }] = await Promise.all([
+    supabase
+      .from("enquiries")
+      .select("id, students ( mobile )")
+      .eq("id", input.enquiryId)
+      .maybeSingle(),
+    supabase
+      .from("enquiry_items")
+      .select("teacher_id, course_id, subject_id, content_id")
+      .eq("enquiry_id", input.enquiryId)
+      .eq("status", "open"),
+  ]);
 
   if (findError) return { error: findError.message };
   if (!enquiry) return { error: "That enquiry no longer exists." };
 
+  // §47.1. De-duped on the whole combination, against the lead as well as
+  // within this batch. Silent: somebody asking for a line the lead already has
+  // wants it there, and it is.
+  const fresh = dropDuplicateLines(lines, new Set((present ?? []).map(rowShape)));
+  if (!fresh.length) {
+    return { error: null, ok: "Those interests were already on this lead." };
+  }
+
   const { error } = await supabase.from("enquiry_items").insert(
-    lines.map((l) => ({
+    fresh.map((l) => ({
       enquiry_id: input.enquiryId,
       teacher_id: l.teacherId || null,
       course_id: l.courseId || null,
@@ -1011,7 +1035,7 @@ export async function addEnquiryItems(input: {
 
   return {
     error: null,
-    ok: `Added ${lines.length} interest${lines.length === 1 ? "" : "s"}.`,
+    ok: `Added ${fresh.length} interest${fresh.length === 1 ? "" : "s"}.`,
   };
 }
 

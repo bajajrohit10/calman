@@ -81,6 +81,7 @@ export const LOST_REASON_LABELS: Record<LostReason, string> = {
   competitor: "went to a competitor",
   max_followups: "follow-up slots exhausted",
   dropped: "dropped",
+  not_interested: "not interested",
 };
 
 export const CLOSE_REASON_LABELS: Record<CloseReason, string> = {
@@ -118,6 +119,9 @@ export const PURCHASE_OUTCOMES = [
   "call_back",
   "purchased",
   "competitor",
+  // §47.3. Below the two that lose the lead to somebody else, above the one
+  // that says the number was never a lead at all.
+  "not_interested",
   "closed",
 ] as const satisfies readonly CallOutcome[];
 
@@ -135,6 +139,7 @@ export const OUTCOME_LABELS: Record<CallOutcome, string> = {
   call_back: "Call back — no pickup",
   purchased: "Purchased",
   competitor: "Went to a competitor",
+  not_interested: "Not interested — don't call",
   closed: "Wrong number",
   noted: "Ticket, still open",
   working: "Working on it",
@@ -149,6 +154,7 @@ export const OUTCOME_SHORT: Record<CallOutcome, string> = {
   call_back: "Call back",
   purchased: "Purchased",
   competitor: "Competitor",
+  not_interested: "Not interested",
   closed: "Wrong number",
   noted: "Ticket",
   working: "Working",
@@ -188,7 +194,7 @@ export function outcomeTone(
   outcome: CallOutcome,
 ): "ok" | "danger" | "neutral" | "info" | "accent" | "warn" {
   if (outcome === "purchased" || outcome === "resolved") return "ok";
-  if (outcome === "competitor") return "danger";
+  if (outcome === "competitor" || outcome === "not_interested") return "danger";
   if (outcome === "closed") return "neutral";
   if (outcome === "call_back") return "warn";
   if (outcome === "escalated") return "accent";
@@ -226,6 +232,7 @@ export const LAST_OUTCOME_FILTER = [
   "call_back",
   "purchased",
   "competitor",
+  "not_interested",
   "closed",
 ] as const;
 
@@ -253,6 +260,7 @@ export const OFFER_STATUS_FILTER = [
   { id: "lost_exhausted", name: "Lost – exhausted" },
   { id: "lost_competitor", name: "Lost – competitor" },
   { id: "lost_dropped", name: "Lost – dropped" },
+  { id: "lost_not_interested", name: "Lost – not interested" },
 ] as const;
 
 export type OfferStatusKey = (typeof OFFER_STATUS_FILTER)[number]["id"];
@@ -267,6 +275,7 @@ export function offerStatusOf(
   if (lostReason === "max_followups") return "lost_exhausted";
   if (lostReason === "competitor") return "lost_competitor";
   if (lostReason === "dropped") return "lost_dropped";
+  if (lostReason === "not_interested") return "lost_not_interested";
   return null;
 }
 
