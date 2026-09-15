@@ -181,15 +181,23 @@ export type PanelPayload = {
 export async function loadPanelEnquiry(
   enquiryId: number,
 ): Promise<{ error: string | null; enquiry?: PanelPayload }> {
-  const viewer = await requireUser();
   const supabase = await createClient();
 
-  // §46.1. The working-day default depends on nothing this function reads, so
-  // it goes out with the enquiry rather than after it. Three sequential round
-  // trips to Mumbai is most of what a counsellor waits for when a row opens.
+  /**
+   * §46.1. Three sequential crossings to Mumbai is most of what a counsellor
+   * waits for when a row opens, and two of them wait on nothing.
+   *
+   * The working-day default reads nothing this function reads. The enquiry
+   * read is authorised by RLS, not by the order of these awaits — the policy
+   * decides what comes back whoever asks — so blocking it on the viewer's own
+   * profile row buys a round trip's delay and no safety. The viewer is still
+   * awaited before anything is *returned*, so an inactive account gets the
+   * same refusal it always did.
+   */
   const nextDayPromise = supabase.rpc("next_working_day", {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
+  const viewerPromise = requireUser();
 
   const { data, error } = await supabase
     .from("enquiries")
@@ -210,6 +218,8 @@ export async function loadPanelEnquiry(
     )
     .eq("id", enquiryId)
     .maybeSingle();
+
+  const viewer = await viewerPromise;
 
   if (error) return { error: error.message };
   if (!data) return { error: "That enquiry no longer exists." };
