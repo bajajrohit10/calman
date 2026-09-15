@@ -362,6 +362,7 @@ export type Database = {
           closed_at: string | null
           created_at: string
           created_by: string | null
+          escalated_to: string | null
           follow_up_slots_used: number
           fresh_call_date: string | null
           id: number
@@ -372,6 +373,7 @@ export type Database = {
             | null
           lost_reason: Database["public"]["Enums"]["lost_reason"] | null
           next_follow_up_date: string | null
+          order_id: string | null
           product_text: string | null
           re_enquired_at: string | null
           reopened_from_enquiry_id: number | null
@@ -379,6 +381,7 @@ export type Database = {
           source_id: string | null
           status: Database["public"]["Enums"]["enquiry_status"]
           student_id: string
+          teacher_id: string | null
           term_id: string | null
           top_content_priority: number | null
           type: Database["public"]["Enums"]["enquiry_type"]
@@ -391,6 +394,7 @@ export type Database = {
           closed_at?: string | null
           created_at?: string
           created_by?: string | null
+          escalated_to?: string | null
           follow_up_slots_used?: number
           fresh_call_date?: string | null
           id?: never
@@ -401,6 +405,7 @@ export type Database = {
             | null
           lost_reason?: Database["public"]["Enums"]["lost_reason"] | null
           next_follow_up_date?: string | null
+          order_id?: string | null
           product_text?: string | null
           re_enquired_at?: string | null
           reopened_from_enquiry_id?: number | null
@@ -408,6 +413,7 @@ export type Database = {
           source_id?: string | null
           status?: Database["public"]["Enums"]["enquiry_status"]
           student_id: string
+          teacher_id?: string | null
           term_id?: string | null
           top_content_priority?: number | null
           type: Database["public"]["Enums"]["enquiry_type"]
@@ -420,6 +426,7 @@ export type Database = {
           closed_at?: string | null
           created_at?: string
           created_by?: string | null
+          escalated_to?: string | null
           follow_up_slots_used?: number
           fresh_call_date?: string | null
           id?: never
@@ -430,6 +437,7 @@ export type Database = {
             | null
           lost_reason?: Database["public"]["Enums"]["lost_reason"] | null
           next_follow_up_date?: string | null
+          order_id?: string | null
           product_text?: string | null
           re_enquired_at?: string | null
           reopened_from_enquiry_id?: number | null
@@ -437,6 +445,7 @@ export type Database = {
           source_id?: string | null
           status?: Database["public"]["Enums"]["enquiry_status"]
           student_id?: string
+          teacher_id?: string | null
           term_id?: string | null
           top_content_priority?: number | null
           type?: Database["public"]["Enums"]["enquiry_type"]
@@ -459,6 +468,13 @@ export type Database = {
           {
             foreignKeyName: "enquiries_created_by_fkey"
             columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enquiries_escalated_to_fkey"
+            columns: ["escalated_to"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -503,6 +519,13 @@ export type Database = {
             columns: ["student_id"]
             isOneToOne: false
             referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enquiries_teacher_id_fkey"
+            columns: ["teacher_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
             referencedColumns: ["id"]
           },
           {
@@ -1289,6 +1312,65 @@ export type Database = {
         }
         Relationships: []
       }
+      ticket_events: {
+        Row: {
+          actor_id: string | null
+          at: string
+          enquiry_id: number
+          escalated_to: string | null
+          from_status: Database["public"]["Enums"]["enquiry_status"] | null
+          id: number
+          to_status: Database["public"]["Enums"]["enquiry_status"]
+        }
+        Insert: {
+          actor_id?: string | null
+          at?: string
+          enquiry_id: number
+          escalated_to?: string | null
+          from_status?: Database["public"]["Enums"]["enquiry_status"] | null
+          id?: never
+          to_status: Database["public"]["Enums"]["enquiry_status"]
+        }
+        Update: {
+          actor_id?: string | null
+          at?: string
+          enquiry_id?: number
+          escalated_to?: string | null
+          from_status?: Database["public"]["Enums"]["enquiry_status"] | null
+          id?: never
+          to_status?: Database["public"]["Enums"]["enquiry_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ticket_events_enquiry_id_fkey"
+            columns: ["enquiry_id"]
+            isOneToOne: false
+            referencedRelation: "enquiries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ticket_events_enquiry_id_fkey"
+            columns: ["enquiry_id"]
+            isOneToOne: false
+            referencedRelation: "live_enquiries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ticket_events_escalated_to_fkey"
+            columns: ["escalated_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_sends: {
         Row: {
           enquiry_id: number
@@ -1386,6 +1468,7 @@ export type Database = {
           closed_at: string | null
           created_at: string | null
           created_by: string | null
+          escalated_to: string | null
           follow_up_slots_used: number | null
           fresh_call_date: string | null
           id: number | null
@@ -1396,11 +1479,15 @@ export type Database = {
             | null
           lost_reason: Database["public"]["Enums"]["lost_reason"] | null
           next_follow_up_date: string | null
+          order_id: string | null
           product_text: string | null
           re_enquired_at: string | null
+          reopened_from_enquiry_id: number | null
+          reopened_via_offer_id: string | null
           source_id: string | null
           status: Database["public"]["Enums"]["enquiry_status"] | null
           student_id: string | null
+          teacher_id: string | null
           term_id: string | null
           top_content_priority: number | null
           type: Database["public"]["Enums"]["enquiry_type"] | null
@@ -1413,6 +1500,7 @@ export type Database = {
           closed_at?: string | null
           created_at?: string | null
           created_by?: string | null
+          escalated_to?: string | null
           follow_up_slots_used?: number | null
           fresh_call_date?: string | null
           id?: number | null
@@ -1423,11 +1511,15 @@ export type Database = {
             | null
           lost_reason?: Database["public"]["Enums"]["lost_reason"] | null
           next_follow_up_date?: string | null
+          order_id?: string | null
           product_text?: string | null
           re_enquired_at?: string | null
+          reopened_from_enquiry_id?: number | null
+          reopened_via_offer_id?: string | null
           source_id?: string | null
           status?: Database["public"]["Enums"]["enquiry_status"] | null
           student_id?: string | null
+          teacher_id?: string | null
           term_id?: string | null
           top_content_priority?: number | null
           type?: Database["public"]["Enums"]["enquiry_type"] | null
@@ -1440,6 +1532,7 @@ export type Database = {
           closed_at?: string | null
           created_at?: string | null
           created_by?: string | null
+          escalated_to?: string | null
           follow_up_slots_used?: number | null
           fresh_call_date?: string | null
           id?: number | null
@@ -1450,11 +1543,15 @@ export type Database = {
             | null
           lost_reason?: Database["public"]["Enums"]["lost_reason"] | null
           next_follow_up_date?: string | null
+          order_id?: string | null
           product_text?: string | null
           re_enquired_at?: string | null
+          reopened_from_enquiry_id?: number | null
+          reopened_via_offer_id?: string | null
           source_id?: string | null
           status?: Database["public"]["Enums"]["enquiry_status"] | null
           student_id?: string | null
+          teacher_id?: string | null
           term_id?: string | null
           top_content_priority?: number | null
           type?: Database["public"]["Enums"]["enquiry_type"] | null
@@ -1482,6 +1579,41 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "enquiries_escalated_to_fkey"
+            columns: ["escalated_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enquiries_reopened_from_enquiry_id_fkey"
+            columns: ["reopened_from_enquiry_id"]
+            isOneToOne: false
+            referencedRelation: "enquiries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enquiries_reopened_from_enquiry_id_fkey"
+            columns: ["reopened_from_enquiry_id"]
+            isOneToOne: false
+            referencedRelation: "live_enquiries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enquiries_reopened_via_offer_id_fkey"
+            columns: ["reopened_via_offer_id"]
+            isOneToOne: false
+            referencedRelation: "offer_matches"
+            referencedColumns: ["offer_id"]
+          },
+          {
+            foreignKeyName: "enquiries_reopened_via_offer_id_fkey"
+            columns: ["reopened_via_offer_id"]
+            isOneToOne: false
+            referencedRelation: "offers"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "enquiries_source_id_fkey"
             columns: ["source_id"]
             isOneToOne: false
@@ -1493,6 +1625,13 @@ export type Database = {
             columns: ["student_id"]
             isOneToOne: false
             referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enquiries_teacher_id_fkey"
+            columns: ["teacher_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
             referencedColumns: ["id"]
           },
           {
@@ -2116,13 +2255,26 @@ export type Database = {
         Returns: number
       }
       set_my_theme: { Args: { p_theme: string }; Returns: string }
+      set_ticket_fields: {
+        Args: {
+          p_enquiry_id: number
+          p_escalated_to?: string
+          p_order_id?: string
+          p_product?: string
+          p_teacher_id?: string
+          p_touch_escalated?: boolean
+        }
+        Returns: undefined
+      }
       supersede_enquiry: { Args: { p_enquiry_id: number }; Returns: undefined }
       tickets_counts: {
         Args: { p_date?: string; p_mine_for?: string }
         Returns: {
           escalated_count: number
           open_count: number
+          pending_institute_count: number
           resolved_count: number
+          working_count: number
         }[]
       }
       tickets_list: {
@@ -2130,12 +2282,17 @@ export type Database = {
           p_as_of?: string
           p_counsellor_id?: string
           p_dir?: string
+          p_due?: string
+          p_due_within?: number
+          p_escalated_to?: string
           p_from?: string
           p_include_resolved?: boolean
+          p_institute_id?: string
           p_issue_category?: Database["public"]["Enums"]["issue_category"]
           p_limit?: number
           p_mine_for?: string
           p_offset?: number
+          p_open_since?: number
           p_resolved_on?: string
           p_sort?: string
           p_status?: Database["public"]["Enums"]["enquiry_status"]
@@ -2146,6 +2303,10 @@ export type Database = {
           created_at: string
           created_by: string
           enquiry_id: number
+          escalated_to: string
+          escalated_to_name: string
+          institute_id: string
+          institute_name: string
           is_overdue: boolean
           issue_category: Database["public"]["Enums"]["issue_category"]
           last_call_at: string
@@ -2154,13 +2315,17 @@ export type Database = {
           last_discussion: string
           last_outcome: Database["public"]["Enums"]["call_outcome"]
           mobile: string
+          open_days: number
           order_id: string
+          product_text: string
           re_enquired_at: string
           reminder_date: string
           resolved_on: string
           status: Database["public"]["Enums"]["enquiry_status"]
           student_id: string
           student_name: string
+          teacher_id: string
+          teacher_name: string
           total_count: number
         }[]
       }
@@ -2181,10 +2346,19 @@ export type Database = {
         | "competitor"
         | "closed"
         | "noted"
+        | "working"
         | "escalated"
+        | "pending_institute"
         | "resolved"
       close_reason: "wrong_number" | "superseded" | "converted"
-      enquiry_status: "open" | "won" | "lost" | "closed" | "escalated"
+      enquiry_status:
+        | "open"
+        | "working"
+        | "won"
+        | "lost"
+        | "closed"
+        | "escalated"
+        | "pending_institute"
       enquiry_type: "purchase" | "after_sale"
       import_outcome:
         | "imported"
@@ -2355,11 +2529,21 @@ export const Constants = {
         "competitor",
         "closed",
         "noted",
+        "working",
         "escalated",
+        "pending_institute",
         "resolved",
       ],
       close_reason: ["wrong_number", "superseded", "converted"],
-      enquiry_status: ["open", "won", "lost", "closed", "escalated"],
+      enquiry_status: [
+        "open",
+        "working",
+        "won",
+        "lost",
+        "closed",
+        "escalated",
+        "pending_institute",
+      ],
       enquiry_type: ["purchase", "after_sale"],
       import_outcome: [
         "imported",

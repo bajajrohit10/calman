@@ -60,6 +60,16 @@ export type LogCallInput = {
   /** §38.2: the mirror — this ticket call is really a sales conversation. */
   convertToPurchase?: boolean;
   /**
+   * §44.1. What the ticket itself carries. Written on the after-sale enquiry
+   * rather than on the call, because an order id that lives on whichever call
+   * happened to mention it is an order id a fresh ticket does not have.
+   */
+  ticketOrderId?: string | null;
+  ticketProduct?: string | null;
+  ticketTeacherId?: string | null;
+  /** §44.2: set with the escalated outcome, kept afterwards. */
+  escalatedTo?: string | null;
+  /**
    * §26.2. The first-call form has the student's name and the term on it,
    * because on a first call there is nothing else to look at and hiding them
    * behind a drawer is how leads reach the second call with neither. Both are
@@ -145,6 +155,10 @@ export type PanelPayload = {
    * call, so it is carried in and pre-chosen.
    */
   issueCategory: IssueCategory | null;
+  /** §44.1/§44.2: the ticket's own fields, so the panel opens holding them. */
+  orderId: string | null;
+  teacherId: string | null;
+  escalatedTo: string | null;
   items: {
     id: string;
     status: string;
@@ -175,7 +189,7 @@ export async function loadPanelEnquiry(
     .select(
       `id, type, product_text, term_id, source_id, importance, lead_verification,
        follow_up_slots_used, status, next_follow_up_date, re_enquired_at, created_at,
-       student_id,
+       student_id, order_id, teacher_id, escalated_to,
        enquiry_sources ( occurred_at, source:sources ( name ) ),
        term:terms ( name ),
        students ( name, mobile ),
@@ -278,6 +292,9 @@ export async function loadPanelEnquiry(
       viewerIsAdmin: isAdmin(viewer.profile?.role ?? "counsellor"),
       // The most recent category recorded on this ticket, which is what the
       // ticket is about until somebody says otherwise.
+      orderId: data.order_id,
+      teacherId: data.teacher_id,
+      escalatedTo: data.escalated_to,
       issueCategory:
         ((callRows ?? []) as unknown as {
           enquiry_id: number;
@@ -411,6 +428,17 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
 
   if (type === "after_sale" && !input.issueCategory) {
     return { error: "An after-sale call needs an issue category." };
+  }
+
+  // §44.1. The same refusal the screen makes, made again here: a server action
+  // is a public endpoint and the amber box proves nothing.
+  if (type === "after_sale" && !input.ticketOrderId?.trim()) {
+    return { error: "A ticket needs an order ID." };
+  }
+  // §44.2. Escalating is handing the ticket to somebody; without a name it is
+  // a status with nobody behind it.
+  if (type === "after_sale" && outcome === "escalated" && !input.escalatedTo) {
+    return { error: "Say who this ticket is escalated to." };
   }
 
   const ticked =
@@ -713,6 +741,28 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
     // Not fatal: the call is the record of what happened and must still be
     // written. A refused grading is a permissions problem worth a server log.
     if (error) console.error("Could not save the grading:", error.message);
+  }
+
+  // §44.1/§44.2. The ticket's own fields, before the call — the call's insert
+  // fires the recompute that sets the status, and the escalatee has to be on
+  // the row by the time the status change is logged or ticket_events records
+  // an escalation to nobody.
+  if (type === "after_sale") {
+    // Through a function, not a direct update: enquiries grants UPDATE on four
+    // graded columns only, because everything else on it is the recompute
+    // trigger's to own. set_ticket_fields can reach these three and nothing
+    // else. Escalation is opted into separately, so a save that is not about
+    // escalating leaves the name already on the ticket alone.
+    const { error } = await supabase.rpc("set_ticket_fields", {
+      p_enquiry_id: targetEnquiryId,
+      p_order_id: input.ticketOrderId?.trim() || undefined,
+      p_product: input.ticketProduct?.trim() || undefined,
+      p_teacher_id: input.ticketTeacherId || undefined,
+      p_touch_escalated: input.escalatedTo !== undefined,
+      p_escalated_to: input.escalatedTo || undefined,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    if (error) return { error: `Could not save the ticket details: ${error.message}` };
   }
 
   // ---- 3. The call, last ---------------------------------------------------

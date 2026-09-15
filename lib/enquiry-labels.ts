@@ -27,11 +27,41 @@ export const ENQUIRY_TYPE_LABELS: Record<EnquiryType, string> = {
 
 export const ENQUIRY_STATUS_LABELS: Record<EnquiryStatus, string> = {
   open: "Open",
+  working: "Working on it",
   won: "Won",
   lost: "Lost",
   closed: "Closed",
   escalated: "Escalated",
+  pending_institute: "Pending with Institute",
 };
+
+/**
+ * §44.2. The five states a ticket moves through, in the order it moves
+ * through them.
+ *
+ * "Closed" is the word a purchase enquiry uses for a wrong number, so a
+ * ticket's end state says Resolved instead — the same row, told to the person
+ * who cares which it is.
+ */
+export const TICKET_STATES = [
+  { id: "open", label: "Open", outcome: "noted" },
+  { id: "working", label: "Working on it", outcome: "working" },
+  { id: "escalated", label: "Escalated", outcome: "escalated" },
+  { id: "pending_institute", label: "Pending with Institute", outcome: "pending_institute" },
+  { id: "closed", label: "Resolved", outcome: "resolved" },
+] as const satisfies readonly {
+  id: EnquiryStatus;
+  label: string;
+  outcome: CallOutcome;
+}[];
+
+export type TicketState = (typeof TICKET_STATES)[number]["id"];
+
+/** What a ticket's status is called on a ticket screen. */
+export function ticketStateLabel(status: EnquiryStatus): string {
+  return TICKET_STATES.find((t) => t.id === status)?.label
+    ?? ENQUIRY_STATUS_LABELS[status];
+}
 
 /** §3: A is "Yes + PLI"; PLI is derived from importance = A, not stored. */
 export const IMPORTANCE_LABELS: Record<Importance, string> = {
@@ -91,9 +121,12 @@ export const PURCHASE_OUTCOMES = [
   "closed",
 ] as const satisfies readonly CallOutcome[];
 
+/** §44.2: one outcome per state, in the order the states run. */
 export const AFTER_SALE_OUTCOMES = [
   "noted",
+  "working",
   "escalated",
+  "pending_institute",
   "resolved",
 ] as const satisfies readonly CallOutcome[];
 
@@ -103,8 +136,10 @@ export const OUTCOME_LABELS: Record<CallOutcome, string> = {
   purchased: "Purchased",
   competitor: "Went to a competitor",
   closed: "Wrong number",
-  noted: "Noted — working on it",
-  escalated: "Escalated to the ticket team",
+  noted: "Noted — still open",
+  working: "Working on it",
+  escalated: "Escalated — to somebody",
+  pending_institute: "Pending with the institute",
   resolved: "Resolved",
 };
 
@@ -116,7 +151,9 @@ export const OUTCOME_SHORT: Record<CallOutcome, string> = {
   competitor: "Competitor",
   closed: "Wrong number",
   noted: "Noted",
+  working: "Working",
   escalated: "Escalated",
+  pending_institute: "With institute",
   resolved: "Resolved",
 };
 
@@ -124,9 +161,22 @@ export function outcomesFor(type: EnquiryType): readonly CallOutcome[] {
   return type === "purchase" ? PURCHASE_OUTCOMES : AFTER_SALE_OUTCOMES;
 }
 
-/** Only these two carry the enquiry forward, so only they take a date (§4). */
+/**
+ * Which outcomes carry the enquiry forward, and so take a date (§4, §44.3).
+ *
+ * On a ticket that is every state except Resolved: a ticket that is open,
+ * being worked, escalated or sitting with the institute all have a day
+ * somebody should look at them again, and only the resolved one does not.
+ */
 export function outcomeTakesDate(outcome: CallOutcome | ""): boolean {
-  return outcome === "follow_up" || outcome === "call_back" || outcome === "noted";
+  return (
+    outcome === "follow_up" ||
+    outcome === "call_back" ||
+    outcome === "noted" ||
+    outcome === "working" ||
+    outcome === "escalated" ||
+    outcome === "pending_institute"
+  );
 }
 
 /**

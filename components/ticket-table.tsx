@@ -6,9 +6,9 @@ import { StudentLink } from "@/components/student-link";
 
 import { Badge, cx } from "@/components/ui";
 import {
-  ENQUIRY_STATUS_LABELS,
   ISSUE_CATEGORY_LABELS,
   OUTCOME_SHORT,
+  ticketStateLabel,
   type CallOutcome,
   type EnquiryStatus,
   type IssueCategory,
@@ -23,9 +23,9 @@ import { formatMobile } from "@/lib/mobile";
  * only be a way to lose that order.
  */
 export const TICKET_SORTABLE = [
-  { key: "reminder", label: "Reminder" },
+  { key: "created", label: "Opened" },
+  { key: "reminder", label: "Due" },
   { key: "last_call", label: "Last call" },
-  { key: "created", label: "Raised" },
 ] as const;
 
 /** Everything the table draws. Both callers' row types satisfy this. */
@@ -43,6 +43,14 @@ export type TicketTableRow = {
   last_caller_name: string | null;
   /** §33.4: the reminder has passed and nobody has closed it. */
   is_overdue?: boolean;
+  /** §44.1/§44.4: what the ticket is chased with. */
+  order_id?: string | null;
+  teacher_name?: string | null;
+  institute_name?: string | null;
+  escalated_to?: string | null;
+  escalated_to_name?: string | null;
+  /** §44.3: whole days since it was opened, counted by the database. */
+  open_days?: number | null;
 };
 
 /**
@@ -73,12 +81,16 @@ export function TicketTable({
 
   return (
     <div className="min-w-0 flex-1 overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
-      <table className="w-full min-w-[900px] border-collapse text-[12.5px]">
+      <table className="w-full min-w-[1100px] border-collapse text-[12.5px]">
         <thead>
           <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
             <th className="px-1.5 py-[7px]">Student</th>
-            <th className="px-1.5 py-[7px]">Status</th>
+            <th className="px-1.5 py-[7px]">Order ID</th>
+            <th className="px-1.5 py-[7px]">Institute</th>
+            <th className="px-1.5 py-[7px]">Teacher</th>
             <th className="px-1.5 py-[7px]">Issue</th>
+            <th className="px-1.5 py-[7px]">Status</th>
+            <th className="px-1.5 py-[7px]">Escalated to</th>
             {TICKET_SORTABLE.map((col) => {
               if (!sortable) {
                 return (
@@ -101,7 +113,6 @@ export function TicketTable({
                 </th>
               );
             })}
-            <th className="px-1.5 py-[7px]">Last note</th>
             <th className="px-1.5 py-[7px]">Last called by</th>
           </tr>
         </thead>
@@ -129,6 +140,16 @@ export function TicketTable({
                   {formatMobile(r.mobile)}
                 </StudentLink>
               </td>
+              {/* §44.4. Order ID first after the student: it is what an
+                  institute asks for and what a counsellor reads out. */}
+              <td className="px-1.5 py-[5px] whitespace-nowrap tabular-nums text-ink-2">
+                {r.order_id || "—"}
+              </td>
+              <td className="px-1.5 py-[5px] text-ink-2">{r.institute_name || "—"}</td>
+              <td className="px-1.5 py-[5px] text-ink-2">{r.teacher_name || "—"}</td>
+              <td className="px-1.5 py-[5px] text-ink-2">
+                {r.issue_category ? ISSUE_CATEGORY_LABELS[r.issue_category] : "—"}
+              </td>
               <td className="px-1.5 py-[5px]">
                 <Badge
                   dot
@@ -137,14 +158,39 @@ export function TicketTable({
                       ? "accent"
                       : r.status === "closed"
                         ? "neutral"
-                        : "info"
+                        : r.status === "pending_institute"
+                          ? "warn"
+                          : "info"
                   }
                 >
-                  {r.status === "closed" ? "Resolved" : ENQUIRY_STATUS_LABELS[r.status]}
+                  {ticketStateLabel(r.status)}
                 </Badge>
               </td>
-              <td className="px-1.5 py-[5px] text-ink-2">
-                {r.issue_category ? ISSUE_CATEGORY_LABELS[r.issue_category] : "—"}
+              {/* §44.4. Highlighted when set, because a ticket on somebody
+                  else's desk is the one row on this screen you do not act on
+                  yourself. */}
+              <td className="px-1.5 py-[5px]">
+                {r.escalated_to_name ? (
+                  <Badge tone="accent">{r.escalated_to_name}</Badge>
+                ) : (
+                  <span className="text-ink-3">—</span>
+                )}
+              </td>
+              {/* §44.3. Opened is immutable and on its own is a date nobody
+                  does arithmetic on at a glance, so the row does it: the age
+                  of a complaint is the thing that decides which to pick up. */}
+              <td className="px-1.5 py-[5px] whitespace-nowrap text-ink-3">
+                {formatDate(r.created_at)}
+                {r.open_days != null ? (
+                  <span
+                    className={cx(
+                      "ml-1.5",
+                      r.open_days >= 7 ? "font-medium text-warn" : "text-ink-3",
+                    )}
+                  >
+                    {r.open_days} day{r.open_days === 1 ? "" : "s"}
+                  </span>
+                ) : null}
               </td>
               <td className="flex items-center gap-1.5 px-1.5 py-[5px] whitespace-nowrap tabular-nums">
                 {/* §33.4. The reminder is shown on every row, and once it has
@@ -169,18 +215,12 @@ export function TicketTable({
                   "never"
                 )}
               </td>
-              <td className="px-1.5 py-[5px] whitespace-nowrap text-ink-3">
-                {formatDate(r.created_at)}
-              </td>
-              <td className="max-w-[280px] truncate px-1.5 py-[5px] text-ink-3">
-                {r.last_discussion ?? "—"}
-              </td>
               <td className="px-1.5 py-[5px] text-ink-3">{r.last_caller_name ?? "—"}</td>
             </tr>
           ))}
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={8} className="px-3 py-8 text-center text-ink-3">
+              <td colSpan={11} className="px-3 py-8 text-center text-ink-3">
                 {empty}
               </td>
             </tr>

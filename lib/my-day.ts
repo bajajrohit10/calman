@@ -97,6 +97,13 @@ export type MyDayTicket = {
   resolved_on: string | null;
   /** An after-sale call logged today. `calls` rows here are after-sale only. */
   called_today: boolean;
+  /** §44.1/§44.4: what the ticket carries, drawn by the shared table. */
+  order_id: string | null;
+  teacher_name: string | null;
+  institute_name: string | null;
+  escalated_to: string | null;
+  escalated_to_name: string | null;
+  open_days: number | null;
 };
 
 /** One offer sub-tab: the offer, and what it is aimed at (§24.2). */
@@ -172,6 +179,12 @@ export async function loadMyDay(input: {
     created_by: string | null;
     is_overdue: boolean;
     resolved_on: string | null;
+    order_id: string | null;
+    teacher_name: string | null;
+    institute_name: string | null;
+    escalated_to: string | null;
+    escalated_to_name: string | null;
+    open_days: number | null;
   };
   const ticketRows = [
     ...((tickets.data ?? []) as unknown as RawTicket[]),

@@ -327,12 +327,22 @@ export function MyDay({
    * The default is everybody's: it is a shared queue, and a counsellor opening
    * it wants to see what is waiting, not only what they have touched.
    */
+  /**
+   * §44.5. Whose ticket this is, now that a ticket can be handed on.
+   *
+   * Three ways it lands on somebody's day: they raised it, they were the last
+   * to speak on it, or it was escalated to them. The third is the new one and
+   * the only one that arrives without them doing anything — which is exactly
+   * why it has to show up here rather than only on the Tickets screen.
+   */
   const ownedTickets = useMemo(
     () =>
       data.tickets.filter((t) => {
         if (ticketOwner === TICKET_OWNER_ALL) return true;
         const who = ticketOwner === TICKET_OWNER_MINE ? viewerId : ticketOwner;
-        return t.last_caller_id === who || t.created_by === who;
+        return (
+          t.last_caller_id === who || t.created_by === who || t.escalated_to === who
+        );
       }),
     [data.tickets, ticketOwner, viewerId],
   );
@@ -340,7 +350,10 @@ export function MyDay({
   const ticketCounts = useMemo(
     () => ({
       open: ownedTickets.filter((t) => t.status === "open").length,
+      working: ownedTickets.filter((t) => t.status === "working").length,
       escalated: ownedTickets.filter((t) => t.status === "escalated").length,
+      pending_institute: ownedTickets.filter((t) => t.status === "pending_institute")
+        .length,
       resolved: ownedTickets.filter((t) => t.resolved_on === date).length,
     }),
     [ownedTickets, date],
@@ -350,7 +363,8 @@ export function MyDay({
     if (ticketTab === "resolved") {
       return [...ownedTickets.filter((t) => t.resolved_on === date)].sort(byCallTimeDesc);
     }
-    return ownedTickets.filter((t) => t.status === ticketTab);
+    const want = TICKET_TABS.find((t) => t.key === ticketTab)?.status;
+    return ownedTickets.filter((t) => t.status === want);
   }, [ownedTickets, ticketTab, date]);
 
   async function openEnquiry(enquiryId: number, index: number) {
@@ -874,6 +888,7 @@ export function MyDay({
             enquiry={open}
             masters={masters}
             counsellorName={counsellorName}
+            roster={roster}
             onSaved={afterSave}
             onCancel={closeOpen}
           />

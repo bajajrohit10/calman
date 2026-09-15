@@ -7,6 +7,7 @@ import {
   InterestLineRows,
   LineFields,
   SavedLineRows,
+  TeacherPicker,
   blankLine,
   hasDetail,
   type ItemMaster,
@@ -83,6 +84,10 @@ export type PanelEnquiry = {
   type: EnquiryType;
   /** What this ticket is already about (§26.1); null on a purchase enquiry. */
   issueCategory?: IssueCategory | null;
+  /** §44.1: what the ticket itself carries, not what a call once mentioned. */
+  orderId?: string | null;
+  teacherId?: string | null;
+  escalatedTo?: string | null;
   /** §29.4: who is looking, and whether they may correct anybody's call. */
   viewerId?: string | null;
   viewerIsAdmin?: boolean;
@@ -285,6 +290,7 @@ export function CallLogPanel({
   enquiry,
   masters,
   counsellorName,
+  roster,
   onSaved,
   onCancel,
 }: {
@@ -292,6 +298,8 @@ export function CallLogPanel({
   masters: PanelMasters;
   /** Fills {counsellor} in a WhatsApp template. */
   counsellorName?: string | null;
+  /** §44.2: who a ticket can be escalated to. */
+  roster?: { id: string; name: string }[];
   /**
    * The note carries the one thing the counsellor has to be told after the
    * panel closes: §23.5 can move a call onto a new enquiry, and a row
@@ -344,7 +352,12 @@ export function CallLogPanel({
   const [toPurchase, setToPurchase] = useState(false);
   const asAfterSale =
     (enquiry.type === "after_sale" || toAfterSale) && !toPurchase;
-  const [orderId, setOrderId] = useState("");
+  const [orderId, setOrderId] = useState(enquiry.orderId ?? "");
+  /** §44.1. The ticket's own product and teacher; the institute follows. */
+  const [ticketProduct, setTicketProduct] = useState(enquiry.productText ?? "");
+  const [ticketTeacher, setTicketTeacher] = useState(enquiry.teacherId ?? "");
+  /** §44.2. Escalated is the one state that needs a name attached. */
+  const [escalatedTo, setEscalatedTo] = useState(enquiry.escalatedTo ?? "");
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
   // Seeded with one blank row so the table always has something to type into.
   const [newLines, setNewLines] = useState<NewLine[]>(() => [blankLine()]);
@@ -548,6 +561,53 @@ export function CallLogPanel({
    */
   const needsIssue = asAfterSale && !issueCategory;
   const [issueAsked, setIssueAsked] = useState(false);
+  /**
+   * §44.1. The order id is the first thing an institute asks for, and a ticket
+   * without one is a ticket nobody can chase. Refused on the field, in the
+   * same amber as the issue category, for the same reason: the thing that is
+   * wrong should be the thing you are looking at.
+   */
+  const needsOrderId = asAfterSale && !orderId.trim();
+  const [orderAsked, setOrderAsked] = useState(false);
+  const orderRef = useRef<HTMLInputElement | null>(null);
+  /** §44.2. Escalating without saying to whom is not escalating. */
+  const needsEscalatee = asAfterSale && outcome === "escalated" && !escalatedTo;
+  const [escalateeAsked, setEscalateeAsked] = useState(false);
+  const escalateeRef = useRef<HTMLSelectElement | null>(null);
+
+  function focusOrder() {
+    setOrderAsked(true);
+    orderRef.current?.focus();
+    orderRef.current?.scrollIntoView({ block: "center" });
+  }
+
+  /** One bundle, so both layouts are handed exactly the same fields. */
+  const ticketFields: TicketFieldsProps = {
+    asAfterSale,
+    outcome,
+    orderId,
+    setOrderId,
+    needsOrderId,
+    orderAsked,
+    orderRef,
+    ticketProduct,
+    setTicketProduct,
+    ticketTeacher,
+    setTicketTeacher,
+    escalatedTo,
+    setEscalatedTo,
+    needsEscalatee,
+    escalateeAsked,
+    escalateeRef,
+    masters,
+    roster,
+  };
+
+  function focusEscalatee() {
+    setEscalateeAsked(true);
+    escalateeRef.current?.focus();
+    escalateeRef.current?.scrollIntoView({ block: "center" });
+  }
 
   function focusIssue() {
     setIssueAsked(true);
@@ -640,6 +700,14 @@ export function CallLogPanel({
       focusIssue();
       return;
     }
+    if (needsOrderId) {
+      focusOrder();
+      return;
+    }
+    if (asAfterSale && outcome === "escalated" && !escalatedTo) {
+      focusEscalatee();
+      return;
+    }
     if (blocksSave) {
       focusInterests();
       return;
@@ -667,6 +735,14 @@ export function CallLogPanel({
         discussion,
         nextFollowUpDate: outcomeTakesDate(outcome) ? followUpDate || null : null,
         issueCategory: asAfterSale ? issueCategory : null,
+        ...(asAfterSale
+          ? {
+              ticketOrderId: orderId.trim() || null,
+              ticketProduct: ticketProduct.trim() || null,
+              ticketTeacherId: ticketTeacher || null,
+              escalatedTo: outcome === "escalated" ? escalatedTo || null : undefined,
+            }
+          : {}),
         convertToAfterSale: toAfterSale,
         convertToPurchase: toPurchase,
         ...(isFirstCall
@@ -774,6 +850,22 @@ export function CallLogPanel({
         <InterestChips items={items} />
       </div>
 
+      {/* §44 fix. This used to live inside the compact branch, so a first
+          call whose save the server refused showed nothing at all — the panel
+          simply sat there. The refusal is the most important thing on the
+          screen at that moment, and it belongs to both layouts. */}
+      {result?.error || result?.ok ? (
+        <div className="px-3 pt-2">
+          {result.error ? (
+            <ErrorNote>{result.error}</ErrorNote>
+          ) : (
+            <p className="text-[12.5px] text-ok" role="status">
+              {result.ok}
+            </p>
+          )}
+        </div>
+      ) : null}
+
       {isFirstCall ? (
         <FirstCallFields
           masters={masters}
@@ -836,6 +928,7 @@ export function CallLogPanel({
           issueRef={issueRef}
           issueAsked={issueAsked}
           needsIssue={needsIssue}
+          ticketFields={ticketFields}
           followUpDate={followUpDate}
           setFollowUpDate={setFollowUpDate}
           pending={pending}
@@ -966,6 +1059,8 @@ export function CallLogPanel({
               ) : null}
             </label>
           ) : null}
+
+          <TicketFields {...ticketFields} />
 
           <label className={cx("min-w-[210px] flex-col gap-1", asAfterSale ? "hidden" : "flex")}>
             <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
@@ -1138,12 +1233,6 @@ export function CallLogPanel({
           </section>
         ) : null}
 
-        {result?.error ? <ErrorNote>{result.error}</ErrorNote> : null}
-        {result && !result.error ? (
-          <p className="text-[12.5px] text-ok" role="status">
-            {result.ok}
-          </p>
-        ) : null}
 
         <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
           <Button type="submit" variant="primary" disabled={pending}>
@@ -1364,6 +1453,7 @@ function FirstCallFields({
   outcome,
   chooseOutcome,
   asAfterSale,
+  ticketFields,
   issueCategory,
   setIssueCategory,
   issueRef,
@@ -1414,6 +1504,7 @@ function FirstCallFields({
   outcome: CallOutcome | "";
   chooseOutcome: (v: CallOutcome | "") => void;
   asAfterSale: boolean;
+  ticketFields: TicketFieldsProps;
   issueCategory: IssueCategory | "";
   setIssueCategory: (v: IssueCategory | "") => void;
   issueRef: React.RefObject<HTMLSelectElement | null>;
@@ -1727,6 +1818,12 @@ function FirstCallFields({
         </FirstCallField>
       ) : null}
 
+      {/* §44.1. The same four fields the compact window shows, because a
+          ticket raised from the first-call form is the same ticket. They lay
+          themselves out as plain labels, so they sit in this grid like any
+          other field. */}
+      <TicketFields {...ticketFields} />
+
       <FirstCallField label="Note" className="md:col-span-2 xl:col-span-3">
         <Textarea
           ref={noteRef}
@@ -1814,5 +1911,165 @@ function FirstCallField({
       </span>
       {children}
     </label>
+  );
+}
+
+/**
+ * §44.1/§44.2. What a ticket carries, drawn once.
+ *
+ * The compact window and the first-call form are two different layouts of the
+ * same call, and a ticket raised through one has to be the same ticket as one
+ * raised through the other — same required order id, same optional product and
+ * teacher, same escalatee. Two copies of these four fields is two places for
+ * "required" to stop being true.
+ */
+export type TicketFieldsProps = {
+  asAfterSale: boolean;
+  outcome: CallOutcome | "";
+  orderId: string;
+  setOrderId: (v: string) => void;
+  needsOrderId: boolean;
+  orderAsked: boolean;
+  orderRef: React.Ref<HTMLInputElement>;
+  ticketProduct: string;
+  setTicketProduct: (v: string) => void;
+  ticketTeacher: string;
+  setTicketTeacher: (v: string) => void;
+  escalatedTo: string;
+  setEscalatedTo: (v: string) => void;
+  needsEscalatee: boolean;
+  escalateeAsked: boolean;
+  escalateeRef: React.Ref<HTMLSelectElement>;
+  masters: PanelMasters;
+  roster?: { id: string; name: string }[];
+};
+
+function TicketFields({
+  asAfterSale,
+  outcome,
+  orderId,
+  setOrderId,
+  needsOrderId,
+  orderAsked,
+  orderRef,
+  ticketProduct,
+  setTicketProduct,
+  ticketTeacher,
+  setTicketTeacher,
+  escalatedTo,
+  setEscalatedTo,
+  needsEscalatee,
+  escalateeAsked,
+  escalateeRef,
+  masters,
+  roster,
+}: TicketFieldsProps) {
+  if (!asAfterSale) return null;
+  return (
+    <>
+          {/* §44.1. The three things a ticket is chased with. Order ID is
+          required for the same reason the category is — an institute
+          cannot look anything up without it — and refused the same way.
+          Product and teacher are optional: often the student says "the FR
+          videos" and nothing more, and half a description beats none. */}
+      {asAfterSale ? (
+        <label className="flex min-w-[150px] flex-col gap-1">
+          <span
+            className={cx(
+              "text-[10px] font-semibold uppercase tracking-[0.045em]",
+              orderAsked && needsOrderId ? "text-warn" : "text-ink-3",
+            )}
+          >
+            Order ID
+          </span>
+          <Input
+            ref={orderRef}
+            aria-label="Order ID"
+            placeholder="ZI-00000"
+            aria-invalid={orderAsked && needsOrderId ? true : undefined}
+            className={
+              orderAsked && needsOrderId ? "border-warn bg-warn-soft/40" : undefined
+            }
+            value={orderId}
+            onChange={(e) => setOrderId(e.target.value)}
+          />
+          {orderAsked && needsOrderId ? (
+            <span role="alert" className="text-[11.5px] font-medium text-warn">
+              An order ID is needed to save this ticket
+            </span>
+          ) : null}
+        </label>
+      ) : null}
+
+      {asAfterSale ? (
+        <label className="flex min-w-[160px] flex-col gap-1">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+            Product
+          </span>
+          <Input
+            aria-label="Product"
+            placeholder="What they bought"
+            value={ticketProduct}
+            onChange={(e) => setTicketProduct(e.target.value)}
+          />
+        </label>
+      ) : null}
+
+      {asAfterSale ? (
+        <div className="flex min-w-[190px] flex-col gap-1">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+            Teacher
+            <span className="ml-1 font-normal normal-case text-ink-3">
+              institute follows
+            </span>
+          </span>
+          <TeacherPicker
+            teachers={masters.teachers}
+            value={ticketTeacher}
+            onChange={setTicketTeacher}
+          />
+        </div>
+      ) : null}
+
+      {/* §44.2. Escalated is the one state that names somebody: the ticket
+          is now on their desk, and it appears in their My Day until it
+          moves on. */}
+      {asAfterSale && outcome === "escalated" ? (
+        <label className="flex min-w-[180px] flex-col gap-1">
+          <span
+            className={cx(
+              "text-[10px] font-semibold uppercase tracking-[0.045em]",
+              escalateeAsked && needsEscalatee ? "text-warn" : "text-ink-3",
+            )}
+          >
+            Escalate to
+          </span>
+          <Select
+            ref={escalateeRef}
+            aria-label="Escalate to"
+            aria-invalid={escalateeAsked && needsEscalatee ? true : undefined}
+            className={
+              escalateeAsked && needsEscalatee
+                ? "border-warn bg-warn-soft/40"
+                : undefined
+            }
+            value={escalatedTo}
+            onChange={(e) => setEscalatedTo(e.target.value)}
+          >
+            <option value="">Choose…</option>
+            {(roster ?? []).map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </Select>
+          {escalateeAsked && needsEscalatee ? (
+            <span role="alert" className="text-[11.5px] font-medium text-warn">
+              Say who this is escalated to
+            </span>
+          ) : null}
+        </label>
+      ) : null}
+    </>
   );
 }

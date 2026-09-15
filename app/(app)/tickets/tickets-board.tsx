@@ -33,6 +33,13 @@ export type TicketRow = {
   last_caller_id: string | null;
   last_caller_name: string | null;
   call_count: number;
+  /** §44.1/§44.3/§44.4: what the ticket carries and how old it is. */
+  teacher_name: string | null;
+  institute_name: string | null;
+  escalated_to: string | null;
+  escalated_to_name: string | null;
+  open_days: number | null;
+  is_overdue: boolean;
   total_count: number;
 };
 
@@ -50,6 +57,7 @@ export function TicketsBoard({
   counts,
   counsellorName,
   roster,
+  institutes,
   masters,
   selected,
 }: {
@@ -68,6 +76,8 @@ export function TicketsBoard({
   counts: Record<TicketTabKey, number>;
   counsellorName: string | null;
   roster: { id: string; name: string }[];
+  /** §44.4: the Institute filter reads the master list, not the tickets. */
+  institutes: { id: string; name: string }[];
   masters: PanelMasters;
   selected: Record<string, string>;
 }) {
@@ -155,10 +165,12 @@ export function TicketsBoard({
               Status
             </span>
             <Select name="status" defaultValue={selected.status}>
-              <option value="">Open and escalated</option>
-              <option value="open">Open</option>
-              <option value="escalated">Escalated</option>
-              <option value="closed">Resolved</option>
+              <option value="">Everything unresolved</option>
+              {TICKET_TABS.map((t) => (
+                <option key={t.key} value={t.status}>
+                  {t.label}
+                </option>
+              ))}
             </Select>
           </label>
 
@@ -185,6 +197,61 @@ export function TicketsBoard({
               {Object.entries(ISSUE_CATEGORY_LABELS).map(([v, label]) => (
                 <option key={v} value={v}>
                   {label}
+                </option>
+              ))}
+            </Select>
+          </label>
+
+          {/* §44.4. The four questions a ticket queue is actually read with:
+              how old, how late, whose desk, and whose institute. */}
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+              Open since
+            </span>
+            <Select name="openSince" defaultValue={selected.openSince}>
+              <option value="">Any age</option>
+              <option value="3">More than 3 days</option>
+              <option value="7">More than 7 days</option>
+              <option value="14">More than 14 days</option>
+              <option value="30">More than 30 days</option>
+            </Select>
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+              Due
+            </span>
+            <Select name="due" defaultValue={selected.due}>
+              <option value="">Any</option>
+              <option value="overdue">Overdue</option>
+              <option value="today">Due today</option>
+              <option value="within">Due within 7 days</option>
+            </Select>
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+              Escalated to
+            </span>
+            <Select name="escalatedTo" defaultValue={selected.escalatedTo}>
+              <option value="">Anyone</option>
+              {roster.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </Select>
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+              Institute
+            </span>
+            <Select name="institute" defaultValue={selected.institute}>
+              <option value="">Any</option>
+              {institutes.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.name}
                 </option>
               ))}
             </Select>
@@ -252,6 +319,7 @@ export function TicketsBoard({
             enquiry={open}
             masters={masters}
             counsellorName={counsellorName}
+            roster={roster}
             onSaved={() => {
               setOpen(null);
               router.refresh();
