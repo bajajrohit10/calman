@@ -184,6 +184,13 @@ export async function loadPanelEnquiry(
   const viewer = await requireUser();
   const supabase = await createClient();
 
+  // §46.1. The working-day default depends on nothing this function reads, so
+  // it goes out with the enquiry rather than after it. Three sequential round
+  // trips to Mumbai is most of what a counsellor waits for when a row opens.
+  const nextDayPromise = supabase.rpc("next_working_day", {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any);
+
   const { data, error } = await supabase
     .from("enquiries")
     .select(
@@ -209,9 +216,6 @@ export async function loadPanelEnquiry(
 
   const student = data.students as { name: string | null; mobile: string } | null;
 
-  const { data: nextDay } = await supabase.rpc("next_working_day", {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any);
 
   // Every call this student has ever had, across all of their enquiries. The
   // filter is on the embedded enquiry, so the database returns this student's
@@ -258,6 +262,10 @@ export async function loadPanelEnquiry(
     calledBy: c.called_by,
   }));
 
+  // Both in flight since before the enquiry came back; this is where the
+  // answer is finally needed.
+  const nextDay = await nextDayPromise;
+
   const sourceNames = [
     ...new Set(
       [...((data.enquiry_sources ?? []) as { occurred_at: string; source: { name: string } | null }[])]
@@ -281,7 +289,7 @@ export async function loadPanelEnquiry(
       sourceId: data.source_id,
       importance: data.importance as Importance | null,
       leadVerification: data.lead_verification as LeadVerification | null,
-      defaultFollowUpDate: (nextDay as string | null) ?? null,
+      defaultFollowUpDate: (nextDay.data as string | null) ?? null,
       status: data.status as EnquiryStatus,
       sourceNames,
       nextFollowUpDate: data.next_follow_up_date,

@@ -588,6 +588,35 @@ export function CallLogPanel({
     orderRef.current?.scrollIntoView({ block: "center" });
   }
 
+  /** §46.2. The same bundle idea for the purchase block. */
+  const labelOfLine = (line: NewLine) => {
+    const nameIn = (list: { id: string; name: string }[], id: string) =>
+      list.find((x) => x.id === id)?.name;
+    return (
+      [
+        nameIn(masters.teachers, line.teacherId),
+        nameIn(masters.courses, line.courseId),
+        nameIn(masters.subjects, line.subjectId),
+        nameIn(masters.contents, line.contentId),
+      ]
+        .filter(Boolean)
+        .join(" · ") || "Untitled interest"
+    );
+  };
+
+  const purchaseBlock: PurchaseBlockProps = {
+    purchased,
+    orderId,
+    setOrderId,
+    savedItems: openItems,
+    decision,
+    setDecision,
+    newLines,
+    setNewLines,
+    labelOfLine,
+    needsAnItem,
+  };
+
   /** One bundle, so both layouts are handed exactly the same fields. */
   const ticketFields: TicketFieldsProps = {
     asAfterSale,
@@ -939,6 +968,7 @@ export function CallLogPanel({
           issueAsked={issueAsked}
           needsIssue={needsIssue}
           ticketFields={ticketFields}
+          purchaseBlock={purchaseBlock}
           followUpDate={followUpDate}
           setFollowUpDate={setFollowUpDate}
           pending={pending}
@@ -1157,92 +1187,7 @@ export function CallLogPanel({
           </div>
         </div>
 
-        {purchased ? (
-          <section className="rounded-md border border-ok/40 bg-ok-soft/40 px-3 py-2.5">
-            <div className="flex flex-wrap items-end gap-3">
-              <label className="flex flex-col gap-1">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-                  Order ID *
-                </span>
-                <Input
-                  className="w-[190px]"
-                  value={orderId}
-                  onChange={(e) => setOrderId(e.target.value)}
-                  placeholder="ZI-00000"
-                  aria-label="Order ID"
-                />
-              </label>
-              <p className="pb-1.5 text-[11.5px] text-ink-3">
-                Tick what was bought. Anything left unticked keeps being followed up
-                unless you close it.
-              </p>
-            </div>
-
-            <ul className="mt-2 flex flex-col gap-1.5">
-              {openItems.map((item) => {
-                const d = decision(item.id);
-                return (
-                  <li
-                    key={item.id}
-                    className="flex flex-wrap items-center gap-2 rounded border border-line bg-surface px-2 py-1.5"
-                  >
-                    <label className="flex cursor-pointer items-center gap-1.5 text-[12.5px] text-ink">
-                      <input
-                        type="checkbox"
-                        checked={d.won}
-                        onChange={(e) =>
-                          setDecision(item.id, { won: e.target.checked, close: false })
-                        }
-                      />
-                      {itemLabel(item)}
-                    </label>
-
-                    {d.won ? (
-                      <Input
-                        className="ml-auto w-[110px]"
-                        inputMode="decimal"
-                        placeholder="Amount"
-                        aria-label={`Amount for ${itemLabel(item)}`}
-                        value={d.amount}
-                        onChange={(e) => setDecision(item.id, { amount: e.target.value })}
-                      />
-                    ) : (
-                      <span className="ml-auto flex items-center gap-3 text-[11.5px] text-ink-2">
-                        <label className="flex cursor-pointer items-center gap-1">
-                          <input
-                            type="radio"
-                            name={`keep-${item.id}`}
-                            checked={!d.close}
-                            onChange={() => setDecision(item.id, { close: false })}
-                          />
-                          keep following
-                        </label>
-                        <label className="flex cursor-pointer items-center gap-1">
-                          <input
-                            type="radio"
-                            name={`keep-${item.id}`}
-                            checked={d.close}
-                            onChange={() => setDecision(item.id, { close: true })}
-                          />
-                          close
-                        </label>
-                      </span>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-
-            {needsAnItem ? (
-              <p className="mt-2 text-[12px] text-danger">
-                This enquiry has no interests recorded. Add the teacher that was
-                bought below — a won enquiry with no teacher against it is invisible
-                to the teacher-wise reports.
-              </p>
-            ) : null}
-          </section>
-        ) : null}
-
+        <PurchaseBlock {...purchaseBlock} />
 
         <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
           <Button type="submit" variant="primary" disabled={pending}>
@@ -1464,6 +1409,7 @@ function FirstCallFields({
   chooseOutcome,
   asAfterSale,
   ticketFields,
+  purchaseBlock,
   issueCategory,
   setIssueCategory,
   issueRef,
@@ -1515,6 +1461,7 @@ function FirstCallFields({
   chooseOutcome: (v: CallOutcome | "") => void;
   asAfterSale: boolean;
   ticketFields: TicketFieldsProps;
+  purchaseBlock: PurchaseBlockProps;
   issueCategory: IssueCategory | "";
   setIssueCategory: (v: IssueCategory | "") => void;
   issueRef: React.RefObject<HTMLSelectElement | null>;
@@ -1834,6 +1781,15 @@ function FirstCallFields({
           other field. */}
       <TicketFields {...ticketFields} />
 
+      {/* §46.2. Purchased on a first call is most first sales — the ones that
+          close on the call that opened them. The order id, the ticks and the
+          amounts belong here exactly as they do in the compact window. */}
+      {purchaseBlock.purchased ? (
+        <div className="md:col-span-2 xl:col-span-4">
+          <PurchaseBlock {...purchaseBlock} />
+        </div>
+      ) : null}
+
       <FirstCallField label="Note" className="md:col-span-2 xl:col-span-3">
         <Textarea
           ref={noteRef}
@@ -2081,5 +2037,171 @@ function TicketFields({
         </label>
       ) : null}
     </>
+  );
+}
+
+/**
+ * What was bought, and for how much (§46.2).
+ *
+ * This lived inside the compact window, so choosing Purchased on a *first*
+ * call — which is most first sales, the ones that close on the call that
+ * opened them — showed no order id, no amount and nothing to tick. The save
+ * then refused for want of a ticked line, and §46's own fix to the error note
+ * is the only reason anybody would have seen why.
+ *
+ * Two lists, because a first call has no saved lines yet: the interests it is
+ * about are the ones being typed into the form beside it. Both get a tick and
+ * an amount; only a saved line can be kept-or-closed, because an unsaved one
+ * that is not bought simply gets saved as open.
+ */
+export type PurchaseBlockProps = {
+  purchased: boolean;
+  orderId: string;
+  setOrderId: (v: string) => void;
+  savedItems: PanelItem[];
+  decision: (id: string) => Decision;
+  setDecision: (id: string, patch: Partial<Decision>) => void;
+  /** §46.2: the unsaved lines a first call is about. */
+  newLines: NewLine[];
+  setNewLines: (fn: (lines: NewLine[]) => NewLine[]) => void;
+  labelOfLine: (line: NewLine) => string;
+  needsAnItem: boolean;
+};
+
+function PurchaseBlock({
+  purchased,
+  orderId,
+  setOrderId,
+  savedItems,
+  decision,
+  setDecision,
+  newLines,
+  setNewLines,
+  labelOfLine,
+  needsAnItem,
+}: PurchaseBlockProps) {
+  if (!purchased) return null;
+  const buyable = newLines.filter(hasDetail);
+
+  return (
+    <section className="rounded-md border border-ok/40 bg-ok-soft/40 px-3 py-2.5">
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+            Order ID *
+          </span>
+          <Input
+            className="w-[190px]"
+            value={orderId}
+            onChange={(e) => setOrderId(e.target.value)}
+            placeholder="ZI-00000"
+            aria-label="Order ID"
+          />
+        </label>
+        <p className="pb-1.5 text-[11.5px] text-ink-3">
+          Tick what was bought. Anything left unticked keeps being followed up
+          unless you close it.
+        </p>
+      </div>
+
+      <ul className="mt-2 flex flex-col gap-1.5">
+        {savedItems.map((item) => {
+          const d = decision(item.id);
+          return (
+            <li
+              key={item.id}
+              className="flex flex-wrap items-center gap-2 rounded border border-line bg-surface px-2 py-1.5"
+            >
+              <label className="flex cursor-pointer items-center gap-1.5 text-[12.5px] text-ink">
+                <input
+                  type="checkbox"
+                  checked={d.won}
+                  onChange={(e) => setDecision(item.id, { won: e.target.checked, close: false })}
+                />
+                {itemLabel(item)}
+              </label>
+
+              {d.won ? (
+                <Input
+                  className="ml-auto w-[110px]"
+                  inputMode="decimal"
+                  placeholder="Amount"
+                  aria-label={`Amount for ${itemLabel(item)}`}
+                  value={d.amount}
+                  onChange={(e) => setDecision(item.id, { amount: e.target.value })}
+                />
+              ) : (
+                <span className="ml-auto flex items-center gap-3 text-[11.5px] text-ink-2">
+                  <label className="flex cursor-pointer items-center gap-1">
+                    <input
+                      type="radio"
+                      name={`keep-${item.id}`}
+                      checked={!d.close}
+                      onChange={() => setDecision(item.id, { close: false })}
+                    />
+                    keep following
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-1">
+                    <input
+                      type="radio"
+                      name={`keep-${item.id}`}
+                      checked={d.close}
+                      onChange={() => setDecision(item.id, { close: true })}
+                    />
+                    close
+                  </label>
+                </span>
+              )}
+            </li>
+          );
+        })}
+
+        {/* §46.2. The lines this call is creating. On a first call these are
+            the only ones there are. */}
+        {buyable.map((line) => (
+          <li
+            key={line.key}
+            className="flex flex-wrap items-center gap-2 rounded border border-line bg-surface px-2 py-1.5"
+          >
+            <label className="flex cursor-pointer items-center gap-1.5 text-[12.5px] text-ink">
+              <input
+                type="checkbox"
+                checked={line.won}
+                onChange={(e) =>
+                  setNewLines((ls) =>
+                    ls.map((l) => (l.key === line.key ? { ...l, won: e.target.checked } : l)),
+                  )
+                }
+              />
+              {labelOfLine(line)}
+            </label>
+            {line.won ? (
+              <Input
+                className="ml-auto w-[110px]"
+                inputMode="decimal"
+                placeholder="Amount"
+                aria-label={`Amount for ${labelOfLine(line)}`}
+                value={line.amount}
+                onChange={(e) =>
+                  setNewLines((ls) =>
+                    ls.map((l) => (l.key === line.key ? { ...l, amount: e.target.value } : l)),
+                  )
+                }
+              />
+            ) : (
+              <span className="ml-auto text-[11.5px] text-ink-3">saved as open</span>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      {needsAnItem ? (
+        <p className="mt-2 text-[12px] text-danger">
+          This enquiry has no interests recorded. Add the teacher that was bought
+          — a won enquiry with no teacher against it is invisible to the
+          teacher-wise reports.
+        </p>
+      ) : null}
+    </section>
   );
 }
