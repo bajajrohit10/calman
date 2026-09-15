@@ -16,15 +16,23 @@ import { createClient } from "@/lib/supabase/server";
  * person this protects is the first counsellor of the morning, and after that
  * anyone who opens Calman in a quiet half hour between calls.
  *
- * Three things get warmed, in the order they cost:
+ * Two things get warmed, in the order they cost:
  *
- *   1. The instance itself — the Node process, the compiled bytecode, and the
- *      app's server module graph, which is most of a cold start.
- *   2. The Supabase client, built exactly as every page builds it.
- *   3. The connection to Supabase, by making a real round trip. The query is
- *      chosen to be the cheapest true read in the schema and its result is
- *      discarded — an anonymous caller gets nothing back through RLS, which is
- *      correct and beside the point. The crossing is what is being paid for.
+ *   1. The instance — the Node process, the compiled bytecode, and the app's
+ *      server module graph, which is most of a cold start.
+ *   2. The function's TLS connection to Supabase, by making a real crossing.
+ *      Undici's pool lives in module memory for the life of the process, so
+ *      the next real request finds the handshake already done.
+ *
+ * It asks GoTrue's health endpoint rather than reading a table, for two
+ * reasons. The `anon` role has no grant on anything — correctly — so every
+ * table read and every RPC answers 401 `permission denied`, and a warm-up that
+ * files 870 permission denials a week into the Supabase log teaches whoever
+ * reads that log to ignore it. And it buys nothing: /auth/v1 and /rest/v1 are
+ * the same origin, so one connection serves both, and the part a table read
+ * would additionally warm — PostgREST's own pool to Postgres — is on
+ * Supabase's side of the wire, shared across every client, and already warm
+ * from the day's actual calls. It was never ours to keep.
  *
  * What it cannot warm is auth-js's JWKS cache, which only fills when a real
  * token is verified. Warming it would mean parking a live session's
@@ -58,17 +66,30 @@ export async function GET() {
     }
   }
 
+  // Built the way every page builds it, so the same modules are resident
+  // afterwards. With no session cookie this resolves locally and costs
+  // nothing; it is here for the module graph, not the round trip.
   const supabase = await createClient();
+  await supabase.auth.getClaims();
 
-  // The auth path and the data path are two different hosts and two different
-  // TLS sessions, so both are crossed. Neither result is read.
-  const [, { error }] = await Promise.all([
-    supabase.auth.getClaims(),
-    supabase.from("terms").select("id").limit(1),
-  ]);
+  // The crossing. `reached` is the honest health signal: false means Supabase
+  // did not answer, which is worth seeing in the cron log.
+  let reached = false;
+  try {
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/health`,
+      {
+        headers: { apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY! },
+        cache: "no-store",
+      },
+    );
+    reached = res.ok;
+  } catch {
+    reached = false;
+  }
 
   return Response.json(
-    { ok: true, reached: !error, ms: Math.round(performance.now() - started) },
+    { ok: true, reached, ms: Math.round(performance.now() - started) },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
