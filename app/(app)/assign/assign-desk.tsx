@@ -1,5 +1,7 @@
 "use client";
 
+import { contentLabel, isCallType } from "@/lib/call-type";
+
 import Link from "next/link";
 
 import { OfferCrossBadges } from "@/components/offer-cross-badges";
@@ -704,6 +706,19 @@ export function AssignDesk({
                     ) : (
                       <span className="text-[11.5px] italic text-ink-3">no interests</span>
                     )}
+                    {/* §47.5. What this lead is taken to be about when its
+                        lines name no content. Dashed and dimmer than a real
+                        chip, and carrying the word "(auto)", because it is a
+                        guess from the product text and the last note — a
+                        counsellor recording real content replaces it. */}
+                    {autoContent(r) ? (
+                      <span
+                        className="ml-1 rounded-full border border-dashed border-line-2 px-1.5 py-[1px] text-[11px] whitespace-nowrap text-ink-3"
+                        title="Worked out from the product text and the last call note"
+                      >
+                        {autoContent(r)}
+                      </span>
+                    ) : null}
                   </td>
                   <td className="px-1.5 py-[4px] whitespace-nowrap text-ink-2">
                     {r.term_name ?? "—"}
@@ -1044,3 +1059,16 @@ function Pager({
   );
 }
 
+/**
+ * The stand-in content for one row, or nothing (§47.5).
+ *
+ * top_content_priority is null exactly when no open interest line on the lead
+ * names a content, so it is the whole test for "was anything recorded" — and
+ * a lead that recorded something keeps it, which is the override the brief
+ * asks for.
+ */
+function autoContent(row: { top_content_priority: number | null; call_type?: string | null }) {
+  if (row.top_content_priority != null) return null;
+  const label = contentLabel(null, isCallType(row.call_type) ? row.call_type : null);
+  return label?.auto ? label.text : null;
+}

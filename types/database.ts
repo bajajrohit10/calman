@@ -358,6 +358,7 @@ export type Database = {
           archive_batch_id: string | null
           archived_at: string | null
           archived_by: string | null
+          call_type: string
           close_reason: Database["public"]["Enums"]["close_reason"] | null
           closed_at: string | null
           created_at: string
@@ -390,6 +391,7 @@ export type Database = {
           archive_batch_id?: string | null
           archived_at?: string | null
           archived_by?: string | null
+          call_type?: string
           close_reason?: Database["public"]["Enums"]["close_reason"] | null
           closed_at?: string | null
           created_at?: string
@@ -422,6 +424,7 @@ export type Database = {
           archive_batch_id?: string | null
           archived_at?: string | null
           archived_by?: string | null
+          call_type?: string
           close_reason?: Database["public"]["Enums"]["close_reason"] | null
           closed_at?: string | null
           created_at?: string
@@ -1464,6 +1467,7 @@ export type Database = {
           archive_batch_id: string | null
           archived_at: string | null
           archived_by: string | null
+          call_type: string | null
           close_reason: Database["public"]["Enums"]["close_reason"] | null
           closed_at: string | null
           created_at: string | null
@@ -1496,6 +1500,7 @@ export type Database = {
           archive_batch_id?: string | null
           archived_at?: string | null
           archived_by?: string | null
+          call_type?: string | null
           close_reason?: Database["public"]["Enums"]["close_reason"] | null
           closed_at?: string | null
           created_at?: string | null
@@ -1528,6 +1533,7 @@ export type Database = {
           archive_batch_id?: string | null
           archived_at?: string | null
           archived_by?: string | null
+          call_type?: string | null
           close_reason?: Database["public"]["Enums"]["close_reason"] | null
           closed_at?: string | null
           created_at?: string | null
@@ -2016,6 +2022,7 @@ export type Database = {
       }
       new_calls_facets: {
         Args: {
+          p_call_types?: string[]
           p_content_ids?: string[]
           p_course_id?: string
           p_created_from?: string
@@ -2036,6 +2043,7 @@ export type Database = {
       }
       new_calls_pool: {
         Args: {
+          p_call_types?: string[]
           p_content_ids?: string[]
           p_course_id?: string
           p_created_from?: string
@@ -2050,6 +2058,7 @@ export type Database = {
           p_term_id?: string
         }
         Returns: {
+          call_type: string
           created_at: string
           enquiry_id: number
           importance: Database["public"]["Enums"]["importance"]
@@ -2063,6 +2072,24 @@ export type Database = {
           teacher_names: string
           term_name: string
           total_count: number
+        }[]
+      }
+      new_calls_type_counts: {
+        Args: {
+          p_content_ids?: string[]
+          p_course_id?: string
+          p_created_from?: string
+          p_created_to?: string
+          p_importance?: Database["public"]["Enums"]["importance"][]
+          p_institute_id?: string
+          p_product_text?: string
+          p_source_ids?: string[]
+          p_teacher_ids?: string[]
+          p_term_id?: string
+        }
+        Returns: {
+          call_type: string
+          n: number
         }[]
       }
       next_working_day: { Args: { p_from?: string }; Returns: string }
@@ -2140,6 +2167,7 @@ export type Database = {
       recommended_calls: {
         Args: {
           p_assignment?: string
+          p_auto_contents?: string[]
           p_bucket?: string
           p_content_ids?: string[]
           p_counsellor_id?: string
@@ -2179,6 +2207,7 @@ export type Database = {
           assignment_label: string
           bucket: Database["public"]["Enums"]["assignment_bucket"]
           bucket_rank: number
+          call_type: string
           called_since: boolean
           created_at: string
           due_date: string
@@ -2213,6 +2242,7 @@ export type Database = {
       recommended_facets: {
         Args: {
           p_assignment?: string
+          p_auto_contents?: string[]
           p_bucket?: string
           p_content_ids?: string[]
           p_counsellor_id?: string

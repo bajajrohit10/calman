@@ -1,3 +1,5 @@
+import { parseCallTypes, type CallType } from "@/lib/call-type";
+
 
 /**
  * The New Calls filter bar, parsed once for the page and again for "take next
@@ -19,6 +21,8 @@ const str = (get: ParamReader, key: string) => {
 
 export type NewCallsArgs = {
   p_source_ids: string[] | undefined;
+  /** §47.5: Video / Books / Unknown, undefined for all three. */
+  p_call_types: string[] | undefined;
   p_course_id: string | undefined;
   p_teacher_ids: string[] | undefined;
   p_content_ids: string[] | undefined;
@@ -35,6 +39,7 @@ export function parseNewCallsParams(get: ParamReader): {
   sourceIds: string[];
   teacherIds: string[];
   contentIds: string[];
+  callTypes: CallType[];
   filters: NewCallsArgs;
 } {
   const page = Math.max(1, Number(str(get, "page") ?? 1) || 1);
@@ -49,6 +54,7 @@ export function parseNewCallsParams(get: ParamReader): {
   const sourceIds = many("source");
   const teacherIds = many("teacher");
   const contentIds = many("content");
+  const callTypes = parseCallTypes(str(get, "callType"));
 
   const opt = (v: string | null) => v ?? undefined;
 
@@ -57,8 +63,10 @@ export function parseNewCallsParams(get: ParamReader): {
     sourceIds,
     teacherIds,
     contentIds,
+    callTypes,
     filters: {
       p_source_ids: sourceIds.length ? sourceIds : undefined,
+      p_call_types: callTypes.length ? callTypes : undefined,
       p_course_id: opt(str(get, "course")),
       p_teacher_ids: teacherIds.length ? teacherIds : undefined,
       p_content_ids: contentIds.length ? contentIds : undefined,

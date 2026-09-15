@@ -1,3 +1,4 @@
+import { splitContentIds } from "@/lib/call-type";
 import "server-only";
 
 import { buildFacetMap, type FacetMap, type FacetRow } from "@/lib/facet-shape";
@@ -34,6 +35,7 @@ export async function loadDeskFacets(f: RecommendedFilters): Promise<Loaded> {
   const supabase = await createClient();
   const clean = <T>(v: T | null | undefined) => (v === null || v === "" ? undefined : v);
 
+  const content = splitContentIds(f.contentIds);
   const { data, error } = await supabase
     .rpc("recommended_facets", {
       p_date: clean(f.date),
@@ -42,7 +44,8 @@ export async function loadDeskFacets(f: RecommendedFilters): Promise<Loaded> {
       p_teacher_ids: f.teacherIds?.length ? f.teacherIds : undefined,
       p_course_id: clean(f.courseId),
       p_subject_id: clean(f.subjectId),
-      p_content_ids: f.contentIds?.length ? f.contentIds : undefined,
+      p_content_ids: content.real.length ? content.real : undefined,
+      p_auto_contents: content.auto.length ? content.auto : undefined,
       p_institute_id: clean(f.instituteId),
       p_institute_ids: f.instituteIds?.length ? f.instituteIds : undefined,
       p_stages: f.stages?.length ? f.stages : undefined,
@@ -82,6 +85,9 @@ export async function loadNewCallsFacets(args: NewCallsArgs): Promise<Loaded> {
       p_course_id: args.p_course_id,
       p_teacher_ids: args.p_teacher_ids,
       p_content_ids: args.p_content_ids,
+      // §47.5: the tabs narrow the list, so they must narrow the counts too —
+      // otherwise the two totals disagree and the bar hides itself.
+      p_call_types: args.p_call_types,
       p_institute_id: args.p_institute_id,
       p_importance: args.p_importance,
       p_term_id: args.p_term_id,

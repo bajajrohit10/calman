@@ -1,3 +1,4 @@
+import { splitContentIds } from "@/lib/call-type";
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
@@ -55,6 +56,8 @@ export type RecommendedRow = {
   offer_ids: string[] | null;
   /** Brief 23: an offer lead may be lost, and which kind decides the filter. */
   lost_reason: string | null;
+  /** §47.5: video | books | unknown, derived. Stands in for content when none. */
+  call_type: string | null;
   total_count: number;
 };
 
@@ -110,6 +113,8 @@ function args(f: RecommendedFilters): Args {
   // An empty multi-select widens the filter rather than emptying the list, so
   // it goes as undefined and the SQL default ("any") applies.
   const list = (v: string[] | null | undefined) => (v && v.length ? v : undefined);
+  // §47.5. One list on the screen, two parameters on the wire.
+  const content = splitContentIds(f.contentIds);
   return {
     p_date: clean(f.date),
     p_include_not_due: f.includeNotDue ?? false,
@@ -117,7 +122,8 @@ function args(f: RecommendedFilters): Args {
     p_teacher_ids: list(f.teacherIds),
     p_course_id: clean(f.courseId),
     p_subject_id: clean(f.subjectId),
-    p_content_ids: list(f.contentIds),
+    p_content_ids: list(content.real),
+    p_auto_contents: list(content.auto),
     p_institute_id: clean(f.instituteId),
     p_institute_ids: list(f.instituteIds),
     p_stages: f.stages?.length ? f.stages : undefined,

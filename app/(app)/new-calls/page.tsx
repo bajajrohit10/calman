@@ -1,3 +1,9 @@
+import {
+  CALL_TYPES,
+  CALL_TYPE_LABELS,
+  isCallType,
+  type CallType,
+} from "@/lib/call-type";
 import Link from "next/link";
 
 import { PageHeader } from "@/components/ui";
@@ -37,7 +43,8 @@ export default async function Page({
 }) {
   const viewer = await requireUser();
   const sp = await searchParams;
-  const { page, sourceIds, teacherIds, contentIds, filters } = parseNewCallsParams(read(sp));
+  const { page, sourceIds, teacherIds, contentIds, callTypes, filters } =
+    parseNewCallsParams(read(sp));
   // §33.6. Two pipelines, one pool. They share nothing but the question — who
   // is waiting and nobody has picked them up — so they are sub-tabs rather
   // than one list with a type column.
@@ -58,7 +65,11 @@ export default async function Page({
   } as any);
   const afterSaleRows = (afterSale.data ?? []) as unknown as AfterSaleRow[];
   const afterSaleTotal = afterSaleRows[0]?.total_count ?? 0;
-  const [list, facetResult] =
+  // §47.5. The tab counts describe the whole pool under the *other* filters,
+  // so picking a tab narrows the list without zeroing the two counts beside
+  // it. p_call_types is the one argument deliberately not passed on.
+  const { p_call_types: _chosen, ...countFilters } = filters;
+  const [list, facetResult, typeCounts] =
     await Promise.all([
       supabase.rpc("new_calls_pool", {
         ...filters,
@@ -67,7 +78,18 @@ export default async function Page({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any),
       loadNewCallsFacets(filters),
+      supabase.rpc("new_calls_type_counts", {
+        ...countFilters,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any),
     ]);
+
+  // The function returns a row only for a type that has leads, so the three
+  // are seeded at zero rather than read straight out of the result.
+  const byType: Record<CallType, number> = { video: 0, books: 0, unknown: 0 };
+  for (const row of (typeCounts.data ?? []) as { call_type: string; n: number }[]) {
+    if (isCallType(row.call_type)) byType[row.call_type] = Number(row.n ?? 0);
+  }
 
   const rows = (list.data ?? []) as unknown as PoolRow[];
   const search = new URLSearchParams(
@@ -93,6 +115,10 @@ export default async function Page({
         purchase={purchaseTotal}
         afterSale={afterSaleTotal}
       />
+
+      {pipeline === "purchase" ? (
+        <CallTypeTabs chosen={callTypes} counts={byType} search={search} />
+      ) : null}
 
       {pipeline === "after_sale" ? (
         <AfterSaleBoard
@@ -207,6 +233,73 @@ function NewCallsPipelineTabs({
         {pipeline === "after_sale"
           ? "Tickets never called, and open tickets whose number has come in again."
           : "Open leads nobody has called or claimed today."}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Video · Books · Unknown (§47.5).
+ *
+ * A filter, not a partition: the counts beside each name describe the pool
+ * under every *other* filter, so they stay put as tabs are picked and a
+ * counsellor can see where the work is before going there. Multi-select,
+ * because "Books and Unknown" is a real morning's work and forcing two passes
+ * over the same list to get it would be the wrong shape.
+ *
+ * Links rather than buttons, like every other filter on this screen, so a tab
+ * is shareable and the back button means what it says.
+ */
+function CallTypeTabs({
+  chosen,
+  counts,
+  search,
+}: {
+  chosen: CallType[];
+  counts: Record<CallType, number>;
+  search: string;
+}) {
+  const href = (key: CallType) => {
+    const params = new URLSearchParams(search);
+    // Clicking a chosen tab clears it, so the same control turns the filter
+    // off. With none chosen the parameter goes altogether and the list is
+    // everything, which is what "no tab selected" should mean.
+    const next = chosen.includes(key)
+      ? chosen.filter((c) => c !== key)
+      : [...chosen, key];
+    if (next.length) params.set("callType", next.join(","));
+    else params.delete("callType");
+    params.delete("page");
+    return `/new-calls?${params.toString()}`;
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+        Type
+      </span>
+      <div className="inline-flex overflow-hidden rounded-md border border-line-2">
+        {CALL_TYPES.map((key) => {
+          const on = chosen.includes(key);
+          return (
+            <Link
+              key={key}
+              href={href(key)}
+              aria-pressed={on}
+              className={
+                on
+                  ? "bg-accent px-3 py-1 text-[12.5px] font-medium text-accent-ink"
+                  : "bg-surface px-3 py-1 text-[12.5px] text-ink-2 hover:bg-surface-2"
+              }
+            >
+              {CALL_TYPE_LABELS[key]}
+              <span className="ml-1.5 tabular-nums opacity-80">{counts[key]}</span>
+            </Link>
+          );
+        })}
+      </div>
+      <span className="text-[11.5px] text-ink-3">
+        Worked out from the product text and the last call note.
       </span>
     </div>
   );

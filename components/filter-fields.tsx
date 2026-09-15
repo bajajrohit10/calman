@@ -1,5 +1,7 @@
 "use client";
 
+import { contentOptions } from "@/lib/call-type";
+
 import { useMemo } from "react";
 
 import { MultiSelect } from "@/components/multi-select";
@@ -171,6 +173,7 @@ export function CommonFilterFields({
    */
   noDetail?: boolean;
 }) {
+  const contentChoices = contentOptions(masters.contents, facets?.byFacet.content);
   const subjectsForCourse = useMemo(
     () =>
       selected.course
@@ -224,10 +227,16 @@ export function CommonFilterFields({
       </Labelled>
 
       <Labelled label="Content">
+        {/* §47.5. The real contents, then "Full (auto)" and "Books (auto)" for
+            leads whose lines carry none — one list, because picking either is
+            the same gesture, and the word "(auto)" is what says which. The
+            auto options appear only when something is behind them. */}
         <MultiSelect
           name="content"
           facet="content"
-          options={noDetail ? withNoDetail(masters.contents) : masters.contents}
+          options={
+            noDetail ? withNoDetail(contentChoices) : contentChoices
+          }
           values={multi?.content ?? []}
           facets={facets}
         />
