@@ -2193,6 +2193,7 @@ export type Database = {
           p_offer_statuses?: string[]
           p_offset?: number
           p_source_id?: string
+          p_source_ids?: string[]
           p_stages?: string[]
           p_status?: Database["public"]["Enums"]["enquiry_status"]
           p_subject_id?: string
@@ -2266,6 +2267,7 @@ export type Database = {
           p_offer_ids?: string[]
           p_offer_statuses?: string[]
           p_source_id?: string
+          p_source_ids?: string[]
           p_stages?: string[]
           p_status?: Database["public"]["Enums"]["enquiry_status"]
           p_subject_id?: string

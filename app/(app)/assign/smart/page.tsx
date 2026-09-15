@@ -85,6 +85,7 @@ export default async function Page({
           teachers: masters.teachers,
           institutes: masters.institutes,
           contents: masters.contents,
+          sources: masters.sources,
         }}
         backHref={backHref}
       />

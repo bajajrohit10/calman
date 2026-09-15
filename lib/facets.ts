@@ -45,6 +45,7 @@ export async function loadDeskFacets(f: RecommendedFilters): Promise<Loaded> {
       p_course_id: clean(f.courseId),
       p_subject_id: clean(f.subjectId),
       p_content_ids: content.real.length ? content.real : undefined,
+      p_source_ids: f.sourceIds?.length ? f.sourceIds : undefined,
       p_auto_contents: content.auto.length ? content.auto : undefined,
       p_institute_id: clean(f.instituteId),
       p_institute_ids: f.instituteIds?.length ? f.instituteIds : undefined,

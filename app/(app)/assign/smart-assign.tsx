@@ -38,6 +38,9 @@ const COLUMNS: Column[] = [
   { key: "importance", facet: "importance", label: "Importance" },
   { key: "teacher", facet: "teacher", label: "Teacher", searchable: true },
   { key: "institute", facet: "institute", label: "Institute", searchable: true },
+  // §47.6. Last, because it is the column a manager reaches for least often
+  // and the row is read left to right.
+  { key: "source", facet: "source", label: "Source" },
   { key: "lastCalledBy", facet: "last_called_by", label: "Last called by" },
 ];
 
@@ -73,7 +76,12 @@ export function SmartAssignPanel({
 }: {
   date: string;
   roster: Master[];
-  masters: { teachers: Master[]; institutes: Master[]; contents: Master[] };
+  masters: {
+    teachers: Master[];
+    institutes: Master[];
+    contents: Master[];
+    sources: Master[];
+  };
   /** §40.1: the desk, with the view somebody left still on it. */
   backHref: string;
 }) {
@@ -116,6 +124,15 @@ export function SmartAssignPanel({
 
       if (col.key === "content") {
         options = masters.contents.map((m) => ({
+          id: m.id,
+          label: m.name,
+          count: count(m.id),
+        }));
+      } else if (col.key === "source") {
+        // §47.6. Every source, in the master list's own order — there are a
+        // handful and they are a fixed vocabulary, so none of the top-ten
+        // folding the teacher and institute columns need.
+        options = masters.sources.map((m) => ({
           id: m.id,
           label: m.name,
           count: count(m.id),
@@ -218,6 +235,7 @@ export function SmartAssignPanel({
       importance: out.importance ?? [],
       teacher: out.teacher ?? [],
       institute: out.institute ?? [],
+      source: out.source ?? [],
       lastCalledBy: out.lastCalledBy ?? [],
     };
   }, [columns, cleared, date, campaign]);
@@ -350,7 +368,7 @@ export function SmartAssignPanel({
             the width a desk actually is. Below that they wrap rather than
             shrink past reading — three columns of legible options beat six of
             truncated ones. */}
-        <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 lg:grid-cols-3 xl:grid-cols-6">
+        <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 lg:grid-cols-4 xl:grid-cols-7">
           {columns.map((col) => {
             const gone = cleared[col.key] ?? new Set<string>();
             const allIds = col.options.map((o) => o.id);

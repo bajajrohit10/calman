@@ -69,6 +69,8 @@ export type RecommendedFilters = {
   courseId?: string | null;
   subjectId?: string | null;
   contentIds?: string[] | null;
+  /** §47.6: several at once, beside the desk's single sourceId. */
+  sourceIds?: string[] | null;
   instituteId?: string | null;
   /** Brief 34: institute as a column of options rather than one choice. */
   instituteIds?: string[] | null;
@@ -123,6 +125,7 @@ function args(f: RecommendedFilters): Args {
     p_course_id: clean(f.courseId),
     p_subject_id: clean(f.subjectId),
     p_content_ids: list(content.real),
+    p_source_ids: list(f.sourceIds),
     p_auto_contents: list(content.auto),
     p_institute_id: clean(f.instituteId),
     p_institute_ids: list(f.instituteIds),

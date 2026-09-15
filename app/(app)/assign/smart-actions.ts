@@ -29,6 +29,8 @@ export type SmartSelection = {
   importance: string[];
   teacher: string[];
   institute: string[];
+  /** §47.6. The seventh column: several sources at once, or none recorded. */
+  source: string[];
   lastCalledBy: string[];
 };
 
@@ -76,6 +78,7 @@ function toFilters(sel: SmartSelection, offered: Record<string, number>): Recomm
   const content = pick("content", sel.content);
   const teacher = pick("teacher", sel.teacher);
   const institute = pick("institute", sel.institute);
+  const source = pick("source", sel.source);
   const importance = pick("importance", sel.importance);
   const stage = pick("stage", sel.stage);
   const lastBy = pick("lastCalledBy", sel.lastCalledBy);
@@ -92,6 +95,7 @@ function toFilters(sel: SmartSelection, offered: Record<string, number>): Recomm
   const instituteIds = strip(institute, "institute");
   const contentIds = strip(content, "content");
   const importanceIds = strip(importance, "importance");
+  const sourceIds = strip(source, "source");
   const neverCalled = Boolean(lastBy?.includes("__never__"));
   const lastCalledBy = lastBy?.filter((v) => v !== "__never__") ?? null;
 
@@ -112,6 +116,7 @@ function toFilters(sel: SmartSelection, offered: Record<string, number>): Recomm
     importance: importanceIds,
     teacherIds,
     instituteIds,
+    sourceIds,
     lastCalledBy,
     neverCalled,
     noDetail: noDetail.length ? noDetail : null,
