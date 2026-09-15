@@ -136,7 +136,7 @@ export const OUTCOME_LABELS: Record<CallOutcome, string> = {
   purchased: "Purchased",
   competitor: "Went to a competitor",
   closed: "Wrong number",
-  noted: "Noted — still open",
+  noted: "Ticket, still open",
   working: "Working on it",
   escalated: "Escalated — to somebody",
   pending_institute: "Pending with the institute",
@@ -150,7 +150,7 @@ export const OUTCOME_SHORT: Record<CallOutcome, string> = {
   purchased: "Purchased",
   competitor: "Competitor",
   closed: "Wrong number",
-  noted: "Noted",
+  noted: "Ticket",
   working: "Working",
   escalated: "Escalated",
   pending_institute: "With institute",
@@ -279,3 +279,33 @@ export function offerStatusLabel(
   if (!key || key === "open") return null;
   return OFFER_STATUS_FILTER.find((o) => o.id === key)?.name ?? null;
 }
+
+/**
+ * Which follow-up is due next (§45.1).
+ *
+ * The screens used to show the counter itself — "0/3", "2 of 3" — which is a
+ * number about the past dressed as instruction. A counsellor picking up a lead
+ * wants to know which call they are about to make, and "0/3" is the one
+ * phrasing that does not say it: it reads as *none of three*, which is either
+ * "nothing to do" or "three to do" depending on who is reading.
+ *
+ * So the label names the next call. The three-slot rule itself is unchanged —
+ * this is what the same number is called.
+ *
+ * Reports keep the counter, because their columns count calls that were made;
+ * the Stage filter keeps its values, because those are a filter's vocabulary
+ * and renaming them would change what a saved link means.
+ */
+export function nextFollowUpLabel(
+  slotsUsed: number | null | undefined,
+  /** Null fresh_call_date means nobody has called this lead at all. */
+  everCalled = true,
+): string {
+  if (!everCalled) return "Fresh call";
+  const used = Math.max(0, slotsUsed ?? 0);
+  if (used >= 3) return "Many Follow-ups";
+  return ["1st Follow-up", "2nd Follow-up", "3rd Follow-up"][used];
+}
+
+/** The column header that used to say "Slots". */
+export const NEXT_FOLLOW_UP_HEADER = "Next follow-up";

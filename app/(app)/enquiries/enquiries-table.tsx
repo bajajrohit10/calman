@@ -25,6 +25,8 @@ import {
   cx,
 } from "@/components/ui";
 import {
+  nextFollowUpLabel,
+  NEXT_FOLLOW_UP_HEADER,
   CLOSE_REASON_LABELS,
   ENQUIRY_STATUS_LABELS,
   ENQUIRY_TYPE_LABELS,
@@ -46,7 +48,7 @@ const SORTABLE = [
   { key: "importance", label: "Imp" },
   { key: "next_follow_up_date", label: "Follow-up" },
   { key: "last_call_at", label: "Last call" },
-  { key: "slots", label: "Slots" },
+  { key: "slots", label: NEXT_FOLLOW_UP_HEADER },
 ] as const;
 
 /**
@@ -334,8 +336,16 @@ export function EnquiriesTable({
                       "never"
                     )}
                   </td>
-                  <td className="px-1.5 py-[5px] tabular-nums text-ink-3">
-                    {r.follow_up_slots_used}/3
+                  {/* §45.1. A ticket has no follow-up ladder, and naming one
+                      is worse than the "0/3" this replaced: that read as
+                      meaningless, this reads as an instruction. */}
+                  <td className="px-1.5 py-[5px] whitespace-nowrap text-ink-3">
+                    {r.type === "after_sale"
+                      ? "—"
+                      : nextFollowUpLabel(
+                          r.follow_up_slots_used,
+                          Boolean(r.fresh_call_date),
+                        )}
                   </td>
                   <td className="px-1.5 py-[5px] text-ink-2">{r.teacher_names ?? "—"}</td>
                   <td className="max-w-[260px] truncate px-1.5 py-[5px] text-ink-3">

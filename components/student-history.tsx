@@ -11,6 +11,7 @@ import { Badge, cx } from "@/components/ui";
 import { WhatsAppButton } from "@/components/whatsapp/button";
 import { stageOf } from "@/lib/whatsapp-text";
 import {
+  nextFollowUpLabel,
   BUCKET_LABELS,
   CLOSE_REASON_LABELS,
   ENQUIRY_STATUS_LABELS,
@@ -603,7 +604,10 @@ function NowCard({
                 off; this is the human sentence. */}
             {enquiry.type === "after_sale"
               ? "After-sale"
-              : `${enquiry.follow_up_slots_used} of 3 follow-ups`}
+              : nextFollowUpLabel(
+                  enquiry.follow_up_slots_used,
+                  Boolean(enquiry.fresh_call_date),
+                )}
           </Fact>
           <Fact label="Importance">
             {enquiry.importance ? IMPORTANCE_LABELS[enquiry.importance] : "—"}

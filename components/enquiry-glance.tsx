@@ -1,5 +1,7 @@
 import { Badge, cx } from "@/components/ui";
 import {
+  nextFollowUpLabel,
+  NEXT_FOLLOW_UP_HEADER,
   ENQUIRY_STATUS_LABELS,
   ENQUIRY_TYPE_LABELS,
   IMPORTANCE_LABELS,
@@ -36,6 +38,8 @@ export type EnquiryGlanceFields = {
   importance: Importance | null;
   leadVerification: LeadVerification | null;
   slotsUsed: number;
+  /** §45.1: nobody has called this lead at all, so the next call is the first. */
+  everCalled?: boolean;
   nextFollowUpDate: string | null;
   reEnquiredAt: string | null;
   createdAt: string;
@@ -96,7 +100,10 @@ export function EnquiryGlanceLine({ glance }: { glance: EnquiryGlanceFields }) {
             : "—"
         }
       />
-      <Fact label="Slots" value={`${glance.slotsUsed} of 3`} />
+      <Fact
+        label={NEXT_FOLLOW_UP_HEADER}
+        value={nextFollowUpLabel(glance.slotsUsed, glance.everCalled ?? true)}
+      />
       <Fact
         label="Next follow-up"
         value={glance.nextFollowUpDate ? formatDate(glance.nextFollowUpDate) : "—"}

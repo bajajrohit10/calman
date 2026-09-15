@@ -290,7 +290,7 @@ export function CallLogPanel({
   enquiry,
   masters,
   counsellorName,
-  roster,
+  escalatees,
   onSaved,
   onCancel,
 }: {
@@ -298,8 +298,8 @@ export function CallLogPanel({
   masters: PanelMasters;
   /** Fills {counsellor} in a WhatsApp template. */
   counsellorName?: string | null;
-  /** §44.2: who a ticket can be escalated to. */
-  roster?: { id: string; name: string }[];
+  /** §44.2/§45.3: who a ticket can be escalated to — every active user. */
+  escalatees?: { id: string; name: string }[];
   /**
    * The note carries the one thing the counsellor has to be told after the
    * panel closes: §23.5 can move a call onto a new enquiry, and a row
@@ -600,7 +600,7 @@ export function CallLogPanel({
     escalateeAsked,
     escalateeRef,
     masters,
-    roster,
+    escalatees,
   };
 
   function focusEscalatee() {
@@ -842,6 +842,9 @@ export function CallLogPanel({
             importance: enquiry.importance,
             leadVerification: enquiry.leadVerification,
             slotsUsed: enquiry.slotsUsed,
+            // §45.1: the glance is only drawn on a lead with history, but the
+            // timeline is the honest source for "has anybody called this".
+            everCalled: enquiry.timeline.some((c) => c.sameEnquiry),
             nextFollowUpDate: enquiry.nextFollowUpDate,
             reEnquiredAt: enquiry.reEnquiredAt,
             createdAt: enquiry.createdAt,
@@ -1941,7 +1944,7 @@ export type TicketFieldsProps = {
   escalateeAsked: boolean;
   escalateeRef: React.Ref<HTMLSelectElement>;
   masters: PanelMasters;
-  roster?: { id: string; name: string }[];
+  escalatees?: { id: string; name: string }[];
 };
 
 function TicketFields({
@@ -1962,7 +1965,7 @@ function TicketFields({
   escalateeAsked,
   escalateeRef,
   masters,
-  roster,
+  escalatees,
 }: TicketFieldsProps) {
   if (!asAfterSale) return null;
   return (
@@ -2057,7 +2060,7 @@ function TicketFields({
             onChange={(e) => setEscalatedTo(e.target.value)}
           >
             <option value="">Choose…</option>
-            {(roster ?? []).map((r) => (
+            {(escalatees ?? []).map((r) => (
               <option key={r.id} value={r.id}>
                 {r.name}
               </option>

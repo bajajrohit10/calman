@@ -59,6 +59,7 @@ export function TicketsBoard({
   counts,
   counsellorName,
   roster,
+  escalatees,
   institutes,
   masters,
   selected,
@@ -80,6 +81,8 @@ export function TicketsBoard({
   counts: Record<TicketTabKey, number>;
   counsellorName: string | null;
   roster: { id: string; name: string }[];
+  /** §45.3: every active user, for the escalate-to pickers. */
+  escalatees: { id: string; name: string }[];
   /** §44.4: the Institute filter reads the master list, not the tickets. */
   institutes: { id: string; name: string }[];
   masters: PanelMasters;
@@ -326,7 +329,7 @@ export function TicketsBoard({
             enquiry={open}
             masters={masters}
             counsellorName={counsellorName}
-            roster={roster}
+            escalatees={escalatees}
             onSaved={() => {
               setOpen(null);
               router.refresh();
@@ -344,7 +347,7 @@ export function TicketsBoard({
           sort={sort}
           dir={dir}
           hrefFor={(col, nextDir) => withParam({ sort: col, dir: nextDir, page: "" })}
-          roster={roster}
+          escalatees={escalatees}
         />
 
       </div>

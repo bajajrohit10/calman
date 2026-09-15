@@ -22,6 +22,8 @@ import {
 import { Badge, Button, ErrorNote, ImportanceMark, Input, Select, cx } from "@/components/ui";
 import type { FacetMap } from "@/lib/facet-shape";
 import {
+  nextFollowUpLabel,
+  NEXT_FOLLOW_UP_HEADER,
   BUCKET_LABELS,
   ENQUIRY_STATUS_LABELS,
   type AssignmentBucket,
@@ -596,7 +598,7 @@ export function AssignDesk({
                 <th className="px-1.5 py-[6px]">Interests</th>
                 <th className="w-[80px] px-1.5 py-[6px]">Term</th>
                 <th className="w-[95px] px-1.5 py-[6px]">Follow-up</th>
-                <th className="w-[60px] px-1.5 py-[6px]">Slots</th>
+                <th className="w-[92px] px-1.5 py-[6px]">{NEXT_FOLLOW_UP_HEADER}</th>
                 <th className="px-1.5 py-[6px]">Assigned to</th>
               </tr>
             </thead>
@@ -714,8 +716,8 @@ export function AssignDesk({
                   >
                     {r.next_follow_up_date ? formatDate(r.next_follow_up_date) : "—"}
                   </td>
-                  <td className="px-1.5 py-[4px] tabular-nums text-ink-2">
-                    {r.follow_up_slots_used}/3
+                  <td className="px-1.5 py-[4px] whitespace-nowrap text-ink-2">
+                    {nextFollowUpLabel(r.follow_up_slots_used, Boolean(r.last_outcome))}
                   </td>
                   <td className="px-1.5 py-[4px] whitespace-nowrap text-ink-2">
                     {r.assigned_to_name ?? "—"}

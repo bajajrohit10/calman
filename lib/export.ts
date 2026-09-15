@@ -29,7 +29,7 @@ export const EXPORT_COLUMNS = [
   { key: "amount_total", label: "Amount" },
   { key: "next_follow_up_date", label: "Next follow-up" },
   { key: "fresh_call_date", label: "Fresh call" },
-  { key: "follow_up_slots_used", label: "Slots used" },
+  { key: "follow_up_slots_used", label: "Next follow-up" },
   { key: "last_call_at", label: "Last call at" },
   { key: "last_outcome", label: "Last outcome" },
   { key: "last_discussion", label: "Last note" },

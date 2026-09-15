@@ -22,6 +22,7 @@ import {
   cx,
 } from "@/components/ui";
 import {
+  nextFollowUpLabel,
   ENQUIRY_STATUS_LABELS,
   OFFER_STATUS_FILTER,
   OUTCOME_SHORT,
@@ -97,6 +98,7 @@ export function MyDay({
   roster,
   overdue,
   overdueDismissed,
+  escalatees,
   offerCalls,
   masters,
 }: {
@@ -119,6 +121,8 @@ export function MyDay({
   counsellorId: string;
   roster: { id: string; name: string }[];
   overdue: RecommendedRow[];
+  /** §45.3: every active user, for the escalate-to pickers. */
+  escalatees: { id: string; name: string }[];
   /** §42.4: which of today's leads was already rung under a live offer. */
   offerCalls?: Record<number, { offerName: string; calledOn: string }>;
   overdueDismissed: boolean;
@@ -243,7 +247,10 @@ export function MyDay({
         all,
         ...SLOT_SUB_TABS.map((slot) => ({
           key: `slot:${slot}`,
-          label: `${slot}/3`,
+          // §45.1. The rung named by the call it is asking for. The sub-tab
+          // groups by slots_at_open, so "1st Follow-up" is the tab holding the
+          // leads whose first follow-up is what today wants from them.
+          label: nextFollowUpLabel(slot),
           sub: { kind: "slot" as const, slot },
           ...count({ kind: "slot", slot }),
         })),
@@ -544,8 +551,9 @@ export function MyDay({
                     </span>
                   )}
 
-                  <span className="text-[12px] tabular-nums text-ink-3">
-                    {r.follow_up_slots_used}/3
+                  {/* §45.1. The call about to be made, not the count behind it. */}
+                  <span className="text-[12px] text-ink-3">
+                    {nextFollowUpLabel(r.follow_up_slots_used, Boolean(r.last_outcome))}
                   </span>
                   <span className="ml-auto">
                     <Button
@@ -585,6 +593,12 @@ export function MyDay({
           <input type="hidden" name="tab" value={tab} />
           <input type="hidden" name="view" value={view} />
           <input type="hidden" name="sub" value={formatSubTab(subTab)} />
+          {/* §45.2. The date picker is a GET form, so anything it does not
+              carry is lost on a reload. The ticket sub-tab and the
+              Pending-with-me toggle were both being dropped — you changed the
+              day and landed back on somebody else's Open queue. */}
+          <input type="hidden" name="ticket" value={ticketTab} />
+          <input type="hidden" name="owner" value={ticketOwner} />
           <label className="flex flex-col gap-[3px]">
             <span className={FIELD_LABEL}>Date</span>
             <Input type="date" name="date" defaultValue={date} className="w-[150px]" />
@@ -747,7 +761,7 @@ export function MyDay({
           <span className="text-[11.5px] text-ink-3">
             {tab === "offer"
               ? "pending / total per offer"
-              : "pending / total by follow-ups used at the start of the day"}
+              : "pending / total, by the follow-up each lead was due at the start of the day"}
           </span>
         </div>
       ) : null}
@@ -779,30 +793,41 @@ export function MyDay({
               </button>
             ))}
           </div>
-          <label className="flex items-center gap-1.5 text-[12px] text-ink-3">
-            Whose
-            <Select
-              aria-label="Whose tickets"
-              className="w-[170px]"
-              value={ticketOwner}
-              onChange={(e) => setTicketOwner(e.target.value as TicketOwner)}
-            >
-              <option value={TICKET_OWNER_ALL}>Everyone</option>
-              <option value={TICKET_OWNER_MINE}>Mine</option>
-              {isAdmin
-                ? roster.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))
-                : null}
-            </Select>
-          </label>
+          {/* §45.2. Two answers, not a dropdown of people. The question a
+              counsellor opens this tab with is "what is on me", and that was
+              three clicks into a select whose default was everybody else's
+              work as well. The per-person choice belonged to an admin auditing
+              somebody, which is what the Tickets screen's own filters are for. */}
+          <div className="inline-flex overflow-hidden rounded-md border border-line-2">
+            {(
+              [
+                { id: TICKET_OWNER_MINE, label: "Pending with me" },
+                { id: TICKET_OWNER_ALL, label: "Total list" },
+              ] as const
+            ).map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                aria-pressed={ticketOwner === o.id}
+                onClick={() => setTicketOwner(o.id)}
+                className={cx(
+                  "px-3 py-1 text-[12.5px] transition-colors",
+                  ticketOwner === o.id
+                    ? "bg-accent font-medium text-accent-ink"
+                    : "bg-surface text-ink-2 hover:bg-surface-2",
+                )}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
           <span className="text-[11.5px] leading-relaxed text-ink-3">
             {ticketTab === "resolved"
               ? `Resolved on ${formatDate(date)}.`
               : "Every unresolved ticket, whatever the date — they carry themselves forward until somebody closes them."}
-            {ticketOwner === TICKET_OWNER_MINE ? " Raised by you, or last spoken on by you." : ""}
+            {ticketOwner === TICKET_OWNER_MINE
+              ? " Raised by you, last spoken on by you, or escalated to you."
+              : " Every ticket in the company."}
           </span>
         </div>
       ) : (
@@ -888,7 +913,7 @@ export function MyDay({
             enquiry={open}
             masters={masters}
             counsellorName={counsellorName}
-            roster={roster}
+            escalatees={escalatees}
             onSaved={afterSave}
             onCancel={closeOpen}
           />
@@ -899,7 +924,7 @@ export function MyDay({
         <div className="flex min-w-0 flex-1 flex-col gap-4">
           {tab === "tickets" ? (
             <TicketTable
-              roster={roster}
+              escalatees={escalatees}
               rows={visibleTickets}
               openId={open?.id ?? null}
               onOpen={(row) => {

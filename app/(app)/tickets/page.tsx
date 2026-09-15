@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import type { EnquiryStatus, IssueCategory } from "@/lib/enquiry-labels";
+import { loadEscalatees } from "@/lib/escalatees";
 import { loadMasters } from "@/lib/masters";
 import { istToday } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
@@ -42,6 +43,8 @@ export default async function Page({
   const supabase = await createClient();
 
   const masters = await loadMasters();
+  // §45.3: every active user, whatever their role.
+  const escalatees = await loadEscalatees();
   const [list, staff, counts] = await Promise.all([
     supabase.rpc("tickets_list", {
       p_status:
@@ -130,6 +133,7 @@ export default async function Page({
         }}
         counsellorName={viewer.profile?.full_name ?? null}
         date={on}
+        escalatees={escalatees}
         institutes={masters.institutes}
         roster={(staff.data ?? []).map((p) => ({
           id: p.id,

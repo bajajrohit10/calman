@@ -4,6 +4,8 @@ import { dayAfter, istDatePlus, istToday } from "@/lib/format";
 import { loadMasters } from "@/lib/masters";
 import { logServerTiming } from "@/lib/server-timing";
 import { loadMyDay } from "@/lib/my-day";
+import { loadEscalatees } from "@/lib/escalatees";
+import { TICKET_OWNER_MINE } from "@/lib/ticket-tabs";
 import { loadOfferCallBadges } from "@/lib/offer-badges";
 import { loadTeamDay } from "@/lib/my-day-team";
 import { parseTicketTab } from "@/lib/ticket-tabs";
@@ -123,6 +125,9 @@ export default async function Page({
   // so this is one round trip whose answer is pure decoration — if it fails
   // the rows are still right, they simply say less.
   const offerCalls = await loadOfferCallBadges(day.rows.map((r) => r.enquiry_id));
+  // §45.3. Not the admin-only roster above: the escalate-to picker is on every
+  // counsellor's ticket rows, and for them that list was empty.
+  const escalatees = await loadEscalatees();
 
   // One line per render, so the phase breakdown is in the server log.
   logServerTiming("/my-day");
@@ -139,7 +144,9 @@ export default async function Page({
         initialView={one(sp.view) === "done" ? "done" : "pending"}
         initialSubTab={parseSubTab(one(sp.sub))}
         initialTicketTab={parseTicketTab(one(sp.ticket))}
-        initialTicketOwner={one(sp.owner) ?? "all"}
+        // §45.2: "Pending with me" is the default — what a counsellor opens
+        // this tab to find out.
+        initialTicketOwner={one(sp.owner) ?? TICKET_OWNER_MINE}
         nextWorkingDay={(nextWorkingDay.data as string | null) ?? null}
         viewerId={viewer.userId ?? null}
         isAdmin={admin}
@@ -151,6 +158,7 @@ export default async function Page({
         }))}
         overdue={overdue.rows.filter((r) => r.is_overdue)}
         overdueDismissed={Boolean(dismissal.data)}
+        escalatees={escalatees}
         offerCalls={offerCalls}
         masters={{
           teachers: masters.teachers,

@@ -67,7 +67,7 @@ export function TicketTable({
   sort,
   dir,
   hrefFor,
-  roster,
+  escalatees,
   empty = "No tickets match these filters.",
 }: {
   rows: TicketTableRow[];
@@ -77,8 +77,8 @@ export function TicketTable({
   sort?: string;
   dir?: "asc" | "desc";
   hrefFor?: (col: string, nextDir: "asc" | "desc") => string;
-  /** §44b.1: pass the roster to make the Status column a control. */
-  roster?: { id: string; name: string }[];
+  /** §44b.1/§45.3: pass the escalatees to make the Status column a control. */
+  escalatees?: { id: string; name: string }[];
   empty?: string;
 }) {
   const sortable = Boolean(hrefFor && sort && dir);
@@ -159,11 +159,11 @@ export function TicketTable({
                   to answer "what state is this in", which is the question the
                   column exists for. */}
               <td className="px-1.5 py-[5px]">
-                {roster ? (
+                {escalatees ? (
                   <TicketStatusControl
                     enquiryId={r.enquiry_id}
                     status={r.status}
-                    roster={roster}
+                    escalatees={escalatees}
                   />
                 ) : (
                   <Badge

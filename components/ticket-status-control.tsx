@@ -21,12 +21,12 @@ import { TICKET_STATES, type EnquiryStatus, type TicketState } from "@/lib/enqui
 export function TicketStatusControl({
   enquiryId,
   status,
-  roster,
+  escalatees,
   onDone,
 }: {
   enquiryId: number;
   status: EnquiryStatus;
-  roster: { id: string; name: string }[];
+  escalatees: { id: string; name: string }[];
   onDone?: () => void;
 }) {
   const router = useRouter();
@@ -58,9 +58,17 @@ export function TicketStatusControl({
   }
 
   function choose(next: string) {
-    if (!next || next === status) return;
+    if (!next) return;
     const state = next as TicketState;
-    if (state === "escalated" || state === "closed") {
+    // Escalated is the one state worth re-picking while already in it: handing
+    // a ticket from one person to another is a real move, and the event log
+    // records it as one. Every other state is a no-op when it is where you are.
+    if (state === "escalated") {
+      setAsking(state);
+      return;
+    }
+    if (state === status) return;
+    if (state === "closed") {
       setAsking(state);
       return;
     }
@@ -97,7 +105,7 @@ export function TicketStatusControl({
             onChange={(e) => setWho(e.target.value)}
           >
             <option value="">Who…</option>
-            {roster.map((r) => (
+            {escalatees.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.name}
               </option>
