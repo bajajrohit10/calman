@@ -124,7 +124,10 @@ export default async function Page({
   // §42.4. The day's rows, asked once. A counsellor's day is tens of leads,
   // so this is one round trip whose answer is pure decoration — if it fails
   // the rows are still right, they simply say less.
-  const offerCalls = await loadOfferCallBadges(day.rows.map((r) => r.enquiry_id));
+  // §46.1, as on the desk: no offer running, no badge to draw, no round trip.
+  const offerCalls = day.offerTabs.length
+    ? await loadOfferCallBadges(day.rows.map((r) => r.enquiry_id))
+    : {};
   // §45.3. Not the admin-only roster above: the escalate-to picker is on every
   // counsellor's ticket rows, and for them that list was empty.
   const escalatees = await loadEscalatees();

@@ -50,12 +50,17 @@ export default async function Page({
 
   const supabase = await createClient();
 
-  const masters = await loadMasters();
+  // §46.1. The masters were a serial stage of their own before the five
+  // parallel reads below. They are cached for a minute and usually cheap, but
+  // "usually cheap" in front of everything else is still in front of
+  // everything else, and they depend on none of it.
+  //
   // The facet counts are a second query over the same scope, issued alongside
   // the list rather than after it, so the page waits for the slower of the two
   // and not for their sum.
-  const [list, facetResult, counts, staff, offers] =
+  const [masters, list, facetResult, counts, staff, offers] =
     await Promise.all([
+      loadMasters(),
       loadRecommended(filters),
       loadDeskFacets(filters),
       // §36.1: the three headline figures, under whatever filters are set.
@@ -96,9 +101,16 @@ export default async function Page({
     done: doneCounts[p.id]?.numbers ?? 0,
   }));
 
-  // §42.4. Asked for the rows on screen, after the list is known — fifty ids,
-  // one round trip, and a badge that cannot be drawn is simply not drawn.
-  const offerCalls = await loadOfferCallBadges(list.rows.map((r) => r.enquiry_id));
+  // §42.4. Asked for the rows on screen, after the list is known — it needs
+  // their ids, so it cannot join the batch above.
+  //
+  // §46.1: skipped outright when no offer is running. The badge names an
+  // offer whose window is still open; with none open it can never draw, and a
+  // round trip that can only return nothing is a round trip the desk waits
+  // for on most days of the year.
+  const offerCalls = offers.length
+    ? await loadOfferCallBadges(list.rows.map((r) => r.enquiry_id))
+    : {};
 
   // One line per render, so the phase breakdown is in the server log.
   logServerTiming("/assign");
