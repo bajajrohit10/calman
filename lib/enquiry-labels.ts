@@ -318,3 +318,36 @@ export function nextFollowUpLabel(
 
 /** The column header that used to say "Slots". */
 export const NEXT_FOLLOW_UP_HEADER = "Next follow-up";
+
+/**
+ * The evening call-back list, split by how far down the ladder the call back
+ * was (§47.4).
+ *
+ * One pile of "Evening call backs" was hiding three different jobs. A student
+ * who did not pick up their very first call is a stranger; one who has not
+ * picked up twice already is a decision about whether to keep going. The
+ * counsellor working the list at six o'clock is doing different work in each
+ * case, and the label they get on My Day should say which.
+ *
+ * Keyed by the stage the desk already derives, so this is a naming of
+ * something that existed rather than a new axis: fu3 is absent because §4.3
+ * loses a lead on its third missed follow-up, so there is never a fourth rung
+ * to hand out. The slot rule is untouched by any of this.
+ *
+ * The label doubles as the campaign label stamped on the assignment, which is
+ * what makes My Day group the three the same way — so these strings are what a
+ * counsellor reads on both screens, and changing one changes both.
+ */
+export const EVENING_SUB_TABS = [
+  { stage: "fresh_call_back", label: "Call back – Fresh" },
+  { stage: "fu1", label: "Call back – 1st follow-up" },
+  { stage: "fu2", label: "Call back – 2nd follow-up" },
+] as const;
+
+export type EveningSubTab = (typeof EVENING_SUB_TABS)[number]["stage"];
+
+/** The campaign label for one evening sub-tab, or null if it is not one. */
+export function eveningLabelFor(stages: string[]): string | null {
+  if (stages.length !== 1) return null;
+  return EVENING_SUB_TABS.find((t) => t.stage === stages[0])?.label ?? null;
+}

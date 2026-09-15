@@ -1,5 +1,7 @@
 "use client";
 
+import { EVENING_SUB_TABS, eveningLabelFor } from "@/lib/enquiry-labels";
+
 import { contentLabel, isCallType } from "@/lib/call-type";
 
 import Link from "next/link";
@@ -80,7 +82,18 @@ const BUCKET_EDGE: Record<AssignmentBucket, string> = {
   campaign: "var(--ink-3)",
 };
 
-const PRESETS: { id: string; label: string; query: (date: string) => string }[] = [
+const PRESETS: {
+  id: string;
+  label: string;
+  /**
+   * §47.4. What an assignment made from this preset is stamped as, when it
+   * differs from the button. The button answers "what am I about to look at";
+   * the label answers "what is this pile on my day" — and "PLI issued today"
+   * read on tomorrow's My Day is a date that is no longer true.
+   */
+  campaignLabel?: string;
+  query: (date: string) => string;
+}[] = [
   {
     id: "evening",
     label: "Evening call backs",
@@ -123,6 +136,7 @@ const PRESETS: { id: string; label: string; query: (date: string) => string }[] 
     // issued, and "who did I promise a price list to today" is the follow-up.
     id: "pli",
     label: "PLI issued today",
+    campaignLabel: "PLI calls",
     query: (date) =>
       new URLSearchParams({
         date,
@@ -242,11 +256,22 @@ export function AssignDesk({
   // this view its name is the obvious answer, so it is filled in; otherwise the
   // admin names it. Keyed on the preset so switching preset re-seeds it rather
   // than leaving yesterday's name in the box.
-  const presetLabel = PRESETS.find((x) => x.id === preset)?.label ?? "";
+  const stages = multi?.stage ?? [];
+  const found = PRESETS.find((x) => x.id === preset);
+  // §47.4. An evening sub-tab names itself; otherwise the preset does.
+  const presetLabel =
+    (preset === "evening" ? eveningLabelFor(stages) : null) ??
+    found?.campaignLabel ??
+    found?.label ??
+    "";
   const [label, setLabel] = useState(presetLabel);
-  const [labelKey, setLabelKey] = useState(preset);
-  if (labelKey !== preset) {
-    setLabelKey(preset);
+  // Re-seeded when the sub-tab changes as well as the preset, so moving
+  // between rungs does not carry the previous rung's name onto the next
+  // batch — which would file two different piles under one heading.
+  const labelSeed = `${preset}:${stages.join(",")}`;
+  const [labelKey, setLabelKey] = useState(labelSeed);
+  if (labelKey !== labelSeed) {
+    setLabelKey(labelSeed);
     setLabel(presetLabel);
   }
 
@@ -380,6 +405,60 @@ export function AssignDesk({
           </span>
         </div>
       </div>
+
+      {/* §47.4. The evening list, split by how far down the ladder the missed
+          call was. Counts come from the stage facet, so they describe the
+          board under whatever else is filtered rather than a second reading of
+          the day. Picking one also names the batch: the sub-tab's label is the
+          campaign label stamped on the assignment, which is what makes My Day
+          group the three the same way the desk shows them. */}
+      {preset === "evening" ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+            Call back at
+          </span>
+          <div className="inline-flex overflow-hidden rounded-md border border-line-2">
+            {EVENING_SUB_TABS.map((t) => {
+              const on = stages.length === 1 && stages[0] === t.stage;
+              const params = new URLSearchParams(search);
+              // The same control turns the sub-tab off, so the whole evening
+              // list is one click back from any rung of it.
+              if (on) params.delete("stage");
+              else params.set("stage", t.stage);
+              params.delete("page");
+              const n = facets?.byFacet.stage?.[t.stage]?.numbers;
+              return (
+                <Link
+                  key={t.stage}
+                  href={`/assign?${params.toString()}`}
+                  aria-pressed={on}
+                  className={
+                    on
+                      ? "bg-accent px-3 py-1 text-[12.5px] font-medium text-accent-ink"
+                      : "bg-surface px-3 py-1 text-[12.5px] text-ink-2 hover:bg-surface-2"
+                  }
+                >
+                  {t.label}
+                  {n == null ? null : (
+                    <span className="ml-1.5 tabular-nums opacity-80">{n}</span>
+                  )}
+                </Link>
+              );
+            })}
+            {/* §47.4 lists PLI beside the three. It is a different preset, not
+                a stage, so it leaves rather than filters. */}
+            <Link
+              href={`/assign?${PRESETS.find((x) => x.id === "pli")!.query(date)}`}
+              className="bg-surface px-3 py-1 text-[12.5px] text-ink-2 hover:bg-surface-2"
+            >
+              PLI calls
+            </Link>
+          </div>
+          <span className="text-[11.5px] text-ink-3">
+            Third-rung call backs are not here: §4.3 has already lost them.
+          </span>
+        </div>
+      ) : null}
 
     <div className="flex flex-col gap-4 xl:flex-row">
       {/* ------------------------------- left ------------------------------- */}
