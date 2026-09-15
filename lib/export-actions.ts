@@ -16,6 +16,31 @@ import {
 import { loadAllMatching } from "@/lib/recommended";
 import { CALL_REPORT_COLUMNS, loadCallReport } from "@/lib/reports";
 import { loadOffers, loadOfferTargetNames } from "@/lib/offers";
+import { ISSUE_CATEGORY_LABELS, ticketStateLabel } from "@/lib/enquiry-labels";
+import { TICKET_EXPORT_COLUMNS, TICKET_TABS } from "@/lib/ticket-tabs";
+import { createClient } from "@/lib/supabase/server";
+import type { EnquiryStatus, IssueCategory } from "@/lib/enquiry-labels";
+
+/** The shape tickets_list returns, narrowed to what the export prints. */
+type TicketExportRow = {
+  student_name: string | null;
+  mobile: string;
+  order_id: string | null;
+  institute_name: string | null;
+  teacher_name: string | null;
+  issue_category: IssueCategory | null;
+  status: EnquiryStatus;
+  escalated_to_name: string | null;
+  created_at: string;
+  open_days: number | null;
+  reminder_date: string | null;
+  is_overdue: boolean;
+  last_call_at: string | null;
+  last_caller_name: string | null;
+};
+
+/** One screenful is fifty; an export is the set. Capped like the others. */
+const EXPORT_CAP = 5000;
 import {
   describeTargets,
   offerWindowFrom,
@@ -66,7 +91,9 @@ export async function exportCurrentView(
         subTabName?: string | null;
       }
     | { source: "report"; from: string; to: string; counsellorId: string | null }
-    | { source: "offers" },
+    | { source: "offers" }
+    /** §44b.2: the ticket queue, as the sub-tab and filters currently cut it. */
+    | { source: "tickets"; search: string; state: string; date: string },
 ): Promise<ExportResult> {
   const viewer = await requireUser();
   if (!viewer.profile) return { error: "Your account is not active." };
@@ -119,6 +146,75 @@ export async function exportCurrentView(
         },
       ],
       filename: `calman-report-${input.from}-to-${input.to}`,
+    };
+  }
+
+  /**
+   * §44b.2. The ticket queue.
+   *
+   * Re-run rather than handed the rows the screen drew: the export has to be
+   * the whole filtered set, not the fifty on the page, and re-deriving it from
+   * the same query string with the same function is what keeps "export what I
+   * am looking at" honest.
+   */
+  if (input.source === "tickets") {
+    const params = new URLSearchParams(input.search);
+    const one = (k: string) => params.get(k) || null;
+    const supabase = await createClient();
+    const tab = TICKET_TABS.find((t) => t.key === input.state);
+    const statusParam = one("status");
+
+    const { data, error } = await supabase.rpc("tickets_list", {
+      p_status:
+        input.state === "resolved"
+          ? undefined
+          : ((statusParam ?? tab?.status) as never),
+      p_resolved_on: input.state === "resolved" ? input.date : undefined,
+      p_counsellor_id: one("counsellor") ?? undefined,
+      p_issue_category: (one("issue") ?? undefined) as never,
+      p_escalated_to: one("escalatedTo") ?? undefined,
+      p_institute_id: one("institute") ?? undefined,
+      p_open_since: one("openSince") ? Number(one("openSince")) : undefined,
+      p_due: one("due") ?? undefined,
+      p_due_within: one("due") === "within" ? 7 : undefined,
+      p_from: one("from") ?? undefined,
+      p_to: one("to") ?? undefined,
+      p_sort: one("sort") ?? "reminder",
+      p_dir: one("dir") ?? "asc",
+      p_as_of: input.date,
+      p_limit: EXPORT_CAP,
+      p_offset: 0,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+
+    if (error) return { error: error.message };
+    const list = (data ?? []) as unknown as TicketExportRow[];
+    if (!list.length) return { error: "There are no tickets in this view to export." };
+
+    return {
+      error: null,
+      rows: list.map((t) => ({
+        student_name: t.student_name ?? "",
+        mobile: t.mobile,
+        order_id: t.order_id ?? "",
+        institute_name: t.institute_name ?? "",
+        teacher_name: t.teacher_name ?? "",
+        issue_category: t.issue_category
+          ? ISSUE_CATEGORY_LABELS[t.issue_category]
+          : "",
+        status: ticketStateLabel(t.status),
+        escalated_to_name: t.escalated_to_name ?? "",
+        opened: `${t.created_at.slice(0, 10)}${
+          t.open_days == null ? "" : ` (${t.open_days} days)`
+        }`,
+        due: `${t.reminder_date ?? ""}${t.is_overdue ? " — overdue" : ""}`,
+        last_call_at: t.last_call_at ? t.last_call_at.slice(0, 10) : "",
+        last_caller_name: t.last_caller_name ?? "",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      })) as any,
+      columns: TICKET_EXPORT_COLUMNS.map((c) => ({ key: c.key as string, label: c.label })),
+      sheetName: "Tickets",
+      filename: `calman-tickets-${input.state}-${input.date}`,
     };
   }
 

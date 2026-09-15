@@ -65,3 +65,25 @@ export const MY_TICKET_STATES: EnquiryStatus[] = ["open", "working"];
 
 export const TICKET_OWNER_ALL = "all";
 export const TICKET_OWNER_MINE = "mine";
+
+/**
+ * §44b.2. The eleven columns the Tickets screen shows, in its order.
+ *
+ * Here rather than in lib/export.ts because that file is the enquiry export's
+ * column set and this is a different row shape entirely — a ticket, not an
+ * enquiry with items flattened onto it.
+ */
+export const TICKET_EXPORT_COLUMNS = [
+  { key: "student_name", label: "Student" },
+  { key: "mobile", label: "Mobile" },
+  { key: "order_id", label: "Order ID" },
+  { key: "institute_name", label: "Institute" },
+  { key: "teacher_name", label: "Teacher" },
+  { key: "issue_category", label: "Issue" },
+  { key: "status", label: "Status" },
+  { key: "escalated_to_name", label: "Escalated to" },
+  { key: "opened", label: "Opened" },
+  { key: "due", label: "Due" },
+  { key: "last_call_at", label: "Last call" },
+  { key: "last_caller_name", label: "Last called by" },
+] as const;

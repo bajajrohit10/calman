@@ -2267,6 +2267,24 @@ export type Database = {
         Returns: undefined
       }
       supersede_enquiry: { Args: { p_enquiry_id: number }; Returns: undefined }
+      ticket_summary: {
+        Args: {
+          p_counsellor_id?: string
+          p_from: string
+          p_grain?: string
+          p_to: string
+        }
+        Returns: {
+          avg_days_to_resolve: number
+          escalated: number
+          grain_key: string
+          is_total: boolean
+          label: string
+          opened: number
+          pending_institute: number
+          resolved: number
+        }[]
+      }
       tickets_counts: {
         Args: { p_date?: string; p_mine_for?: string }
         Returns: {

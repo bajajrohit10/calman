@@ -15,6 +15,7 @@ import {
   type EnquiryStatus,
   type IssueCategory,
 } from "@/lib/enquiry-labels";
+import { ExportButton } from "@/components/export-button";
 import { TICKET_TABS, type TicketTabKey } from "@/lib/ticket-tabs";
 
 export type TicketRow = {
@@ -53,6 +54,7 @@ export function TicketsBoard({
   dir,
   search,
   state,
+  date,
   on,
   counts,
   counsellorName,
@@ -71,6 +73,8 @@ export function TicketsBoard({
   search: string;
   /** §33.3: which of the three the queue is being read in. */
   state: TicketTabKey;
+  /** §44b.2: the day the Resolved tab is bound to, carried into the export. */
+  date: string;
   /** The day Resolved is counted and listed for. */
   on: string;
   counts: Record<TicketTabKey, number>;
@@ -297,8 +301,11 @@ export function TicketsBoard({
           >
             Clear
           </Link>
-          <span className="ml-auto text-[12px] text-ink-3">
+          <span className="ml-auto flex items-center gap-2 text-[12px] text-ink-3">
             {total} ticket{total === 1 ? "" : "s"}
+            {/* §44b.2. Beside the count, because what it exports is what the
+                count counts: this sub-tab under these filters, not the page. */}
+            <ExportButton source="tickets" state={state} date={date} />
           </span>
         </div>
       </form>
@@ -337,6 +344,7 @@ export function TicketsBoard({
           sort={sort}
           dir={dir}
           hrefFor={(col, nextDir) => withParam({ sort: col, dir: nextDir, page: "" })}
+          roster={roster}
         />
 
       </div>

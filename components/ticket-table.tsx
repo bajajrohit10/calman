@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { StudentLink } from "@/components/student-link";
+import { TicketStatusControl } from "@/components/ticket-status-control";
 
 import { Badge, cx } from "@/components/ui";
 import {
@@ -66,6 +67,7 @@ export function TicketTable({
   sort,
   dir,
   hrefFor,
+  roster,
   empty = "No tickets match these filters.",
 }: {
   rows: TicketTableRow[];
@@ -75,6 +77,8 @@ export function TicketTable({
   sort?: string;
   dir?: "asc" | "desc";
   hrefFor?: (col: string, nextDir: "asc" | "desc") => string;
+  /** §44b.1: pass the roster to make the Status column a control. */
+  roster?: { id: string; name: string }[];
   empty?: string;
 }) {
   const sortable = Boolean(hrefFor && sort && dir);
@@ -150,21 +154,33 @@ export function TicketTable({
               <td className="px-1.5 py-[5px] text-ink-2">
                 {r.issue_category ? ISSUE_CATEGORY_LABELS[r.issue_category] : "—"}
               </td>
+              {/* §44b.1. The badge says where it is; the control moves it.
+                  Both, because a dropdown alone makes you read an option list
+                  to answer "what state is this in", which is the question the
+                  column exists for. */}
               <td className="px-1.5 py-[5px]">
-                <Badge
-                  dot
-                  tone={
-                    r.status === "escalated"
-                      ? "accent"
-                      : r.status === "closed"
-                        ? "neutral"
-                        : r.status === "pending_institute"
-                          ? "warn"
-                          : "info"
-                  }
-                >
-                  {ticketStateLabel(r.status)}
-                </Badge>
+                {roster ? (
+                  <TicketStatusControl
+                    enquiryId={r.enquiry_id}
+                    status={r.status}
+                    roster={roster}
+                  />
+                ) : (
+                  <Badge
+                    dot
+                    tone={
+                      r.status === "escalated"
+                        ? "accent"
+                        : r.status === "closed"
+                          ? "neutral"
+                          : r.status === "pending_institute"
+                            ? "warn"
+                            : "info"
+                    }
+                  >
+                    {ticketStateLabel(r.status)}
+                  </Badge>
+                )}
               </td>
               {/* §44.4. Highlighted when set, because a ticket on somebody
                   else's desk is the one row on this screen you do not act on

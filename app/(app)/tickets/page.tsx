@@ -129,6 +129,7 @@ export default async function Page({
           resolved: tallies.resolved_count,
         }}
         counsellorName={viewer.profile?.full_name ?? null}
+        date={on}
         institutes={masters.institutes}
         roster={(staff.data ?? []).map((p) => ({
           id: p.id,

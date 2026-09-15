@@ -45,3 +45,33 @@ export async function loadCallReport(
   if (error) return { rows: [], error };
   return { rows, error: null, truncated };
 }
+
+/** §44b.3. One row per day or per counsellor of the ticket numbers. */
+export type TicketSummaryRow = {
+  grain_key: string;
+  label: string;
+  opened: number;
+  resolved: number;
+  escalated: number;
+  pending_institute: number;
+  avg_days_to_resolve: number | null;
+  is_total: boolean;
+};
+
+export async function loadTicketSummary(
+  from: string,
+  to: string,
+  counsellorId: string | null,
+  grain: ReportGrain,
+): Promise<{ rows: TicketSummaryRow[]; error: string | null }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("ticket_summary", {
+    p_from: from,
+    p_to: to,
+    p_counsellor_id: counsellorId ?? undefined,
+    p_grain: grain,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any);
+  if (error) return { rows: [], error: error.message };
+  return { rows: (data ?? []) as unknown as TicketSummaryRow[], error: null };
+}

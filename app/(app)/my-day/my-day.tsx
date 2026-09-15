@@ -899,6 +899,7 @@ export function MyDay({
         <div className="flex min-w-0 flex-1 flex-col gap-4">
           {tab === "tickets" ? (
             <TicketTable
+              roster={roster}
               rows={visibleTickets}
               openId={open?.id ?? null}
               onOpen={(row) => {

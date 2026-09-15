@@ -19,7 +19,9 @@ type Source =
       subTabName?: string | null;
     }
   | { source: "report"; from: string; to: string; counsellorId: string | null }
-  | { source: "offers" };
+  | { source: "offers" }
+  /** §44b.2: the queue as the sub-tab and the filters currently cut it. */
+  | { source: "tickets"; state: string; date: string };
 
 /**
  * Builds the file in the browser.
@@ -69,7 +71,16 @@ export function ExportButton(props: Source & { className?: string }) {
               }
             : props.source === "offers"
               ? { source: "offers" as const }
-              : props.source === "desk"
+              : props.source === "tickets"
+                ? {
+                    source: "tickets" as const,
+                    state: props.state,
+                    date: props.date,
+                    // The filters live in the URL, so the export re-derives
+                    // them from the same string the screen rendered with.
+                    search: window.location.search,
+                  }
+                : props.source === "desk"
                 ? { source: "desk" as const, search: window.location.search }
                 : { source: "enquiries" as const, search: window.location.search };
 

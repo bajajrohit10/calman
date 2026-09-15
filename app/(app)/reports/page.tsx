@@ -1,7 +1,7 @@
 import { PageHeader } from "@/components/ui";
 import { isAdmin, requireUser } from "@/lib/auth";
 import { istToday, istWeekStart } from "@/lib/format";
-import { loadCallReport } from "@/lib/reports";
+import { loadCallReport, loadTicketSummary } from "@/lib/reports";
 import { createClient } from "@/lib/supabase/server";
 
 import { ReportsView } from "./reports-view";
@@ -31,9 +31,13 @@ export default async function Page({
   const counsellorId = admin ? one(sp.counsellor) : viewer.userId!;
 
   const supabase = await createClient();
-  const [byDay, byCounsellor, staff] = await Promise.all([
+  const [byDay, byCounsellor, ticketsByDay, ticketsByCounsellor, staff] =
+    await Promise.all([
     loadCallReport(from, to, counsellorId, "day"),
     loadCallReport(from, to, counsellorId, "counsellor"),
+    // §44b.3. Two cuts of the same numbers, like the tables above them.
+    loadTicketSummary(from, to, counsellorId, "day"),
+    loadTicketSummary(from, to, counsellorId, "counsellor"),
     admin
       ? supabase
           .from("profiles")
@@ -52,6 +56,8 @@ export default async function Page({
       <ReportsView
         byDay={byDay.rows}
         byCounsellor={byCounsellor.rows}
+        ticketsByDay={ticketsByDay.rows}
+        ticketsByCounsellor={ticketsByCounsellor.rows}
         error={byDay.error ?? byCounsellor.error}
         from={from}
         to={to}

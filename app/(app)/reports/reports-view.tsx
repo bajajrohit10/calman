@@ -11,6 +11,7 @@ import {
   formatReportCell,
   type CallReportRow,
 } from "@/lib/report-shape";
+import type { TicketSummaryRow } from "@/lib/reports";
 
 /**
  * §5.8. Two tables, one column layout: the same range cut by day and by
@@ -179,6 +180,8 @@ function ReportTable({
 export function ReportsView({
   byDay,
   byCounsellor,
+  ticketsByDay,
+  ticketsByCounsellor,
   error,
   from,
   to,
@@ -188,6 +191,9 @@ export function ReportsView({
 }: {
   byDay: CallReportRow[];
   byCounsellor: CallReportRow[];
+  /** §44b.3: the ticket numbers, cut the same two ways. */
+  ticketsByDay: TicketSummaryRow[];
+  ticketsByCounsellor: TicketSummaryRow[];
   error: string | null;
   from: string;
   to: string;
@@ -299,6 +305,33 @@ export function ReportsView({
         emptyNote="Nobody active in this range."
       />
 
+      {/* §44b.3. Under the call tables, not beside them: a ticket is not a
+          call cut a different way, it is a different object with a life of its
+          own, and the two sets of numbers do not add up to anything together. */}
+      <section className="flex flex-col gap-3">
+        <h2 className="text-[13px] font-semibold text-ink">Tickets</h2>
+        <TicketSummaryTable
+          caption="By day"
+          firstHeader="Date"
+          rows={ticketsByDay}
+        />
+        <TicketSummaryTable
+          caption="By counsellor"
+          firstHeader="Counsellor"
+          rows={ticketsByCounsellor}
+        />
+        <p className="text-[11.5px] leading-relaxed text-ink-3">
+          <strong>Opened</strong> counts tickets raised in the range, against
+          whoever raised them. <strong>Resolved</strong>,{" "}
+          <strong>Escalated</strong> and <strong>Pending with institute</strong>{" "}
+          count the moves that happened in the range, against whoever made them —
+          not tickets sitting in that state now, which would make a date range
+          mean nothing. <strong>Avg days to resolve</strong> is Opened → Resolved
+          on the tickets resolved in the range, whenever they were opened; the
+          total is averaged over the tickets, not over the rows.
+        </p>
+      </section>
+
       <p className="text-[11.5px] leading-relaxed text-ink-3">
         A call is counted once in <strong>Calls by type</strong> and once in{" "}
         <strong>Calls by outcome</strong>, so the two totals always match. Type is
@@ -313,5 +346,76 @@ export function ReportsView({
         them. PLI issued counts leads re-graded to A by a person, excluding imports.
       </p>
     </div>
+  );
+}
+
+/** §44b.3. Six columns, a totals row, and the same shape as the tables above. */
+function TicketSummaryTable({
+  caption,
+  firstHeader,
+  rows,
+}: {
+  caption: string;
+  firstHeader: string;
+  rows: TicketSummaryRow[];
+}) {
+  const body = rows.filter((r) => !r.is_total);
+  const total = rows.find((r) => r.is_total) ?? null;
+
+  return (
+    <section>
+      <h3 className="mb-1.5 text-[12.5px] font-semibold text-ink">{caption}</h3>
+      <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
+        <table className="w-full min-w-[620px] border-collapse text-[11.5px]">
+          <thead>
+            <tr className="border-b border-line-2 bg-surface-2 text-left text-[9.5px] font-semibold uppercase text-ink-3">
+              <th className="px-1 py-[6px] whitespace-nowrap">{firstHeader}</th>
+              <th className="px-1 py-[6px] text-right">Opened</th>
+              <th className="px-1 py-[6px] text-right">Resolved</th>
+              <th className="px-1 py-[6px] text-right">Escalated</th>
+              <th className="px-1 py-[6px] text-right">Pending with institute</th>
+              <th className="px-1 py-[6px] text-right">Avg days to resolve</th>
+            </tr>
+          </thead>
+          <tbody>
+            {body.map((r) => (
+              <tr key={r.grain_key} className="border-b border-line last:border-b-0">
+                <td className="px-1 py-[4px] whitespace-nowrap text-ink">{r.label}</td>
+                <td className="px-1 py-[4px] text-right tabular-nums text-ink-2">{r.opened}</td>
+                <td className="px-1 py-[4px] text-right tabular-nums text-ink-2">{r.resolved}</td>
+                <td className="px-1 py-[4px] text-right tabular-nums text-ink-2">{r.escalated}</td>
+                <td className="px-1 py-[4px] text-right tabular-nums text-ink-2">
+                  {r.pending_institute}
+                </td>
+                <td className="px-1 py-[4px] text-right tabular-nums text-ink-2">
+                  {r.avg_days_to_resolve ?? "—"}
+                </td>
+              </tr>
+            ))}
+            {body.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-3 py-6 text-center text-ink-3">
+                  No tickets in this range.
+                </td>
+              </tr>
+            ) : null}
+            {total ? (
+              <tr className="border-t border-line-2 bg-surface-2 font-medium">
+                <td className="px-1 py-[5px] text-ink">Total</td>
+                <td className="px-1 py-[5px] text-right tabular-nums text-ink">{total.opened}</td>
+                <td className="px-1 py-[5px] text-right tabular-nums text-ink">{total.resolved}</td>
+                <td className="px-1 py-[5px] text-right tabular-nums text-ink">{total.escalated}</td>
+                <td className="px-1 py-[5px] text-right tabular-nums text-ink">
+                  {total.pending_institute}
+                </td>
+                <td className="px-1 py-[5px] text-right tabular-nums text-ink">
+                  {total.avg_days_to_resolve ?? "—"}
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
