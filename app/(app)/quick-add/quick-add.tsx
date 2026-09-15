@@ -34,11 +34,14 @@ export type QuickAddMasters = PanelMasters & {
 export function QuickAdd({
   masters,
   counsellorName,
+  escalatees,
   viewerId,
   viewerIsAdmin,
 }: {
   masters: QuickAddMasters;
   counsellorName: string | null;
+  /** §45.3: every active user, for the escalate-to picker on a new ticket. */
+  escalatees: { id: string; name: string }[];
   /** §29.4: who is looking, so a call row in the history knows if it is theirs. */
   viewerId: string | null;
   viewerIsAdmin: boolean;
@@ -84,6 +87,7 @@ export function QuickAdd({
           enquiry={logging.enquiry}
           masters={masters}
           counsellorName={counsellorName}
+          escalatees={escalatees}
           onSaved={close}
           onCancel={close}
         />

@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { PageHeader } from "@/components/ui";
+import { loadEscalatees } from "@/lib/escalatees";
 import { requireUser } from "@/lib/auth";
 import { facetsAgreeWithList, loadNewCallsFacets } from "@/lib/facets";
 import { loadMasters } from "@/lib/masters";
@@ -45,6 +46,8 @@ export default async function Page({
   const supabase = await createClient();
 
   const masters = await loadMasters();
+  // §45.3: every active user, for the escalate-to picker in the call window.
+  const escalatees = await loadEscalatees();
 
   // Both totals on every render: the sub-tabs carry counts, and a count that
   // only appears once you are on the tab is no use for deciding to go there.
@@ -93,6 +96,7 @@ export default async function Page({
 
       {pipeline === "after_sale" ? (
         <AfterSaleBoard
+          escalatees={escalatees}
           rows={afterSaleRows}
           total={afterSaleTotal}
           error={afterSale.error?.message ?? null}

@@ -53,12 +53,15 @@ export function AfterSaleBoard({
   error,
   masters,
   counsellorName,
+  escalatees,
 }: {
   rows: AfterSaleRow[];
   total: number;
   error: string | null;
   masters: PanelMasters;
   counsellorName: string | null;
+  /** §45.3: every active user, for the escalate-to picker. */
+  escalatees: { id: string; name: string }[];
 }) {
   const [open, setOpen] = useState<PanelPayload | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -94,6 +97,7 @@ export function AfterSaleBoard({
           enquiry={open}
           masters={masters}
           counsellorName={counsellorName}
+          escalatees={escalatees}
           onSaved={() => {
             setOpen(null);
             // The row has been called, so it leaves this queue; the server

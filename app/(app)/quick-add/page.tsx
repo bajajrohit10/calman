@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/ui";
 import { isAdmin, requireUser } from "@/lib/auth";
+import { loadEscalatees } from "@/lib/escalatees";
 import { loadMasters } from "@/lib/masters";
 
 import { QuickAdd } from "./quick-add";
@@ -9,6 +10,7 @@ export const metadata = { title: "Quick Add · Calman" };
 export default async function Page() {
   const viewer = await requireUser();
   const masters = await loadMasters();
+  const escalatees = await loadEscalatees();
 
   return (
     <div className="flex flex-col gap-5">
@@ -18,6 +20,7 @@ export default async function Page() {
       />
       <QuickAdd
         masters={masters}
+        escalatees={escalatees}
         counsellorName={viewer.profile?.full_name ?? null}
         viewerId={viewer.userId ?? null}
         viewerIsAdmin={isAdmin(viewer.profile?.role ?? "counsellor")}

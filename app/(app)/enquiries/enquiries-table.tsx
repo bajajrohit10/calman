@@ -69,6 +69,7 @@ export function EnquiriesTable({
   search,
   counsellorName,
   roster,
+  escalatees,
   masters,
   multi,
   panelMasters,
@@ -85,6 +86,8 @@ export function EnquiriesTable({
   search: string;
   counsellorName: string | null;
   roster: { id: string; name: string }[];
+  /** §45.3: every active user, for the escalate-to picker. */
+  escalatees: { id: string; name: string }[];
   masters: FilterMasters;
   /** Teacher and Content are multi-select (§12.1). */
   multi?: Record<string, string[]>;
@@ -237,6 +240,7 @@ export function EnquiriesTable({
             ← Back to the list
           </button>
           <CallLogPanel
+            escalatees={escalatees}
             enquiry={open}
             masters={panelMasters}
             counsellorName={counsellorName}

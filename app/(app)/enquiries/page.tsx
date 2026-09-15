@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/ui";
+import { loadEscalatees } from "@/lib/escalatees";
 import { requireUser } from "@/lib/auth";
 import { loadEnquiries } from "@/lib/enquiries";
 import { loadMasters } from "@/lib/masters";
@@ -48,6 +49,8 @@ export default async function Page({
   const supabase = await createClient();
 
   const masters = await loadMasters();
+  // §45.3: every active user, for the escalate-to picker in the call window.
+  const escalatees = await loadEscalatees();
   const [list, staff] =
     await Promise.all([
       loadEnquiries(filters),
@@ -68,6 +71,7 @@ export default async function Page({
         description="Every enquiry in Calman, however it ended."
       />
       <EnquiriesTable
+        escalatees={escalatees}
         rows={list.rows}
         total={list.total}
         includeArchived={includeArchived}

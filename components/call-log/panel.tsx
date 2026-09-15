@@ -298,8 +298,15 @@ export function CallLogPanel({
   masters: PanelMasters;
   /** Fills {counsellor} in a WhatsApp template. */
   counsellorName?: string | null;
-  /** §44.2/§45.3: who a ticket can be escalated to — every active user. */
-  escalatees?: { id: string; name: string }[];
+  /**
+   * §44.2/§45.3: who a ticket can be escalated to — every active user.
+   *
+   * Required, not optional. It was optional, and three of the five screens
+   * that render this panel simply never passed it: the picker rendered with
+   * nothing in it and no way to tell that was a bug rather than an empty
+   * company. A missing list is now a compile error.
+   */
+  escalatees: { id: string; name: string }[];
   /**
    * The note carries the one thing the counsellor has to be told after the
    * panel closes: §23.5 can move a call onto a new enquiry, and a row
@@ -1944,7 +1951,7 @@ export type TicketFieldsProps = {
   escalateeAsked: boolean;
   escalateeRef: React.Ref<HTMLSelectElement>;
   masters: PanelMasters;
-  escalatees?: { id: string; name: string }[];
+  escalatees: { id: string; name: string }[];
 };
 
 function TicketFields({
@@ -2060,7 +2067,7 @@ function TicketFields({
             onChange={(e) => setEscalatedTo(e.target.value)}
           >
             <option value="">Choose…</option>
-            {(escalatees ?? []).map((r) => (
+            {escalatees.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.name}
               </option>
