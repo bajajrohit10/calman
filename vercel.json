@@ -1,4 +1,15 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "regions": ["bom1"]
+  "regions": ["bom1"],
+  "fluid": true,
+  "crons": [
+    {
+      "path": "/api/warm",
+      "schedule": "*/5 3-14 * * 1-6"
+    },
+    {
+      "path": "/api/warm",
+      "schedule": "0 15 * * 1-6"
+    }
+  ]
 }
