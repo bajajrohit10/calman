@@ -1,5 +1,6 @@
 import "server-only";
 
+import { nextFollowUpLabel } from "@/lib/enquiry-labels";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -75,5 +76,29 @@ export async function loadExportRows(
     out.push(...((data ?? []) as unknown as ExportRow[]));
   }
 
-  return { rows: out, error: null };
+  return { rows: out.map(withFollowUpLabel), error: null };
+}
+
+/**
+ * §45.1, finished. The column header says "Next follow-up"; the cell used to
+ * hold the raw counter, so the sheet read "Next follow-up: 0" — which is the
+ * exact ambiguity the rename was about, preserved in the one place somebody
+ * reads away from the app and cannot ask.
+ *
+ * The label is computed here rather than in SQL so the spreadsheet and the
+ * screens cannot drift: there is one function that decides what a slot count
+ * is called, and this is it. A ticket has no ladder, so its cell is blank.
+ */
+function withFollowUpLabel(row: ExportRow): ExportRow {
+  const used = row.follow_up_slots_used;
+  return {
+    ...row,
+    follow_up_slots_used:
+      row.type === "after_sale"
+        ? ""
+        : nextFollowUpLabel(
+            typeof used === "number" ? used : Number(used ?? 0),
+            Boolean(row.fresh_call_date),
+          ),
+  };
 }
