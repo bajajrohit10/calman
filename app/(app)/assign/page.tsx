@@ -35,7 +35,6 @@ export default async function Page({
 }: {
   searchParams: Promise<Params>;
 }) {
-  await requireAdminProfile();
   const sp = await searchParams;
 
   const { date, page, includeNotDue, filters } = parseDeskParams(read(sp));
@@ -58,21 +57,36 @@ export default async function Page({
   // The facet counts are a second query over the same scope, issued alongside
   // the list rather than after it, so the page waits for the slower of the two
   // and not for their sum.
-  const [masters, list, facetResult, counts, staff, offers] =
-    await Promise.all([
-      loadMasters(),
-      loadRecommended(filters),
-      loadDeskFacets(filters),
-      // §36.1: the three headline figures, under whatever filters are set.
-      loadAssignmentCounts(filters),
-      supabase
-        .from("profiles")
-        .select("id, full_name, role")
-        .eq("is_active", true)
-        .neq("role", "ticket_team")
-        .order("full_name"),
-      loadOfferOptions(),
-    ]);
+  const batch = Promise.all([
+    loadMasters(),
+    loadRecommended(filters),
+    loadDeskFacets(filters),
+    // §36.1: the three headline figures, under whatever filters are set.
+    loadAssignmentCounts(filters),
+    supabase
+      .from("profiles")
+      .select("id, full_name, role")
+      .eq("is_active", true)
+      .neq("role", "ticket_team")
+      .order("full_name"),
+    loadOfferOptions(),
+  ]);
+
+  // §46.1. The admin check is a gate, not an input: unlike My Day or Tickets,
+  // nothing above is scoped by who is asking, so waiting for the answer before
+  // issuing any of it buys nothing. It runs alongside instead, and still
+  // decides whether any of this is rendered.
+  //
+  // Issuing the reads before the check is not a hole. Every one of them goes
+  // through the viewer's own session, so RLS — not this line — is what decides
+  // what comes back; a counsellor who types /assign gets their own permissions
+  // applied and is then redirected to My Day without seeing a row. The catch
+  // is for exactly that visitor: redirect() throws, and a batch nobody awaits
+  // afterwards would surface as an unhandled rejection.
+  batch.catch(() => {});
+  await requireAdminProfile();
+
+  const [masters, list, facetResult, counts, staff, offers] = await batch;
 
   // Counted per counsellor by the database. Fetching the day's assignment rows
   // and tallying them in JS was wrong above a thousand rows on a busy day, and
