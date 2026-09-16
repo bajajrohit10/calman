@@ -33,7 +33,7 @@ import {
   type AssignmentBucket,
   offerStatusLabel,
 } from "@/lib/enquiry-labels";
-import { formatDate } from "@/lib/format";
+import { formatArrived, formatDate } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
 import type { RecommendedRow } from "@/lib/recommended";
 
@@ -808,7 +808,19 @@ export function AssignDesk({
                       r.is_overdue ? "text-danger" : "text-ink-2",
                     )}
                   >
-                    {r.next_follow_up_date ? formatDate(r.next_follow_up_date) : "—"}
+                    {/* §48.1. A fresh row has no follow-up date, so the
+                        column showed a dash for exactly the rows a manager
+                        most wants dated. It now carries what the list orders
+                        those rows by: when the lead came in, to the minute. */}
+                    {r.next_follow_up_date ? (
+                      formatDate(r.next_follow_up_date)
+                    ) : r.bucket === "fresh" ? (
+                      <span className="text-ink-3" title="Arrived">
+                        {formatArrived(r.arrived_at)}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td className="px-1.5 py-[4px] whitespace-nowrap text-ink-2">
                     {nextFollowUpLabel(r.follow_up_slots_used, Boolean(r.last_outcome))}

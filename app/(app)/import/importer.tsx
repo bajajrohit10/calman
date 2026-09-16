@@ -1,5 +1,7 @@
 "use client";
 
+import { parseArrivedAt } from "@/lib/arrived-at";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
@@ -41,6 +43,10 @@ const FIELDS = [
   { key: "term", label: "Term", required: false },
   { key: "importance", label: "Importance", required: false },
   { key: "lead_verification", label: "Lead verification", required: false },
+  // §48.2. Optional, and when absent the enquiry keeps arrived_at null and
+  // falls back to created_at — which is the honest reading of a file that
+  // never said when its leads came in.
+  { key: "arrived_at", label: "Arrived / Created time", required: false },
 ] as const;
 
 type FieldKey = (typeof FIELDS)[number]["key"];
@@ -75,6 +81,8 @@ type ReviewRow = {
   name: string | null;
   sourceId: string | null;
   productText: string | null;
+  /** §48.2: parsed from the mapped column, null when absent or unreadable. */
+  arrivedAt: string | null;
   termId: string | null;
   importance: Importance | null;
   leadVerification: LeadVerification | null;
@@ -149,6 +157,7 @@ export function Importer({ masters }: { masters: ImportMasters }) {
     name: null,
     source: null,
     product_text: null,
+    arrived_at: null,
     term: null,
     importance: null,
     lead_verification: null,
@@ -239,6 +248,12 @@ export function Importer({ masters }: { masters: ImportMasters }) {
           if (f.key === "mobile") return /mobile|phone|number|contact/.test(n);
           if (f.key === "product_text") return /product|item|course name|title/.test(n);
           if (f.key === "lead_verification") return /verif|proof/.test(n);
+          // Shopify calls it "Created at"; hand-kept sheets say "Date" or
+          // "Arrived". "paid at"/"updated at" are deliberately not matched:
+          // they are different instants and guessing one for the other would
+          // be worse than leaving the column unmapped.
+          if (f.key === "arrived_at")
+            return /arriv|created at|created_at|entry time|date ?\/? ?time|^date$|timestamp/.test(n);
           return n.includes(f.key.replace("_", " ")) || n === f.key;
         });
         guess[f.key] = hit ?? null;
@@ -313,6 +328,9 @@ export function Importer({ masters }: { masters: ImportMasters }) {
             ? (p.raw[mapping.product_text] ?? "").trim() || null
             : null,
           termId: term.value,
+          arrivedAt: mapping.arrived_at
+            ? parseArrivedAt(p.raw[mapping.arrived_at])
+            : null,
           importance: importance.value,
           leadVerification: lead.value,
           unmatched: [source, term, importance, lead]
@@ -422,6 +440,7 @@ export function Importer({ masters }: { masters: ImportMasters }) {
           name: r.name,
           sourceId: r.sourceId,
           productText: r.productText,
+          arrivedAt: r.arrivedAt,
           termId: r.termId,
           importance: r.importance,
           leadVerification: r.leadVerification,

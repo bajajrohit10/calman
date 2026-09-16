@@ -36,6 +36,30 @@ export function formatDateTime(value: string | null | undefined): string {
   }).format(new Date(value));
 }
 
+/**
+ * "16 Sept 10:42" from a timestamptz — when a lead arrived (§48.1).
+ *
+ * Its own format rather than formatDateTime because this one goes in a column,
+ * many rows deep, and has to be scannable at a glance: no year, because a
+ * pipeline is worked in days and the year is the same on every row, and a
+ * 24-hour clock, because "10:42" and "22:42" line up and "10:42 am" and
+ * "10:42 pm" do not.
+ */
+export function formatArrived(value: string | null | undefined): string {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: IST,
+  })
+    .format(new Date(value))
+    // en-IN gives "16 Sep, 10:42"; the comma is noise in a narrow column.
+    .replace(",", "");
+}
+
 /** "4:20 pm" from a timestamptz — for times the reader already knows the day of. */
 export function formatTime(value: string | null | undefined): string {
   if (!value) return "—";

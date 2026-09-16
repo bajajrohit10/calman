@@ -30,6 +30,8 @@ export type EnquiryRow = {
   fresh_call_date: string | null;
   follow_up_slots_used: number;
   created_at: string;
+  /** §48.1: the real arrival — arrived_at when recorded, else created_at. */
+  arrived_at: string | null;
   closed_at: string | null;
   item_count: number;
   teacher_names: string | null;

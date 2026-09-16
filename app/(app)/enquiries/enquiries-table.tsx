@@ -35,7 +35,7 @@ import {
   statusTone,
 } from "@/lib/enquiry-labels";
 import type { EnquiryRow } from "@/lib/enquiries";
-import { formatDate } from "@/lib/format";
+import { formatArrived, formatDate } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
 
 /** Sortable columns, and the label each header shows. */
@@ -290,7 +290,7 @@ export function EnquiriesTable({
                   )}
                 >
                   <td className="px-1.5 py-[5px] whitespace-nowrap text-ink-3">
-                    {formatDate(r.created_at)}
+                    {formatArrived(r.arrived_at ?? r.created_at)}
                   </td>
                   <td className="px-1.5 py-[5px] text-ink">{r.student_name || "No name"}</td>
                   <td className="px-1.5 py-[5px]">

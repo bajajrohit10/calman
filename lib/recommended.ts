@@ -58,6 +58,8 @@ export type RecommendedRow = {
   lost_reason: string | null;
   /** §47.5: video | books | unknown, derived. Stands in for content when none. */
   call_type: string | null;
+  /** §48.1: the real arrival — arrived_at when recorded, else created_at. */
+  arrived_at: string | null;
   total_count: number;
 };
 

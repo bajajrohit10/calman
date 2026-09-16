@@ -358,6 +358,7 @@ export type Database = {
           archive_batch_id: string | null
           archived_at: string | null
           archived_by: string | null
+          arrived_at: string | null
           call_type: string
           close_reason: Database["public"]["Enums"]["close_reason"] | null
           closed_at: string | null
@@ -391,6 +392,7 @@ export type Database = {
           archive_batch_id?: string | null
           archived_at?: string | null
           archived_by?: string | null
+          arrived_at?: string | null
           call_type?: string
           close_reason?: Database["public"]["Enums"]["close_reason"] | null
           closed_at?: string | null
@@ -424,6 +426,7 @@ export type Database = {
           archive_batch_id?: string | null
           archived_at?: string | null
           archived_by?: string | null
+          arrived_at?: string | null
           call_type?: string
           close_reason?: Database["public"]["Enums"]["close_reason"] | null
           closed_at?: string | null
@@ -1467,6 +1470,7 @@ export type Database = {
           archive_batch_id: string | null
           archived_at: string | null
           archived_by: string | null
+          arrived_at: string | null
           call_type: string | null
           close_reason: Database["public"]["Enums"]["close_reason"] | null
           closed_at: string | null
@@ -1500,6 +1504,7 @@ export type Database = {
           archive_batch_id?: string | null
           archived_at?: string | null
           archived_by?: string | null
+          arrived_at?: string | null
           call_type?: string | null
           close_reason?: Database["public"]["Enums"]["close_reason"] | null
           closed_at?: string | null
@@ -1533,6 +1538,7 @@ export type Database = {
           archive_batch_id?: string | null
           archived_at?: string | null
           archived_by?: string | null
+          arrived_at?: string | null
           call_type?: string | null
           close_reason?: Database["public"]["Enums"]["close_reason"] | null
           closed_at?: string | null
@@ -1819,6 +1825,7 @@ export type Database = {
           p_type?: Database["public"]["Enums"]["enquiry_type"]
         }
         Returns: {
+          arrived_at: string
           assigned_date: string
           assigned_to_name: string
           close_reason: Database["public"]["Enums"]["close_reason"]
@@ -2058,6 +2065,7 @@ export type Database = {
           p_term_id?: string
         }
         Returns: {
+          arrived_at: string
           call_type: string
           created_at: string
           enquiry_id: number
@@ -2202,6 +2210,7 @@ export type Database = {
           p_type?: Database["public"]["Enums"]["enquiry_type"]
         }
         Returns: {
+          arrived_at: string
           assigned_at: string
           assigned_to: string
           assigned_to_name: string
@@ -2291,10 +2300,13 @@ export type Database = {
         Args: {
           p_enquiry_id: number
           p_escalated_to?: string
+          p_issue_category?: Database["public"]["Enums"]["issue_category"]
           p_order_id?: string
           p_product?: string
+          p_replace?: boolean
           p_teacher_id?: string
           p_touch_escalated?: boolean
+          p_touch_issue?: boolean
         }
         Returns: undefined
       }

@@ -11,7 +11,7 @@ import { MultiSelect } from "@/components/multi-select";
 import { Badge, Button, ErrorNote, ImportanceMark, Input, cx } from "@/components/ui";
 import type { FacetMap } from "@/lib/facet-shape";
 import { IMPORTANCE_LABELS, type Importance } from "@/lib/enquiry-labels";
-import { formatDate } from "@/lib/format";
+import { formatArrived, formatDate } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
 
 import {
@@ -34,6 +34,8 @@ export type PoolRow = {
   item_count: number;
   created_at: string;
   re_enquired_at: string | null;
+  /** §48.1: the real arrival — arrived_at when recorded, else created_at. */
+  arrived_at: string | null;
   total_count: number;
 };
 
@@ -402,11 +404,11 @@ export function NewCallsBoard({
                         <Badge dot tone="accent">back</Badge>
                       </span>
                       <span className="text-[11px]">
-                        first {formatDate(r.created_at)}
+                        first {formatArrived(r.arrived_at ?? r.created_at)}
                       </span>
                     </span>
                   ) : (
-                    formatDate(r.created_at)
+                    formatArrived(r.arrived_at ?? r.created_at)
                   )}
                 </td>
                 <td className="px-1.5 py-[5px] text-right">

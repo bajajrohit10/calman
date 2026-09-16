@@ -197,6 +197,8 @@ export type CommitRow = {
   name: string | null;
   sourceId: string | null;
   productText: string | null;
+  /** §48.2: when the lead really arrived, if the file said. */
+  arrivedAt: string | null;
   termId: string | null;
   importance: Importance | null;
   leadVerification: LeadVerification | null;
@@ -342,6 +344,12 @@ export async function commitChunk(
       enquiry_id: row.existingEnquiryId!,
       source_id: row.sourceId,
       product_text: row.productText,
+      // §48.2. Deliberately not arrived_at. This branch re-opens an enquiry
+      // that already exists, and arrived_at means when *that* enquiry arrived
+      // — a fact the file cannot revise. The return itself is already dated by
+      // re_enquired_at, which is what New Calls orders a returning lead by.
+      // (It would also have been ignored: import_re_enquire_many reads a fixed
+      // set of keys out of the jsonb, so an extra one is a silent no-op.)
       term_id: row.termId,
       importance: row.importance,
       lead_verification: row.leadVerification,
@@ -500,6 +508,7 @@ export async function commitChunk(
         type: "purchase",
         source_id: row.sourceId,
         product_text: row.productText,
+        arrived_at: row.arrivedAt,
         term_id: row.termId,
         importance: row.importance,
         lead_verification: row.leadVerification,
