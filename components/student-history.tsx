@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { AutoTag } from "@/components/enquiry-glance";
 import { EnquiryDetailsEditor, type DetailMasters } from "@/components/enquiry-details";
 import { EnquiryInterests } from "@/components/enquiry-interests";
 import { UnarchiveButton } from "@/components/unarchive-button";
@@ -639,11 +640,13 @@ function NowCard({
             openItems.map((i) => (
               <span
                 key={i.id}
-                className="rounded-full border border-line-2 bg-surface-2 px-2 py-0.5 text-[11.5px] text-ink-2"
+                className="inline-flex items-center gap-1.5 rounded-full border border-line-2 bg-surface-2 px-2 py-0.5 text-[11.5px] text-ink-2"
               >
                 {[i.teacher?.name, i.course?.name, i.subject?.name, i.content?.name]
                   .filter(Boolean)
                   .join(" · ")}
+                {/* §49.2: read off the product text, not yet confirmed. */}
+                {i.is_auto ? <AutoTag /> : null}
               </span>
             ))
           ) : (
