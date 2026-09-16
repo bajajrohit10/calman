@@ -552,6 +552,7 @@ export type Database = {
           created_by: string | null
           enquiry_id: number
           id: string
+          is_auto: boolean
           order_id: string | null
           status: Database["public"]["Enums"]["item_status"]
           subject_id: string | null
@@ -566,6 +567,7 @@ export type Database = {
           created_by?: string | null
           enquiry_id: number
           id?: string
+          is_auto?: boolean
           order_id?: string | null
           status?: Database["public"]["Enums"]["item_status"]
           subject_id?: string | null
@@ -580,6 +582,7 @@ export type Database = {
           created_by?: string | null
           enquiry_id?: number
           id?: string
+          is_auto?: boolean
           order_id?: string | null
           status?: Database["public"]["Enums"]["item_status"]
           subject_id?: string | null
@@ -2226,6 +2229,7 @@ export type Database = {
           due_date: string
           enquiry_id: number
           follow_up_slots_used: number
+          has_auto: boolean
           importance: Database["public"]["Enums"]["importance"]
           is_overdue: boolean
           item_count: number
@@ -2300,6 +2304,10 @@ export type Database = {
       }
       set_my_quick_add_tab: { Args: { p_tab: string }; Returns: string }
       set_my_theme: { Args: { p_theme: string }; Returns: string }
+      set_product_text: {
+        Args: { p_enquiry_id: number; p_product: string }
+        Returns: undefined
+      }
       set_ticket_fields: {
         Args: {
           p_enquiry_id: number

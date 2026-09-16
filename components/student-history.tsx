@@ -40,6 +40,7 @@ function toInterestItem(item: HistoryEnquiry["enquiry_items"][number]) {
   return {
     id: item.id,
     status: item.status,
+    isAuto: Boolean(item.is_auto),
     // §39.3: the drawer edits the line in place, so it carries the ids as well
     // as the names it reads as.
     teacherId: item.teacher_id,

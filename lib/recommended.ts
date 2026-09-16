@@ -60,6 +60,8 @@ export type RecommendedRow = {
   call_type: string | null;
   /** §48.1: the real arrival — arrived_at when recorded, else created_at. */
   arrived_at: string | null;
+  /** §49.2: this lead has interest lines the parser guessed and nobody confirmed. */
+  has_auto: boolean | null;
   total_count: number;
 };
 

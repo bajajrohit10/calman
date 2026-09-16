@@ -55,7 +55,31 @@ export type GlanceItem = {
   course: string | null;
   subject: string | null;
   content: string | null;
+  /** §49.2: the parser guessed this line and nobody has confirmed it yet. */
+  isAuto?: boolean;
 };
+
+/**
+ * The mark an unverified line carries (§49.2).
+ *
+ * Red, and in words. The parser is right most of the time, which is exactly
+ * what makes it dangerous — a counsellor who has seen fifty correct guesses
+ * stops reading the fifty-first. "auto — verify" is an instruction rather than
+ * a label because the only thing that clears it is somebody looking.
+ */
+export function AutoTag({ className }: { className?: string }) {
+  return (
+    <span
+      title="Filled in from the product text — check it against what the student said"
+      className={cx(
+        "inline-flex items-center rounded-full border border-danger/50 bg-danger-soft px-1.5 py-[1px] text-[10px] font-medium whitespace-nowrap text-danger",
+        className,
+      )}
+    >
+      auto — verify
+    </span>
+  );
+}
 
 /** One fact. Label in grey, value in ink, no wrapping between them. */
 function Fact({ label, value }: { label: string; value: string }) {
@@ -163,6 +187,7 @@ export function InterestChips({
               {ITEM_STATUS_LABELS[item.status as keyof typeof ITEM_STATUS_LABELS] ??
                 item.status}
             </span>
+            {item.isAuto ? <AutoTag /> : null}
           </span>
         );
       })}

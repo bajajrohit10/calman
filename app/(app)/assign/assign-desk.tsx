@@ -2,6 +2,7 @@
 
 import { EVENING_SUB_TABS, eveningLabelFor } from "@/lib/enquiry-labels";
 
+import { AutoTag } from "@/components/enquiry-glance";
 import { contentLabel, isCallType } from "@/lib/call-type";
 
 import Link from "next/link";
@@ -790,6 +791,9 @@ export function AssignDesk({
                         chip, and carrying the word "(auto)", because it is a
                         guess from the product text and the last note — a
                         counsellor recording real content replaces it. */}
+                    {/* §49.2. The interests on this row were read off the
+                        product text and nobody has confirmed them. */}
+                    {r.has_auto ? <AutoTag className="ml-1" /> : null}
                     {autoContent(r) ? (
                       <span
                         className="ml-1 rounded-full border border-dashed border-line-2 px-1.5 py-[1px] text-[11px] whitespace-nowrap text-ink-3"

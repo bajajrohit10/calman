@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { clearAutoFlag } from "@/lib/auto-interests";
 import { dropDuplicateLines, rowShape } from "@/lib/interest-shape";
 
 import { isAdmin, requireUser } from "@/lib/auth";
@@ -80,6 +81,12 @@ export type LogCallInput = {
   studentName?: string | null;
   termId?: string | null;
   sourceId?: string | null;
+  /**
+   * §49.2. The product text, from the first-call form. Written through the
+   * same security-definer door the ticket fields use, because the column grant
+   * on enquiries does not cover it.
+   */
+  productText?: string | null;
 };
 
 export type LogCallResult = {
@@ -164,6 +171,8 @@ export type PanelPayload = {
   items: {
     id: string;
     status: string;
+    /** §49.2: parser-filled and unconfirmed. */
+    isAuto: boolean;
     teacherId: string | null;
     courseId: string | null;
     subjectId: string | null;
@@ -211,7 +220,7 @@ export async function loadPanelEnquiry(
        term:terms ( name ),
        students ( name, mobile ),
        enquiry_items (
-         id, status, teacher_id, course_id, subject_id, content_id,
+         id, status, is_auto, teacher_id, course_id, subject_id, content_id,
          teacher:teachers ( name ),
          course:courses ( name ),
          subject:subjects ( name ),
@@ -324,6 +333,7 @@ export async function loadPanelEnquiry(
       items: (data.enquiry_items ?? []).map((i) => ({
         id: i.id,
         status: i.status,
+        isAuto: Boolean(i.is_auto),
         teacherId: i.teacher_id,
         courseId: i.course_id,
         subjectId: i.subject_id,
@@ -792,6 +802,19 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
     if (error) return { error: `Could not save the ticket details: ${error.message}` };
   }
 
+  // §49.2. The product text, when the first-call form sent one. Purchase or
+  // ticket — a ticket's copy goes through set_ticket_fields above, so this
+  // only ever fires for the lead case, but the function takes either rather
+  // than making the caller know which.
+  if (input.productText !== undefined && type !== "after_sale") {
+    const { error } = await supabase.rpc("set_product_text", {
+      p_enquiry_id: targetEnquiryId,
+      p_product: input.productText,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    if (error) return { error: `Could not save the product text: ${error.message}` };
+  }
+
   // ---- 3. The call, last ---------------------------------------------------
   // call_date and enquiry_type are set by app.calls_before_write();
   // next_follow_up_date is snapped to a working day by the same trigger.
@@ -863,6 +886,11 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
       console.error("Could not claim the enquiry for today:", claimError.message);
     }
   }
+
+  // §49.2. A call has been logged on this lead, which means a person has had
+  // the conversation the guesses were about. Whatever they left standing they
+  // left standing on purpose, so the lines stop being provisional.
+  await clearAutoFlag(targetEnquiryId);
 
   const mobile = (enquiry.students as { mobile: string } | null)?.mobile;
   if (mobile) revalidatePath(`/students/${mobile}`);
@@ -1029,6 +1057,10 @@ export async function addEnquiryItems(input: {
 
   if (error) return { error: `Could not save the interests: ${error.message}` };
 
+  // §49.2. Somebody has added a line by hand, so the parser's guesses on this
+  // lead have been seen and stand or fall on that person's judgement now.
+  await clearAutoFlag(input.enquiryId);
+
   const mobile = (enquiry.students as { mobile: string } | null)?.mobile;
   if (mobile) revalidatePath(`/students/${mobile}`);
   revalidatePath("/enquiries");
@@ -1108,6 +1140,11 @@ export async function updateEnquiryItem(input: {
 
   if (error) return { error: `Could not save the line: ${error.message}` };
 
+  // §49.2. Editing one line verifies them all: the counsellor was looking at
+  // the whole set when they decided this one was wrong, so the ones they left
+  // alone have been confirmed as surely as the one they changed.
+  await clearAutoFlag(item.enquiry_id);
+
   const mobile = (
     item.enquiries as { students: { mobile: string } | null } | null
   )?.students?.mobile;
@@ -1143,6 +1180,9 @@ export async function removeEnquiryItem(input: {
     .eq("id", input.itemId);
 
   if (error) return { error: `Could not remove the line: ${error.message}` };
+
+  // Taking a wrong line off is the same act of verification as fixing one.
+  await clearAutoFlag(item.enquiry_id);
 
   const mobile = (
     item.enquiries as { students: { mobile: string } | null } | null

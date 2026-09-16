@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import type { Importance, LeadVerification } from "@/lib/enquiry-labels";
 import type { NumberState, NumberStatus } from "@/lib/duplicate-rules";
+import { applyAutoInterests } from "@/lib/auto-interests";
 import { isValidMobile, normaliseMobile } from "@/lib/mobile";
 import { fillBlankStudentName } from "@/lib/student-name";
 import { createClient } from "@/lib/supabase/server";
@@ -538,6 +539,18 @@ export async function commitChunk(
       if (error) {
         console.error("enquiry_sources insert failed", error.message);
       }
+    }
+
+    // §49.2. Same rule as Quick Add: the title these rows arrived with becomes
+    // their interests, flagged auto, and only where the lead has no lines.
+    // Chunked with the rest of the commit, so a 3,000-row import fills as it
+    // goes rather than in one pass at the end.
+    const createdIds = [...enquiryByStudent.values()];
+    if (createdIds.length) {
+      const auto = await applyAutoInterests(createdIds);
+      // Not fatal, for the same reason the source log is not: the enquiries
+      // are in, and a title the parser cannot read must not fail the import.
+      if (auto.error) console.error("auto interests failed", auto.error);
     }
 
     for (const { row, studentId } of withStudent) {

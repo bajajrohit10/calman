@@ -42,6 +42,8 @@ export type HistoryCall = {
 export type HistoryItem = {
   id: string;
   status: ItemStatus;
+  /** §49.2: parser-filled and unconfirmed. */
+  is_auto: boolean;
   order_id: string | null;
   amount: number | null;
   // §39.3 edits a line where it sits, so the drawer needs the ids it is made
@@ -147,7 +149,7 @@ const SELECT = `
       caller:profiles!calls_called_by_fkey ( full_name )
     ),
     enquiry_items (
-      id, status, order_id, amount,
+      id, status, is_auto, order_id, amount,
       teacher_id, course_id, subject_id, content_id,
       teacher:teachers ( name ),
       course:courses ( name ),

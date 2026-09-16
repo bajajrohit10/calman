@@ -21,6 +21,8 @@ import { type ItemStatus } from "@/lib/enquiry-labels";
 export type InterestItem = {
   id: string;
   status: ItemStatus;
+  /** §49.2: parser-filled and unconfirmed. */
+  isAuto?: boolean;
   teacherId: string | null;
   courseId: string | null;
   subjectId: string | null;

@@ -69,6 +69,8 @@ export type PanelMasters = {
 export type PanelItem = {
   id: string;
   status: string;
+  /** §49.2: parser-filled and unconfirmed. */
+  isAuto?: boolean;
   /** §39.3: the drawer edits the line in place, so it needs the ids too. */
   teacherId: string | null;
   courseId: string | null;
@@ -363,6 +365,8 @@ export function CallLogPanel({
   const [orderId, setOrderId] = useState(enquiry.orderId ?? "");
   /** §44.1. The ticket's own product and teacher; the institute follows. */
   const [ticketProduct, setTicketProduct] = useState(enquiry.productText ?? "");
+  /** §49.2: the same text on a purchase lead, editable on the first call. */
+  const [productText, setProductText] = useState(enquiry.productText ?? "");
   const [ticketTeacher, setTicketTeacher] = useState(enquiry.teacherId ?? "");
   /** §44.2. Escalated is the one state that needs a name attached. */
   const [escalatedTo, setEscalatedTo] = useState(enquiry.escalatedTo ?? "");
@@ -796,7 +800,14 @@ export function CallLogPanel({
         convertToAfterSale: toAfterSale,
         convertToPurchase: toPurchase,
         ...(isFirstCall
-          ? { studentName, termId: termId || null, sourceId: sourceId || null }
+          ? {
+              studentName,
+              termId: termId || null,
+              sourceId: sourceId || null,
+              // §49.2: only sent from the first-call form, which is the only
+              // place a purchase lead's product text is editable.
+              productText: productText.trim() || null,
+            }
           : {}),
         importance,
         leadVerification,
@@ -900,6 +911,20 @@ export function CallLogPanel({
             createdAt: enquiry.createdAt,
           }}
         />
+        {/* §49.2. The title the lead arrived with, shown on the follow-up
+            window whenever the interests below are guesses or absent — those
+            are exactly the moments when the chips cannot be taken at face
+            value and the counsellor needs the words the student actually
+            sent. Hidden once somebody has recorded real lines, because then
+            the chips are the better summary. */}
+        {enquiry.productText && (items.length === 0 || items.every((i) => i.isAuto)) ? (
+          <p className="text-[12px] text-ink-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+              Product{" "}
+            </span>
+            {enquiry.productText}
+          </p>
+        ) : null}
         <InterestChips items={items} />
       </div>
 
@@ -921,6 +946,8 @@ export function CallLogPanel({
 
       {isFirstCall ? (
         <FirstCallFields
+          productText={productText}
+          setProductText={setProductText}
           masters={masters}
           studentName={studentName}
           setStudentName={setStudentName}
@@ -1394,6 +1421,8 @@ export function CallLogPanel({
  */
 function FirstCallFields({
   masters,
+  productText,
+  setProductText,
   studentName,
   setStudentName,
   isPurchase,
@@ -1492,6 +1521,9 @@ function FirstCallFields({
   needsIssue: boolean;
   followUpDate: string;
   setFollowUpDate: (v: string) => void;
+  /** §49.2: the text the auto lines were read from, editable here. */
+  productText: string;
+  setProductText: (v: string) => void;
   pending: boolean;
   onCancel?: () => void;
 }) {
@@ -1519,6 +1551,18 @@ function FirstCallFields({
     // off the form — which is the difference between the Save button being on
     // a 768px screen and being under it.
     <div className="grid gap-x-2.5 gap-y-2 px-3 py-2.5 md:grid-cols-2 xl:grid-cols-4">
+      {/* §49.2. First, and spanning the row: on a first call this is usually
+          the only thing Calman knows about the lead, and the interest lines
+          below were read off it. Putting it anywhere else asks the counsellor
+          to verify a guess without showing them what it was guessed from. */}
+      <FirstCallField label="Product text" className="md:col-span-2 xl:col-span-4">
+        <Input
+          value={productText}
+          onChange={(e) => setProductText(e.target.value)}
+          placeholder="What they asked about — as the catalogue writes it"
+        />
+      </FirstCallField>
+
       <FirstCallField label="Name">
         <Input
           autoFocus

@@ -16,6 +16,7 @@ import {
   type Case5Decision,
   type DuplicateCase,
 } from "@/lib/duplicate-rules";
+import { applyAutoInterests } from "@/lib/auto-interests";
 import { isValidMobile, normaliseMobile } from "@/lib/mobile";
 import { loadStudentByMobile, type StudentHistory } from "@/lib/students";
 import { createClient } from "@/lib/supabase/server";
@@ -736,6 +737,19 @@ async function createMany(
     // Not fatal: the enquiries are already in, and losing a log row must not
     // fail the save the counsellor is waiting on.
     if (error) console.error("enquiry_sources insert failed", error.message);
+  }
+
+  // §49.2. The product text these rows carry is the only description of them
+  // that exists, so it becomes their interests — flagged auto, and only where
+  // the lead has no lines, which a brand-new enquiry never does.
+  //
+  // Not fatal and not awaited for its result beyond logging: the enquiries are
+  // saved, and a parser that cannot read one title must not fail the save a
+  // counsellor is waiting on.
+  const createdIds = [...enquiryByStudent.values()];
+  if (createdIds.length) {
+    const auto = await applyAutoInterests(createdIds);
+    if (auto.error) console.error("auto interests failed", auto.error);
   }
 
   for (const j of ready) {

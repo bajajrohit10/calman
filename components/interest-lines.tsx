@@ -2,6 +2,7 @@
 
 import { useId, useMemo, useState } from "react";
 
+import { AutoTag } from "@/components/enquiry-glance";
 import { Badge, Button, Input, Select, cx } from "@/components/ui";
 
 /**
@@ -337,6 +338,8 @@ export function InterestLineRows({
 export type SavedLine = {
   id: string;
   status: string;
+  /** §49.2: parser-filled and unconfirmed. */
+  isAuto?: boolean;
   teacherId: string | null;
   courseId: string | null;
   subjectId: string | null;
@@ -481,6 +484,9 @@ export function SavedLineRows<T extends SavedLine>({
                 >
                   {STATUS_WORD[line.status] ?? line.status}
                 </Badge>
+                {/* §49.2: this line is the parser's reading of the product
+                    text, not something anybody has said out loud yet. */}
+                {line.isAuto ? <AutoTag /> : null}
                 {line.status === "won" ? (
                   <span className="text-[11px] text-ink-3">bought — not editable</span>
                 ) : fixed ? null : (
