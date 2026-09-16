@@ -148,7 +148,20 @@ export function parseEnquiriesParams(get: ParamReader): {
 } {
   const page = Math.max(1, Number(str(get, "page") ?? 1) || 1);
   const sort = str(get, "sort") ?? "created_at";
-  const dir = str(get, "dir") === "asc" ? "asc" : "desc";
+  /**
+   * §48.1, corrected. The arrival column reads oldest first.
+   *
+   * Every other column keeps its newest/highest-first default, which is what
+   * you want of a last-call date or an importance grade. Arrival is the
+   * exception because this list is worked top to bottom like the other two,
+   * and the lead that has waited longest should be the one you reach first.
+   *
+   * An explicit ?dir= still wins, so the column header can still be clicked
+   * to reverse it — this sets where the screen opens, not what it allows.
+   */
+  const asked = str(get, "dir");
+  const dir: "asc" | "desc" =
+    asked === "asc" ? "asc" : asked === "desc" ? "desc" : sort === "created_at" ? "asc" : "desc";
 
   return {
     page,
