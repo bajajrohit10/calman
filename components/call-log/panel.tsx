@@ -391,6 +391,11 @@ export function CallLogPanel({
       // and having chips appear underneath them is worse than having none.
       const human = current.filter((l) => hasDetail(l) && !l.auto);
       if (human.length) return current;
+      // The three default selects are a hand-entered line too — a course and
+      // a subject with no teacher yet is exactly §39.2's partial line, and it
+      // lives outside `newLines` until a teacher is picked. Without this the
+      // parser would overwrite somebody halfway through typing one.
+      if (defaultsRef.current) return current;
 
       const parsed = parseProductText(text, masters).flatMap((p) =>
         p.lines.map((line) => ({
@@ -429,6 +434,8 @@ export function CallLogPanel({
   // stops to read has something to read.
   const productRef = useRef(productText);
   productRef.current = productText;
+  /** Whether the three default selects hold a part-built line right now. */
+  const defaultsRef = useRef(false);
   //
   // §49.3 asks for the same on the follow-up window "when the enquiry has no
   // lines". Its product text is not editable, so there is nothing to debounce
@@ -454,6 +461,9 @@ export function CallLogPanel({
   const [defCourse, setDefCourse] = useState("");
   const [defSubject, setDefSubject] = useState("");
   const [defContent, setDefContent] = useState("");
+  // Kept in a ref so the parser, which is declared above these, can read them
+  // at the moment it runs rather than closing over a stale render.
+  defaultsRef.current = Boolean(defCourse || defSubject || defContent);
 
   // §47.1. Every match, including teachers already on the lead. Hiding a name
   // that had been used once made "FR and Audit from the same teacher"
