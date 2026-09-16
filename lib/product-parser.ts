@@ -392,26 +392,51 @@ function findSubjects(head: string, courseId: string | null, masters: ParserMast
   const n = flat(head);
   const found: { id: string; name: string; at: number }[] = [];
 
-  const consider = (names: string[], at: number) => {
-    const rows = names
+  /**
+   * Every way the title could be naming a subject, longest phrase first.
+   *
+   * Master names and short forms compete in one pass rather than two. Ordering
+   * by the length of the matched phrase is what makes the specific beat the
+   * general: "Set A - Law" beats "Law", "SPOM Set B" beats "SPOM", "FM SM"
+   * beats "FM" — and doing it in two passes let an early short master name
+   * claim the words a longer alias needed.
+   */
+  const candidates: { needle: string; names: string[] }[] = [
+    ...masters.subjects.map((s) => ({ needle: flat(s.name), names: [s.name] })),
+    ...Object.entries(SUBJECT_ALIASES).map(([alias, names]) => ({
+      needle: flat(alias),
+      names,
+    })),
+  ].sort((a, b) => b.needle.length - a.needle.length);
+
+  // Words already spoken for, so a shorter phrase sitting inside a longer one
+  // is not counted a second time.
+  const claimed: { from: number; to: number }[] = [];
+
+  for (const c of candidates) {
+    const at = n.indexOf(c.needle);
+    if (at < 0) continue;
+    const to = at + c.needle.length;
+    if (claimed.some((k) => at < k.to && to > k.from)) continue;
+
+    const rows = c.names
       .map((nm) => masters.subjects.find((s) => s.name === nm))
-      .filter((s): s is SubjectMaster => Boolean(s));
-    const pick = courseId ? (rows.find((s) => s.course_id === courseId) ?? null) : rows[0] ?? null;
-    if (pick && !found.some((f) => f.id === pick.id)) {
+      .filter((x): x is SubjectMaster => Boolean(x));
+    // Ambiguous short forms are resolved by the course on the title: "SFM" is
+    // a CA Final paper and a CMA Final one, "DT" is three different things.
+    const pick = courseId
+      ? (rows.find((x) => x.course_id === courseId) ?? null)
+      : (rows[0] ?? null);
+
+    // Claimed only when it actually resolved. A phrase that matched the text
+    // but named no subject of this course has not consumed those words —
+    // "Law" under CA Final is not a subject, and letting it claim the range
+    // stopped "Set A - Law" from being found at all.
+    if (!pick) continue;
+    claimed.push({ from: at, to });
+    if (!found.some((f) => f.id === pick.id)) {
       found.push({ id: pick.id, name: pick.name, at });
     }
-  };
-
-  // Master names first — the most specific thing a title can say.
-  for (const s of masters.subjects) {
-    const at = n.indexOf(flat(s.name));
-    if (at >= 0) consider([s.name], at);
-  }
-  // Then the short forms, longest alias first so "fm sm" beats "fm" and "sm".
-  const aliases = Object.entries(SUBJECT_ALIASES).sort((a, b) => b[0].length - a[0].length);
-  for (const [alias, names] of aliases) {
-    const at = n.indexOf(flat(alias));
-    if (at >= 0) consider(names, at);
   }
 
   return found.sort((a, b) => a.at - b.at);
