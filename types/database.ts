@@ -1153,6 +1153,7 @@ export type Database = {
           full_name: string
           id: string
           is_active: boolean
+          quick_add_tab: string
           role: Database["public"]["Enums"]["user_role"]
           theme: string
         }
@@ -1161,6 +1162,7 @@ export type Database = {
           full_name: string
           id: string
           is_active?: boolean
+          quick_add_tab?: string
           role: Database["public"]["Enums"]["user_role"]
           theme?: string
         }
@@ -1169,6 +1171,7 @@ export type Database = {
           full_name?: string
           id?: string
           is_active?: boolean
+          quick_add_tab?: string
           role?: Database["public"]["Enums"]["user_role"]
           theme?: string
         }
@@ -2295,6 +2298,7 @@ export type Database = {
         Args: { p_enquiry_id: number; p_offer_id: string }
         Returns: number
       }
+      set_my_quick_add_tab: { Args: { p_tab: string }; Returns: string }
       set_my_theme: { Args: { p_theme: string }; Returns: string }
       set_ticket_fields: {
         Args: {

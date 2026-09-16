@@ -224,6 +224,14 @@ export type BulkRowInput = {
   mobile: string;
   name: string | null;
   sourceId: string | null;
+  /** §48.3: what the student asked about, optional on both grids. */
+  productText?: string | null;
+  /**
+   * §48.3. When the arrival really happened — the AC grid's own column. Null
+   * on a Normal row, where the row is being typed as the call comes in and
+   * created_at is already the truth.
+   */
+  arrivedAt?: string | null;
   /**
    * Case 5 only (Brief 31, extended by §42): a number somebody has already
    * called today. Three answers — log another call on the same enquiry and
@@ -686,6 +694,11 @@ async function createMany(
         // to be about.
         type: "purchase",
         source_id: j.row.sourceId,
+        product_text: j.row.productText?.trim() || null,
+        // §48.3. Only ever what the grid was told. A Normal row sends null and
+        // the enquiry falls back to created_at, which for a number typed as
+        // the phone rings is the same instant anyway.
+        arrived_at: j.row.arrivedAt ?? null,
         created_by: userId,
       })) as never,
     )
@@ -737,4 +750,20 @@ async function createMany(
           reason: "could not create the enquiry for this row",
         };
   }
+}
+
+/**
+ * Remember which grid this counsellor was last on (§48.3).
+ *
+ * Fire-and-forget from the client: the tab has already switched by the time
+ * this is called, and a preference that fails to save is not worth an error
+ * message in front of somebody mid-list. The next page load simply opens where
+ * it last managed to record.
+ */
+export async function setMyQuickAddTab(tab: "normal" | "ac"): Promise<void> {
+  const supabase = await createClient();
+  await supabase.rpc("set_my_quick_add_tab", {
+    p_tab: tab,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any);
 }

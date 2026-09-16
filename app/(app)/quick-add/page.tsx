@@ -19,6 +19,13 @@ export default async function Page() {
         description="One row per number. Type it, see what Calman knows, then call it or pass it on."
       />
       <QuickAdd
+        // §48.3. The tab this user last had open, and the AC source resolved
+        // by name — the grid is handed an id, so it never has to know that the
+        // source it fixes is called "AC".
+        initialTab={viewer.profile?.quick_add_tab === "ac" ? "ac" : "normal"}
+        acSourceId={
+          masters.sources.find((s) => s.name.trim().toLowerCase() === "ac")?.id ?? null
+        }
         masters={masters}
         escalatees={escalatees}
         counsellorName={viewer.profile?.full_name ?? null}

@@ -9,8 +9,10 @@ import { StudentHistoryView } from "@/components/student-history";
 import { Button, ErrorNote } from "@/components/ui";
 import type { StudentHistory } from "@/lib/students";
 
-import { lookupMobile } from "./actions";
+import { lookupMobile, setMyQuickAddTab } from "./actions";
 import { QuickAddGrid } from "./grid";
+
+type Tab = "normal" | "ac";
 
 export type QuickAddMasters = PanelMasters & {
   sources: { id: string; name: string }[];
@@ -37,6 +39,8 @@ export function QuickAdd({
   escalatees,
   viewerId,
   viewerIsAdmin,
+  initialTab,
+  acSourceId,
 }: {
   masters: QuickAddMasters;
   counsellorName: string | null;
@@ -45,7 +49,12 @@ export function QuickAdd({
   /** §29.4: who is looking, so a call row in the history knows if it is theirs. */
   viewerId: string | null;
   viewerIsAdmin: boolean;
+  /** §48.3: the grid this user last had open, read from their profile. */
+  initialTab: Tab;
+  /** §48.3: the AC source, or null if the master list has no source named AC. */
+  acSourceId: string | null;
 }) {
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [logging, setLogging] = useState<{
     enquiry: PanelEnquiry;
     student: StudentHistory | null;
@@ -113,10 +122,65 @@ export function QuickAdd({
     );
   }
 
+  function choose(next: Tab) {
+    setTab(next);
+    // Recorded, not awaited — see setMyQuickAddTab.
+    void setMyQuickAddTab(next);
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {error ? <ErrorNote>{error}</ErrorNote> : null}
-      <QuickAddGrid sources={masters.sources} onLogCall={openCall} />
+
+      {/* §48.3. Two ways of arriving at the same thing: a call coming in, and
+          a stack of AC entries being keyed afterwards. They want different
+          columns and the second wants a time — but they are the same rules
+          underneath, so they are two tabs over one grid rather than two
+          screens. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="inline-flex overflow-hidden rounded-md border border-line-2">
+          {([
+            { key: "normal" as const, label: "Normal" },
+            { key: "ac" as const, label: "AC" },
+          ]).map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              aria-current={tab === t.key ? "page" : undefined}
+              onClick={() => choose(t.key)}
+              className={
+                tab === t.key
+                  ? "bg-accent px-3 py-1 text-[12.5px] font-medium text-accent-ink"
+                  : "bg-surface px-3 py-1 text-[12.5px] text-ink-2 hover:bg-surface-2"
+              }
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <span className="text-[11.5px] text-ink-3">
+          {tab === "ac"
+            ? "Every row is an AC arrival. The time defaults to now — change it for an entry you are keying later."
+            : "One row per number, as the phone rings."}
+        </span>
+      </div>
+
+      {tab === "ac" && !acSourceId ? (
+        <ErrorNote>
+          No source named “AC” is in the master list, so these rows would save
+          with no source. Add one in Settings → Master lists first.
+        </ErrorNote>
+      ) : null}
+
+      {/* Keyed on the tab so switching starts a clean grid rather than
+          carrying half-typed rows between two different column sets. */}
+      <QuickAddGrid
+        key={tab}
+        mode={tab}
+        acSourceId={acSourceId}
+        sources={masters.sources}
+        onLogCall={openCall}
+      />
     </div>
   );
 }

@@ -26,6 +26,10 @@ type Row = {
   mobile: string;
   name: string;
   sourceId: string;
+  /** §48.3: both grids carry it; only the AC grid shows it by default. */
+  productText: string;
+  /** §48.3: AC only — the moment the entry actually came in, as datetime-local. */
+  arrivedAt: string;
   status: NumberStatus | null;
   /** Case 5 only: what the counsellor chose. */
   decision: Case5Decision | null;
@@ -50,18 +54,51 @@ const GROW_BY = 5;
 const LOOKUP_DELAY = 300;
 
 let seq = 0;
-const blank = (): Row => ({
+const blank = (arrivedAt = ""): Row => ({
   key: `r${++seq}`,
   mobile: "",
   name: "",
   sourceId: "",
+  productText: "",
+  arrivedAt,
   status: null,
   decision: null,
   pipeline: null,
   checking: false,
 });
 
-const blanks = (n: number) => Array.from({ length: n }, blank);
+const blanks = (n: number, arrivedAt = "") =>
+  Array.from({ length: n }, () => blank(arrivedAt));
+
+/**
+ * Now, as a datetime-local value in IST (§48.3).
+ *
+ * datetime-local has no timezone: the browser shows whatever string it is
+ * given and hands the same one back. So the value is built in IST here and
+ * read back as IST on save, rather than going through the machine's own clock
+ * — a counsellor on a laptop left in another timezone would otherwise stamp
+ * every AC entry hours out without anything on screen saying so.
+ */
+/** The inverse: a datetime-local string, read as IST, as an ISO instant. */
+function istLocalToIso(value: string): string | null {
+  const m = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!m) return null;
+  const [, y, mo, d, hh, mm] = m.map(Number) as unknown as number[];
+  // IST is UTC+5:30 all year, so the shift is a constant rather than a lookup.
+  return new Date(
+    Date.UTC(y, mo - 1, d, hh, mm) - (5 * 60 + 30) * 60_000,
+  ).toISOString();
+}
+
+function nowInIst(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  }).formatToParts(new Date());
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "00";
+  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
+}
 
 /**
  * Quick Add (§30.1) under Brief 31's duplicate rules.
@@ -81,12 +118,36 @@ const blanks = (n: number) => Array.from({ length: n }, blank);
 export function QuickAddGrid({
   sources,
   onLogCall,
+  mode = "normal",
+  acSourceId = null,
 }: {
   sources: { id: string; name: string }[];
   /** Open the first-call form for a row that has just been saved. */
   onLogCall: (enquiryId: number, mobile: string) => void;
+  /**
+   * §48.3. Which grid this is. One engine, two column sets: the duplicate
+   * rules, the debounced lookup, the case-5 choice and the save path are the
+   * whole substance of this component and they are identical on both, so a
+   * second copy would be two places for every future rule to be forgotten.
+   */
+  mode?: "normal" | "ac";
+  /** §48.3: the AC grid's fixed source, resolved from the master list. */
+  acSourceId?: string | null;
 }) {
-  const [rows, setRows] = useState<Row[]>(() => blanks(OPENING_ROWS));
+  const ac = mode === "ac";
+  const [rows, setRows] = useState<Row[]>(() =>
+    blanks(OPENING_ROWS, ac ? nowInIst() : ""),
+  );
+  /** A fresh set of empty rows for this grid, after a save or a discard. */
+  const freshRows = () => blanks(OPENING_ROWS, ac ? nowInIst() : "");
+  /**
+   * §48.3. Product text on the Normal grid is optional, and off by default.
+   * The Normal grid's job is speed — a number, maybe a name, next row — and a
+   * column nobody fills on most rows is a Tab stop everybody pays for. On the
+   * AC grid it is always there, because recording what was asked about is
+   * most of why that grid exists.
+   */
+  const [showProduct, setShowProduct] = useState(false);
   const [result, setResult] = useState<BulkResult | null>(null);
   const [pending, start] = useTransition();
   const [opening, setOpening] = useState<string | null>(null);
@@ -145,7 +206,7 @@ export function QuickAddGrid({
       const res = await saveAll();
       return Boolean(res && !res.error);
     },
-    discard: () => setRows(blanks(OPENING_ROWS)),
+    discard: () => setRows(freshRows()),
   });
 
   const patch = (key: string, next: Partial<Row>) =>
@@ -264,7 +325,7 @@ export function QuickAddGrid({
     if (rows[rows.length - 1]?.key !== key) return;
     if (grownFor.current === key) return;
     grownFor.current = key;
-    setRows((rs) => [...rs, ...blanks(GROW_BY)]);
+    setRows((rs) => [...rs, ...blanks(GROW_BY, ac ? nowInIst() : "")]);
   }
 
   /**
@@ -321,7 +382,7 @@ export function QuickAddGrid({
       const next = [...rs];
       parts.forEach((p, i) => {
         const at = index + i;
-        if (!next[at]) next[at] = blank();
+        if (!next[at]) next[at] = blank(ac ? nowInIst() : "");
         next[at] = {
           ...next[at],
           mobile: normaliseMobile(p),
@@ -330,7 +391,8 @@ export function QuickAddGrid({
         };
         keys.push(next[at].key);
       });
-      if (next[next.length - 1].mobile.trim()) next.push(...blanks(GROW_BY));
+      if (next[next.length - 1].mobile.trim())
+        next.push(...blanks(GROW_BY, ac ? nowInIst() : ""));
       return next;
     });
     parts.forEach((p, i) => {
@@ -367,14 +429,19 @@ export function QuickAddGrid({
       filled.map((r) => ({
         mobile: r.mobile,
         name: r.name.trim() || null,
-        sourceId: r.sourceId || null,
+        // §48.3. The AC grid does not ask: every row on it is an AC arrival,
+        // so showing a source column with one option would be a column that
+        // only ever wastes a keystroke.
+        sourceId: (ac ? acSourceId : r.sourceId) || null,
+        productText: r.productText.trim() || null,
+        arrivedAt: ac ? istLocalToIso(r.arrivedAt) : null,
         decision: r.decision,
         pipeline: r.pipeline,
       })),
     );
     setResult(res);
     if (!res.error) {
-      setRows(blanks(OPENING_ROWS));
+      setRows(freshRows());
       grownFor.current = null;
     }
     return res;
@@ -422,7 +489,17 @@ export function QuickAddGrid({
               <th className="w-[40px] px-1.5 py-[7px] text-right">#</th>
               <th className="w-[150px] px-1.5 py-[7px]">Mobile</th>
               <th className="w-[200px] px-1.5 py-[7px]">Name</th>
-              <th className="w-[165px] px-1.5 py-[7px]">Source</th>
+              {/* §48.3. Always on the AC grid, where it is most of the point;
+                  optional on the Normal one, so a counsellor taking a call can
+                  record what was asked about without leaving the row. */}
+              {ac || showProduct ? (
+                <th className="w-[210px] px-1.5 py-[7px]">Product text</th>
+              ) : null}
+              {ac ? (
+                <th className="w-[190px] px-1.5 py-[7px]">AC created time</th>
+              ) : (
+                <th className="w-[165px] px-1.5 py-[7px]">Source</th>
+              )}
               <th className="px-1.5 py-[7px]">Status</th>
               <th className="w-[120px] px-1.5 py-[7px]">Action</th>
             </tr>
@@ -478,20 +555,47 @@ export function QuickAddGrid({
                       onKeyDown={(e) => onEnter(e, r)}
                     />
                   </td>
-                  <td className="px-1.5 py-[5px]">
-                    <Select
-                      value={r.sourceId}
-                      aria-label={`Source, row ${i + 1}`}
-                      onChange={(e) => patch(r.key, { sourceId: e.target.value })}
-                    >
-                      <option value="">—</option>
-                      {sources.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </Select>
-                  </td>
+                  {ac || showProduct ? (
+                    <td className="px-1.5 py-[5px]">
+                      <Input
+                        value={r.productText}
+                        aria-label={`Product text, row ${i + 1}`}
+                        placeholder="Optional"
+                        onChange={(e) => patch(r.key, { productText: e.target.value })}
+                        onKeyDown={(e) => onEnter(e, r)}
+                      />
+                    </td>
+                  ) : null}
+                  {ac ? (
+                    <td className="px-1.5 py-[5px]">
+                      {/* Defaults to now and is left alone by Tab, so a row
+                          keyed as the entry comes in needs no thought; the
+                          one keyed at six for a five o'clock enquiry is two
+                          keystrokes away from being right. */}
+                      <Input
+                        type="datetime-local"
+                        value={r.arrivedAt}
+                        aria-label={`AC created time, row ${i + 1}`}
+                        onChange={(e) => patch(r.key, { arrivedAt: e.target.value })}
+                        onKeyDown={(e) => onEnter(e, r)}
+                      />
+                    </td>
+                  ) : (
+                    <td className="px-1.5 py-[5px]">
+                      <Select
+                        value={r.sourceId}
+                        aria-label={`Source, row ${i + 1}`}
+                        onChange={(e) => patch(r.key, { sourceId: e.target.value })}
+                      >
+                        <option value="">—</option>
+                        {sources.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </td>
+                  )}
                   <td className="px-1.5 py-[5px]">
                     <StatusCell
                       row={r}
@@ -533,10 +637,22 @@ export function QuickAddGrid({
         <Button
           size="sm"
           variant="ghost"
-          onClick={() => setRows((rs) => [...rs, ...blanks(GROW_BY)])}
+          onClick={() =>
+            setRows((rs) => [...rs, ...blanks(GROW_BY, ac ? nowInIst() : "")])
+          }
         >
           Add {GROW_BY} rows
         </Button>
+        {ac ? null : (
+          <label className="flex cursor-pointer items-center gap-1.5 text-[12.5px] text-ink-2">
+            <input
+              type="checkbox"
+              checked={showProduct}
+              onChange={(e) => setShowProduct(e.target.checked)}
+            />
+            Product text column
+          </label>
+        )}
         {undecided.length ? (
           <span className="rounded-md border border-warn/40 bg-warn-soft/50 px-2 py-1 text-[12px] font-medium text-warn">
             {undecided.length} row{undecided.length === 1 ? "" : "s"} need
