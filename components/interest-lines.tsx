@@ -38,6 +38,13 @@ export type NewLine = {
   /** Only used where a purchase is being recorded. */
   won: boolean;
   amount: string;
+  /**
+   * §49.3. Seeded by the live parser from the product text and not yet looked
+   * at. Purely a state of the form: these rows are saved like any other, and
+   * saving is itself the act of confirming them — so nothing carries this to
+   * the database. It exists to colour the chip while the counsellor decides.
+   */
+  auto?: boolean;
 };
 
 let counter = 0;

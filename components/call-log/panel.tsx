@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 
 import { Badge, Button, ErrorNote, Input, Select, Textarea, cx } from "@/components/ui";
 import {
@@ -31,7 +31,7 @@ import {
   type LeadVerification,
 } from "@/lib/enquiry-labels";
 import { EnquiryDetailsEditor } from "@/components/enquiry-details";
-import { EnquiryGlanceLine, InterestChips } from "@/components/enquiry-glance";
+import { AutoTag, EnquiryGlanceLine, InterestChips } from "@/components/enquiry-glance";
 import {
   formatDate,
   formatDateTime,
@@ -40,6 +40,7 @@ import {
   istToday,
 } from "@/lib/format";
 import { interestShape } from "@/lib/interest-shape";
+import { parseProductText } from "@/lib/product-parser";
 import { formatMobile } from "@/lib/mobile";
 import { useUnsavedClaim } from "@/components/unsaved-guard";
 import { WhatsAppButton } from "@/components/whatsapp/button";
@@ -367,6 +368,47 @@ export function CallLogPanel({
   const [ticketProduct, setTicketProduct] = useState(enquiry.productText ?? "");
   /** §49.2: the same text on a purchase lead, editable on the first call. */
   const [productText, setProductText] = useState(enquiry.productText ?? "");
+
+  /**
+   * §49.3. The product text, read as interest lines while it is being typed.
+   *
+   * The same parser the server runs — imported, not reimplemented, so the
+   * chips a counsellor corrects here are the chips that would have been saved
+   * without them. Client-side because it costs nothing: the dictionary is the
+   * master lists, which this component already holds, and a round trip per
+   * keystroke to be told what a regex says would be absurd.
+   *
+   * It seeds the form's own new-line rows rather than living beside them, so
+   * everything that already works on a line — the chip editor, remove, save —
+   * works on these with no second path. `auto` is the only difference, and it
+   * is a colour.
+   */
+  function parseIntoLines(text: string) {
+    setNewLines((current) => {
+      // §49.3. A line the counsellor put there by hand outranks anything the
+      // parser has to say. Not merged, not appended to — left alone entirely,
+      // because a person who has started recording interests is mid-thought
+      // and having chips appear underneath them is worse than having none.
+      const human = current.filter((l) => hasDetail(l) && !l.auto);
+      if (human.length) return current;
+
+      const parsed = parseProductText(text, masters).flatMap((p) =>
+        p.lines.map((line) => ({
+          ...blankLine(),
+          auto: true,
+          teacherId: line.teacherId ?? "",
+          courseId: line.courseId ?? "",
+          subjectId: line.subjectId ?? "",
+          contentId: line.contentId ?? "",
+        })),
+      );
+      // Nothing recognisable: leave the blank row the form opened with rather
+      // than clearing it, or the field would flicker empty as somebody types.
+      if (!parsed.length) return current.filter((l) => !l.auto).length ? current : [blankLine()];
+      return [...parsed, blankLine()];
+    });
+  }
+
   const [ticketTeacher, setTicketTeacher] = useState(enquiry.teacherId ?? "");
   /** §44.2. Escalated is the one state that needs a name attached. */
   const [escalatedTo, setEscalatedTo] = useState(enquiry.escalatedTo ?? "");
@@ -381,6 +423,24 @@ export function CallLogPanel({
    * at and everything to fill in.
    */
   const isFirstCall = !enquiry.timeline.some((c) => c.sameEnquiry);
+
+  // 400 ms after the last keystroke, per §49.3 — long enough that typing a
+  // title is one parse rather than sixty, short enough that a counsellor who
+  // stops to read has something to read.
+  const productRef = useRef(productText);
+  productRef.current = productText;
+  //
+  // §49.3 asks for the same on the follow-up window "when the enquiry has no
+  // lines". Its product text is not editable, so there is nothing to debounce
+  // there — it parses once, on open, and only when the lead really is empty.
+  // A lead with saved lines already has its answer, auto or not.
+  const shouldParse = isFirstCall || items.length === 0;
+  useEffect(() => {
+    if (!shouldParse) return;
+    const t = window.setTimeout(() => parseIntoLines(productRef.current), 400);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productText, shouldParse]);
   /** A follow-up on a purchase lead that still has nothing recorded (§29.2). */
   const needsInterests =
     !isFirstCall && enquiry.type === "purchase" && items.length === 0;
@@ -948,6 +1008,7 @@ export function CallLogPanel({
         <FirstCallFields
           productText={productText}
           setProductText={setProductText}
+          onProductSettled={parseIntoLines}
           masters={masters}
           studentName={studentName}
           setStudentName={setStudentName}
@@ -981,7 +1042,12 @@ export function CallLogPanel({
               editDefaults(patch);
               return;
             }
-            setNewLines((l) => l.map((x) => (x.key === key ? { ...x, ...patch } : x)));
+            // §49.3. Touching a parser chip adopts it: the counsellor has
+            // looked at this line and changed it, so it is theirs now and
+            // stops being redrawn by the next parse.
+            setNewLines((l) =>
+              l.map((x) => (x.key === key ? { ...x, ...patch, auto: false } : x)),
+            );
           }}
           savedLines={items}
           onSaveSaved={saveItem}
@@ -1423,6 +1489,7 @@ function FirstCallFields({
   masters,
   productText,
   setProductText,
+  onProductSettled,
   studentName,
   setStudentName,
   isPurchase,
@@ -1524,6 +1591,8 @@ function FirstCallFields({
   /** §49.2: the text the auto lines were read from, editable here. */
   productText: string;
   setProductText: (v: string) => void;
+  /** §49.3: parse now, because the counsellor has left the field. */
+  onProductSettled: (v: string) => void;
   pending: boolean;
   onCancel?: () => void;
 }) {
@@ -1559,6 +1628,9 @@ function FirstCallFields({
         <Input
           value={productText}
           onChange={(e) => setProductText(e.target.value)}
+          // Leaving the field is a decision that the text is finished, so it
+          // parses at once rather than making somebody wait out the timer.
+          onBlur={(e) => onProductSettled(e.target.value)}
           placeholder="What they asked about — as the catalogue writes it"
         />
       </FirstCallField>
@@ -1742,7 +1814,16 @@ function FirstCallFields({
               ) : (
                 <span
                   key={l.key}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-line-2 bg-surface-2 px-2 py-0.5 text-[11.5px] text-ink-2"
+                  className={cx(
+                    "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11.5px]",
+                    // §49.3. A chip the parser put there reads as a question
+                    // until somebody answers it, so it is outlined in the same
+                    // red the saved auto lines use rather than sitting among
+                    // the counsellor's own entries looking identical to them.
+                    l.auto
+                      ? "border-danger/50 bg-danger-soft text-ink-2"
+                      : "border-line-2 bg-surface-2 text-ink-2",
+                  )}
                 >
                   <button
                     type="button"
@@ -1759,6 +1840,7 @@ function FirstCallFields({
                       .filter(Boolean)
                       .join(" · ")}
                   </button>
+                  {l.auto ? <AutoTag /> : null}
                   <button
                     type="button"
                     aria-label={`Remove ${nameOf(masters.teachers, l.teacherId) ?? "line"}`}
