@@ -1,0 +1,41 @@
+-- §50A (out of band, part two). Make the two views read as the caller.
+--
+-- Migration 128 took the privileges away from `anon`, which closed the public
+-- hole. It left the underlying defect: both views are owned by postgres with
+-- security_invoker off, so they read their base tables as the owner and RLS
+-- never runs. Any signed-in role therefore reads them in full, which is how an
+-- `accounts` user — a role whose whole point is that it cannot see counselling
+-- data — still read all 97 live enquiries.
+--
+-- security_invoker = on makes the view evaluate the caller's privileges and
+-- the caller's policies against the base tables, which is what everyone
+-- reading this code already assumes it does.
+--
+-- Why this does not narrow what staff see. The views touch nine base tables
+-- between them: live_enquiries reads `enquiries`; offer_matches reads
+-- `offers`, `enquiry_items`, `enquiries`, `teachers` and the five offer_*
+-- link tables. Checked on production, all nine agree on two things —
+--
+--   * `authenticated` holds SELECT on every one of them, which a
+--     security_invoker view requires of its caller, and
+--   * the SELECT policy on every one of them is exactly `app.is_staff()`,
+--     with no per-user or per-assignment narrowing anywhere.
+--
+-- So the USING clause is a constant per role, not a filter per row: it is true
+-- for super_admin, manager, counsellor and ticket_team, which means every row
+-- stays visible to all four, and false for `accounts` and for a token with no
+-- active profile, which is the intent. Measured before the change: all four
+-- staff roles saw 97 of 97, and a token with no profile saw 97 through the
+-- view against 0 from the table. That gap is what this closes.
+--
+-- The twelve functions that read live_enquiries are unaffected in both
+-- directions. Two (app.move_assignments, public.offer_match_count) are
+-- security definer owned by postgres, which has rolbypassrls, so RLS is
+-- skipped for them as it always was. The other ten — my_day, tickets_list,
+-- recommended_calls, new_calls_after_sale and friends — are security invoker
+-- and run as the signed-in staff member, for whom is_staff() is true and the
+-- policy is transparent.
+alter view public.live_enquiries set (security_invoker = on);
+alter view public.offer_matches  set (security_invoker = on);
+
+notify pgrst, 'reload schema';
