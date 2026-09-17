@@ -19,6 +19,7 @@
  * describe the rate that actually gets saved.
  */
 export type RateValues = {
+  sale_kind: "single" | "combo";
   level: string;
   product_type: string;
   pct: string;

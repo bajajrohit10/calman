@@ -55,50 +55,6 @@ export type Database = {
           },
         ]
       }
-      combo_rates: {
-        Row: {
-          combo_key: string
-          created_at: string
-          display_title: string | null
-          effective_from: string
-          effective_to: string | null
-          id: string
-          note: string | null
-          pct: number
-          vendor_id: string
-        }
-        Insert: {
-          combo_key: string
-          created_at?: string
-          display_title?: string | null
-          effective_from: string
-          effective_to?: string | null
-          id?: string
-          note?: string | null
-          pct: number
-          vendor_id: string
-        }
-        Update: {
-          combo_key?: string
-          created_at?: string
-          display_title?: string | null
-          effective_from?: string
-          effective_to?: string | null
-          id?: string
-          note?: string | null
-          pct?: number
-          vendor_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "combo_rates_vendor_id_fkey"
-            columns: ["vendor_id"]
-            isOneToOne: false
-            referencedRelation: "vendors"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       payment_batches: {
         Row: {
           file_name: string
@@ -283,6 +239,7 @@ export type Database = {
           note: string | null
           pct: number
           product_type: string
+          sale_kind: string
           state_scope: string[] | null
           vendor_id: string
         }
@@ -297,6 +254,7 @@ export type Database = {
           note?: string | null
           pct: number
           product_type: string
+          sale_kind?: string
           state_scope?: string[] | null
           vendor_id: string
         }
@@ -311,6 +269,7 @@ export type Database = {
           note?: string | null
           pct?: number
           product_type?: string
+          sale_kind?: string
           state_scope?: string[] | null
           vendor_id?: string
         }
@@ -588,7 +547,6 @@ export type Database = {
       normalise_key: { Args: { p_text: string }; Returns: string }
       resolve_rate: {
         Args: {
-          p_combo_key: string
           p_is_combo: boolean
           p_level: string
           p_order_date: string
@@ -605,6 +563,7 @@ export type Database = {
       retro_line_counts: {
         Args: {
           p_from: string
+          p_is_combo: boolean
           p_level: string
           p_product_type: string
           p_to: string

@@ -5,9 +5,9 @@ import { revalidatePath } from "next/cache";
 import { requireAccountsProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { istToday } from "@/lib/format";
-import { normaliseKey } from "@/lib/accounts/normalise-key";
 import { LEVELS, PRODUCT_TYPES, STATES } from "@/lib/accounts/rates";
-import type { ComboFormState, OverrideState, RateFormState } from "./form-state";
+import { SALE_KINDS, type SaleKind } from "@/lib/accounts/classify";
+import type { OverrideState, RateFormState } from "./form-state";
 
 /**
  * §50B.2. Writes behind the Rates screen.
@@ -43,6 +43,7 @@ export async function addRate(
   const supabase = await createClient();
 
   const vendorId = str(form, "vendor_id");
+  const saleKind = str(form, "sale_kind") as SaleKind;
   const level = str(form, "level");
   const productType = str(form, "product_type");
   const from = str(form, "effective_from");
@@ -52,6 +53,8 @@ export async function addRate(
   const confirmed = str(form, "confirmed") === "1";
 
   if (!vendorId) return { ok: false, error: "Pick a vendor first.", confirm: null };
+  if (!(SALE_KINDS as readonly string[]).includes(saleKind))
+    return { ok: false, error: "Unknown sale kind.", confirm: null };
   if (!(LEVELS as readonly string[]).includes(level))
     return { ok: false, error: "Choose a level.", confirm: null };
   if (!(PRODUCT_TYPES as readonly string[]).includes(productType))
@@ -73,7 +76,7 @@ export async function addRate(
       .schema("accounts")
       .rpc("retro_line_counts", {
         p_vendor_id: vendorId, p_level: level,
-        p_product_type: productType, p_from: from,
+        p_product_type: productType, p_is_combo: saleKind === "combo", p_from: from,
         // p_to is nullable in SQL and null is the meaningful value — an
         // open-ended rate, everything from p_from onwards. The type generator
         // has no way to say "nullable argument" and emits a bare string, so
@@ -96,6 +99,7 @@ export async function addRate(
         // user sees this, so the confirm has to carry the values rather than
         // re-read them.
         values: {
+          sale_kind: saleKind,
           level, product_type: productType, pct: String(pct),
           effective_from: from, effective_to: to, note,
           state_scope: states,
@@ -108,7 +112,7 @@ export async function addRate(
     .schema("accounts")
     .from("rate_grid")
     .insert({
-      vendor_id: vendorId, level, product_type: productType, pct,
+      vendor_id: vendorId, sale_kind: saleKind, level, product_type: productType, pct,
       effective_from: from, effective_to: to,
       // null, not [], means "every state" — an empty array would mean no
       // states at all, which is a rate that can never apply.
@@ -126,25 +130,34 @@ export async function addRate(
     return { ok: false, error: error.message, confirm: null };
   }
 
-  // §50C(c). A new rate for this cell means somebody has looked at it, so the
-  // cell stops asking to be reviewed.
+  // §50D.1(e). A cell whose current row is a 0% placeholder now has a real
+  // rate, so the placeholder stops where the real one starts.
   //
-  // Only rows that already carry a real percentage are cleared. The seeded
-  // placeholders are 0% on purpose — needs_review is the only thing stopping
-  // resolve_rate from using them, and clearing the flag on a 0% row would turn
-  // "no rate agreed, send it to Unknown" into "the rate is nothing, pay zero"
-  // for every order in that row's window. Those rows stay flagged and inert;
-  // the cell still stops showing red, because the rate just saved becomes the
-  // current row and the placeholder drops into history.
+  // End-dating rather than clearing the flag. The placeholder is 0% and
+  // needs_review is the only thing keeping resolve_rate off it; un-flagging it
+  // would turn "no rate agreed, send this to Unknown" into "the rate is
+  // nothing, pay zero" for every order before the new rate begins. Closing its
+  // window leaves that period honestly uncovered, which is what it is, and
+  // keeps the observed August figure in the row as the record of why.
+  //
+  // Only placeholders that actually start before the new rate: one starting on
+  // the same day cannot be end-dated to the day before without breaking its
+  // own effective_to >= effective_from check, and the unique index would have
+  // rejected the insert anyway.
+  const dayBefore = new Date(`${from}T00:00:00Z`);
+  dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
   await supabase
     .schema("accounts")
     .from("rate_grid")
-    .update({ needs_review: false })
+    .update({ effective_to: dayBefore.toISOString().slice(0, 10) })
     .eq("vendor_id", vendorId)
+    .eq("sale_kind", saleKind)
     .eq("level", level)
     .eq("product_type", productType)
     .eq("needs_review", true)
-    .gt("pct", 0);
+    .eq("pct", 0)
+    .lt("effective_from", from)
+    .or(`effective_to.is.null,effective_to.gte.${from}`);
 
   revalidatePath("/accounts/rates");
   return { ok: true, error: null, confirm: null };
@@ -182,63 +195,6 @@ export async function updateRatePct(
   return { ok: true, error: null };
 }
 
-export async function addCombo(
-  _prev: ComboFormState,
-  form: FormData,
-): Promise<ComboFormState> {
-  await requireAccountsProfile();
-  const supabase = await createClient();
-
-  const vendorId = str(form, "vendor_id");
-  const title = str(form, "display_title");
-  // The typed key wins if the user edited it; otherwise derive it from the
-  // title with the same normaliser the importer uses.
-  const key = str(form, "combo_key") || normaliseKey(title) || "";
-  const from = str(form, "effective_from");
-  const to = str(form, "effective_to") || null;
-  const note = str(form, "note") || null;
-
-  if (!vendorId) return { ok: false, error: "Choose the vendor this combo is paid to." };
-  if (!title) return { ok: false, error: "Enter the combo title." };
-  if (!key) return { ok: false, error: "The combo key cannot be empty." };
-  if (!from) return { ok: false, error: "Effective from is required." };
-  if (to && to < from) return { ok: false, error: "Effective to cannot be before effective from." };
-
-  const pct = parsePct(str(form, "pct"));
-  if (typeof pct === "string") return { ok: false, error: pct };
-
-  const { error } = await supabase
-    .schema("accounts")
-    .from("combo_rates")
-    .insert({
-      vendor_id: vendorId, combo_key: key, display_title: title,
-      pct, effective_from: from, effective_to: to, note,
-    });
-
-  if (error) {
-    if (error.code === "23505")
-      return { ok: false, error: `A combo rate for "${key}" already starts on ${from}.` };
-    return { ok: false, error: error.message };
-  }
-
-  revalidatePath("/accounts/rates");
-  return { ok: true, error: null };
-}
-
-/** End-date a combo rather than delete it: the old rate is still the record. */
-export async function endCombo(form: FormData): Promise<void> {
-  await requireAccountsProfile();
-  const supabase = await createClient();
-  const id = str(form, "id");
-  const to = str(form, "effective_to");
-  if (!id || !to) return;
-  await supabase
-    .schema("accounts")
-    .from("combo_rates")
-    .update({ effective_to: to })
-    .eq("id", id);
-  revalidatePath("/accounts/rates");
-}
 
 /**
  * Set a percentage on one unresolved line.

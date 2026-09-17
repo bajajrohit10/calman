@@ -5,10 +5,10 @@ import { requireAccountsProfile } from "@/lib/auth";
 import { istToday } from "@/lib/format";
 import {
   LEVELS, PRODUCT_TYPES, STATES,
-  loadCombos, loadRateCells, loadUnknownLines, loadVendor, loadVendorOptions,
+  loadRateCells, loadUnknownLines, loadVendor, loadVendorOptions,
 } from "@/lib/accounts/rates";
-import { endCombo } from "./actions";
-import { AddCombo, AddRate, ConfirmRatePct, SetLinePct } from "./rate-forms";
+import type { SaleKind } from "@/lib/accounts/classify";
+import { AddRate, ConfirmRatePct, SetLinePct } from "./rate-forms";
 
 export const metadata = { title: "Rates · Accounts · Calman" };
 
@@ -26,6 +26,13 @@ const KINDS = [
   { id: "institute", label: "Institute" },
   { id: "books", label: "Books" },
 ];
+
+/**
+ * §50D.2. Combos are agreed with the house, not the teacher, so the Combos
+ * tab opens on institutes. It is a default and not a restriction — a few
+ * teachers do sell their own bundles, and the filter still offers every kind.
+ */
+const DEFAULT_KIND: Record<SaleKind, string> = { single: "", combo: "institute" };
 
 const pctText = (n: number) => `${Number(n).toFixed(2).replace(/\.00$/, "")}%`;
 const dateText = (d: string | null) => (d ? d : "—");
@@ -89,26 +96,34 @@ export default async function Page({
         ))}
       </nav>
 
-      {tab === "single" ? (
-        <SingleCourses search={search} kind={kind} vendorId={vendorId} today={today} />
+      {/* §50D.2. One grid, two tabs. The only difference is which sale_kind
+          it reads and writes, so they cannot drift apart. */}
+      {tab === "single" || tab === "combos" ? (
+        <RateGrid
+          saleKind={tab === "combos" ? "combo" : "single"}
+          search={search}
+          kind={sp.kind === undefined ? DEFAULT_KIND[tab === "combos" ? "combo" : "single"] : kind}
+          vendorId={vendorId}
+          today={today}
+        />
       ) : null}
-      {tab === "combos" ? <Combos today={today} /> : null}
       {tab === "unknown" ? <Unknown /> : null}
     </div>
   );
 }
 
-/* ------------------------------------------------------- single courses -- */
+/* ------------------------------------------------------------ the grid -- */
 
-async function SingleCourses({
-  search, kind, vendorId, today,
+async function RateGrid({
+  saleKind, search, kind, vendorId, today,
 }: {
-  search: string; kind: string; vendorId: string; today: string;
+  saleKind: SaleKind; search: string; kind: string; vendorId: string; today: string;
 }) {
+  const tab = saleKind === "combo" ? "combos" : "single";
   const { rows: vendors, error: vErr } = await loadVendorOptions(search, kind);
   const vendor = vendorId ? await loadVendor(vendorId) : null;
   const { cells, error: cErr } = vendor
-    ? await loadRateCells(vendor.id)
+    ? await loadRateCells(vendor.id, saleKind)
     : { cells: [], error: null };
 
   return (
@@ -119,7 +134,7 @@ async function SingleCourses({
         method="GET"
         className="flex flex-wrap items-end gap-2.5 rounded-lg border border-line bg-surface px-3 py-2.5 shadow-card"
       >
-        <input type="hidden" name="tab" value="single" />
+        <input type="hidden" name="tab" value={tab} />
         <label className="flex flex-col gap-1">
           <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
             Search vendor
@@ -150,7 +165,7 @@ async function SingleCourses({
         {vendors.slice(0, 60).map((v) => (
           <Link
             key={v.id}
-            href={`/accounts/rates?tab=single&vendor=${v.id}${search ? `&q=${encodeURIComponent(search)}` : ""}${kind ? `&kind=${kind}` : ""}`}
+            href={`/accounts/rates?tab=${tab}&vendor=${v.id}${search ? `&q=${encodeURIComponent(search)}` : ""}${kind ? `&kind=${kind}` : ""}`}
             data-testid="vendor-option"
             aria-current={v.id === vendorId ? "true" : undefined}
             className={cx(
@@ -170,7 +185,7 @@ async function SingleCourses({
       {!vendor ? (
         <p className="rounded-lg border border-line bg-surface px-3 py-8 text-center text-[12.5px] text-ink-3"
            data-testid="no-vendor">
-          Pick a vendor to see its rates.
+          Pick a vendor to see its {saleKind === "combo" ? "combo " : ""}rates.
         </p>
       ) : (
         <>
@@ -186,7 +201,8 @@ async function SingleCourses({
             ) : null}
             <div className="ml-auto">
               <AddRate
-                vendorId={vendor.id} levels={LEVELS} types={PRODUCT_TYPES}
+                vendorId={vendor.id} saleKind={saleKind}
+                levels={LEVELS} types={PRODUCT_TYPES}
                 states={STATES} today={today} label="Add cell"
               />
             </div>
@@ -274,7 +290,8 @@ async function SingleCourses({
                           </>
                         ) : null}
                         <AddRate
-                          vendorId={vendor.id} levels={LEVELS} types={PRODUCT_TYPES}
+                          vendorId={vendor.id} saleKind={saleKind}
+                          levels={LEVELS} types={PRODUCT_TYPES}
                           states={STATES} today={today}
                           level={c.level} productType={c.product_type}
                           label="Add rate"
@@ -287,7 +304,8 @@ async function SingleCourses({
                   <tr>
                     <td colSpan={7} className="px-3 py-8 text-center text-ink-3"
                         data-testid="no-cells">
-                      No rates or sales lines for this vendor yet. Use “Add cell”.
+                      No {saleKind === "combo" ? "combo " : ""}rates or sales lines for this
+                      vendor yet. Use “Add cell”.
                     </td>
                   </tr>
                 ) : null}
@@ -296,91 +314,6 @@ async function SingleCourses({
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-/* --------------------------------------------------------------- combos -- */
-
-async function Combos({ today }: { today: string }) {
-  const [{ rows, error }, { rows: vendors }] = await Promise.all([
-    loadCombos(),
-    loadVendorOptions("", ""),
-  ]);
-
-  const groups = new Map<string, typeof rows>();
-  for (const r of rows) {
-    const g = groups.get(r.vendor_name) ?? [];
-    g.push(r);
-    groups.set(r.vendor_name, g);
-  }
-
-  return (
-    <div className="flex flex-col gap-4">
-      {error ? <ErrorNote>{error}</ErrorNote> : null}
-
-      <AddCombo vendors={vendors.map((v) => ({ id: v.id, name: v.name }))} today={today} />
-
-      <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
-        <table className="w-full min-w-[900px] text-left text-[12.5px]">
-          <thead className={TABLE_HEAD_ROW}>
-            <tr>
-              <th className="px-2 py-[7px]">Combo</th>
-              <th className="px-2 py-[7px]">Combo key</th>
-              <th className="px-2 py-[7px] text-right">%</th>
-              <th className="px-2 py-[7px]">Effective from</th>
-              <th className="px-2 py-[7px]">Effective to</th>
-              <th className="px-2 py-[7px]">Note</th>
-              <th className="px-2 py-[7px]">End</th>
-            </tr>
-          </thead>
-          <tbody data-testid="combo-rows">
-            {[...groups.entries()].map(([vendorName, list]) => (
-              <>
-                <tr key={vendorName} className="border-b border-line bg-sunk">
-                  <td colSpan={7} className="px-2 py-[5px] text-[11.5px] font-semibold text-ink-2">
-                    {vendorName}
-                  </td>
-                </tr>
-                {list.map((c) => (
-                  <tr key={c.id} className="border-b border-line last:border-b-0">
-                    <td className={cx(CELL, "text-ink")}>{c.display_title ?? "—"}</td>
-                    <td className={cx(CELL, "font-mono text-[11.5px] text-ink-2")}>{c.combo_key}</td>
-                    <td className={cx(CELL, "text-right tabular-nums text-ink")}>{pctText(c.pct)}</td>
-                    <td className={cx(CELL, "text-ink-2")}>{c.effective_from}</td>
-                    <td className={cx(CELL, "text-ink-2")}>{dateText(c.effective_to)}</td>
-                    <td className={cx(CELL, "text-ink-3")}>{c.note ?? "—"}</td>
-                    <td className={CELL}>
-                      {c.effective_to ? (
-                        <span className="text-[11.5px] text-ink-3">ended</span>
-                      ) : (
-                        <form action={endCombo} className="flex items-center gap-1.5">
-                          <input type="hidden" name="id" value={c.id} />
-                          <Input type="date" name="effective_to" defaultValue={today}
-                                 className="w-[140px]" aria-label="End date" />
-                          <button type="submit"
-                                  className="rounded-md border border-line-2 px-2 py-[3px] text-[11.5px] text-ink-2 hover:bg-surface-2">
-                            End
-                          </button>
-                        </form>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </>
-            ))}
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-ink-3"
-                    data-testid="no-combos">
-                  No combo rates yet. A combo is paid as one thing, so it is
-                  keyed by its title rather than by level and type.
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 }

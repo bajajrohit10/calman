@@ -27,7 +27,7 @@ begin
 
   ---------------------------------------------------------------- 1. no rate
   select pct, source, rate_id into r_pct, r_src, r_id
-    from accounts.resolve_rate(v_vendor, 'CA Final', 'Full', false, null,
+    from accounts.resolve_rate(v_vendor, 'CA Final', 'Full', false,
                                date '2026-08-15', 'Maharashtra');
   insert into _rr values (1, 'no rate at all returns none',
     'none / null', coalesce(r_src,'?') || ' / ' || coalesce(r_pct::text,'null'),
@@ -38,7 +38,7 @@ begin
        values (v_vendor, 'CA Final', 'Full', 30.00, date '2026-08-01');
 
   select pct, source, rate_id into r_pct, r_src, r_id
-    from accounts.resolve_rate(v_vendor, 'CA Final', 'Full', false, null,
+    from accounts.resolve_rate(v_vendor, 'CA Final', 'Full', false,
                                date '2026-08-15', 'Maharashtra');
   insert into _rr values (2, 'open-ended grid row applies',
     'grid / 30.00', coalesce(r_src,'?') || ' / ' || coalesce(r_pct::text,'null'),
@@ -46,7 +46,7 @@ begin
 
   -- a different vendor must not see it
   select pct, source into r_pct, r_src
-    from accounts.resolve_rate(v_other, 'CA Final', 'Full', false, null,
+    from accounts.resolve_rate(v_other, 'CA Final', 'Full', false,
                                date '2026-08-15', 'Maharashtra');
   insert into _rr values (3, 'grid row does not leak to another vendor',
     'none / null', coalesce(r_src,'?') || ' / ' || coalesce(r_pct::text,'null'),
@@ -59,21 +59,21 @@ begin
                date '2026-08-01', date '2026-08-31');
 
   select pct, source into r_pct, r_src
-    from accounts.resolve_rate(v_vendor, 'CA Inter', 'EO', false, null,
+    from accounts.resolve_rate(v_vendor, 'CA Inter', 'EO', false,
                                date '2026-08-15', null);
   insert into _rr values (4, 'closed window applies inside itself',
     'grid / 45.00', coalesce(r_src,'?') || ' / ' || coalesce(r_pct::text,'null'),
     r_src = 'grid' and r_pct = 45.00);
 
   select pct, source into r_pct, r_src
-    from accounts.resolve_rate(v_vendor, 'CA Inter', 'EO', false, null,
+    from accounts.resolve_rate(v_vendor, 'CA Inter', 'EO', false,
                                date '2026-09-01', null);
   insert into _rr values (5, 'closed window does not apply after effective_to',
     'none / null', coalesce(r_src,'?') || ' / ' || coalesce(r_pct::text,'null'),
     r_src = 'none' and r_pct is null);
 
   select pct, source into r_pct, r_src
-    from accounts.resolve_rate(v_vendor, 'CA Inter', 'EO', false, null,
+    from accounts.resolve_rate(v_vendor, 'CA Inter', 'EO', false,
                                date '2026-07-31', null);
   insert into _rr values (6, 'closed window does not apply before effective_from',
     'none / null', coalesce(r_src,'?') || ' / ' || coalesce(r_pct::text,'null'),
@@ -87,47 +87,99 @@ begin
     returning id into id_state;
 
   select pct, source, rate_id into r_pct, r_src, r_id
-    from accounts.resolve_rate(v_vendor, 'CA Final', 'Full', false, null,
+    from accounts.resolve_rate(v_vendor, 'CA Final', 'Full', false,
                                date '2026-08-15', 'Maharashtra');
   insert into _rr values (7, 'state rule beats the general grid row',
     'state_rule / 35.00', coalesce(r_src,'?') || ' / ' || coalesce(r_pct::text,'null'),
     r_src = 'state_rule' and r_pct = 35.00 and r_id = id_state);
 
   select pct, source into r_pct, r_src
-    from accounts.resolve_rate(v_vendor, 'CA Final', 'Full', false, null,
+    from accounts.resolve_rate(v_vendor, 'CA Final', 'Full', false,
                                date '2026-08-15', 'Kerala');
   insert into _rr values (8, 'a state outside the scope falls back to grid',
     'grid / 30.00', coalesce(r_src,'?') || ' / ' || coalesce(r_pct::text,'null'),
     r_src = 'grid' and r_pct = 30.00);
 
   select pct, source into r_pct, r_src
-    from accounts.resolve_rate(v_vendor, 'CA Final', 'Full', false, null,
+    from accounts.resolve_rate(v_vendor, 'CA Final', 'Full', false,
                                date '2026-08-15', null);
   insert into _rr values (9, 'a line with no state falls back to grid',
     'grid / 30.00', coalesce(r_src,'?') || ' / ' || coalesce(r_pct::text,'null'),
     r_src = 'grid' and r_pct = 30.00);
 
-  ----------------------------------------------------- 10. combo beats grid
-  insert into accounts.combo_rates (vendor_id, combo_key, display_title, pct,
-                                    effective_from)
-       values (v_vendor, 'ztest-combo-key', 'ZTEST- Combo Title', 22.00,
-               date '2026-08-01')
+  -------------------------------------------------- 10. the combo grid
+  --
+  -- §50D. A combo rate is a rate_grid row with sale_kind = 'combo'. It is a
+  -- different cell from the single rate for the same level and type, and the
+  -- two never see each other.
+  insert into accounts.rate_grid (vendor_id, sale_kind, level, product_type, pct,
+                                  effective_from)
+       values (v_vendor, 'combo', 'CA Final', 'Full', 22.00, date '2026-08-01')
     returning id into id_combo;
 
   select pct, source, rate_id into r_pct, r_src, r_id
     from accounts.resolve_rate(v_vendor, 'CA Final', 'Full', true,
-                               'ztest-combo-key', date '2026-08-15', 'Maharashtra');
-  insert into _rr values (10, 'combo beats both the state rule and the grid',
+                               date '2026-08-15', 'Maharashtra');
+  insert into _rr values (10, 'a combo line reads the combo grid',
     'combo / 22.00', coalesce(r_src,'?') || ' / ' || coalesce(r_pct::text,'null'),
     r_src = 'combo' and r_pct = 22.00 and r_id = id_combo);
 
-  -- flagged as a combo but the key matches nothing: fall through, do not fail
+  -- the same cell, not a combo, still answers from the single grid
   select pct, source into r_pct, r_src
-    from accounts.resolve_rate(v_vendor, 'CA Final', 'Full', true,
-                               'ztest-no-such-key', date '2026-08-15', 'Kerala');
-  insert into _rr values (11, 'unmatched combo key falls through to the grid',
+    from accounts.resolve_rate(v_vendor, 'CA Final', 'Full', false,
+                               date '2026-08-15', 'Kerala');
+  insert into _rr values (11, 'a single line is unaffected by the combo row',
     'grid / 30.00', coalesce(r_src,'?') || ' / ' || coalesce(r_pct::text,'null'),
     r_src = 'grid' and r_pct = 30.00);
+
+  ------------------------------- 12. a combo with only a single row: none
+  --
+  -- The important one. CMA Final EO has a single rate and no combo rate, and a
+  -- combo line must not borrow it: a combo sells several courses for one
+  -- price, so the single-product percentage would pay more than the
+  -- arrangement intended. 'none' sends the line to the Unknown tab instead.
+  insert into accounts.rate_grid (vendor_id, sale_kind, level, product_type, pct,
+                                  effective_from)
+       values (v_vendor, 'single', 'CMA Final', 'EO', 28.00, date '2026-08-01');
+
+  select pct, source into r_pct, r_src
+    from accounts.resolve_rate(v_vendor, 'CMA Final', 'EO', false,
+                               date '2026-08-15', null);
+  insert into _rr values (12, 'single rate applies to a single line',
+    'grid / 28.00', coalesce(r_src,'?') || ' / ' || coalesce(r_pct::text,'null'),
+    r_src = 'grid' and r_pct = 28.00);
+
+  select pct, source into r_pct, r_src
+    from accounts.resolve_rate(v_vendor, 'CMA Final', 'EO', true,
+                               date '2026-08-15', null);
+  insert into _rr values (13, 'combo line does NOT fall back to the single rate',
+    'none / null', coalesce(r_src,'?') || ' / ' || coalesce(r_pct::text,'null'),
+    r_src = 'none' and r_pct is null);
+
+  ------------------------ 14. a Books line is never a combo (§50D.1c)
+  --
+  -- "Combo" in a books title names the bundle the book accompanies, not a
+  -- combo product. The classifier decides Books first and sets is_combo false,
+  -- so the line arrives here asking the single grid — and gets the books rate
+  -- rather than nothing.
+  insert into accounts.rate_grid (vendor_id, sale_kind, level, product_type, pct,
+                                  effective_from)
+       values (v_vendor, 'single', 'CA Final', 'Books', 10.00, date '2026-08-01');
+
+  select pct, source into r_pct, r_src
+    from accounts.resolve_rate(v_vendor, 'CA Final', 'Books', false,
+                               date '2026-08-15', null);
+  insert into _rr values (14, 'Books line with "Combo" in the title uses single',
+    'grid / 10.00', coalesce(r_src,'?') || ' / ' || coalesce(r_pct::text,'null'),
+    r_src = 'grid' and r_pct = 10.00);
+
+  -- and had it been flagged as a combo, it would have found nothing
+  select pct, source into r_pct, r_src
+    from accounts.resolve_rate(v_vendor, 'CA Final', 'Books', true,
+                               date '2026-08-15', null);
+  insert into _rr values (15, 'the same Books cell has no combo row',
+    'none / null', coalesce(r_src,'?') || ' / ' || coalesce(r_pct::text,'null'),
+    r_src = 'none' and r_pct is null);
 
   ------------------------------------------ 12. overlapping rows, later wins
   insert into accounts.rate_grid (vendor_id, level, product_type, pct, effective_from)
@@ -138,37 +190,36 @@ begin
     returning id into id_new;
 
   select pct, source, rate_id into r_pct, r_src, r_id
-    from accounts.resolve_rate(v_vendor, 'CMA Final', 'FT', false, null,
+    from accounts.resolve_rate(v_vendor, 'CMA Final', 'FT', false,
                                date '2026-08-15', null);
-  insert into _rr values (12, 'two open rows overlap: later effective_from wins',
+  insert into _rr values (16, 'two open rows overlap: later effective_from wins',
     'grid / 25.00', coalesce(r_src,'?') || ' / ' || coalesce(r_pct::text,'null'),
     r_src = 'grid' and r_pct = 25.00 and r_id = id_new);
 
   select pct, source, rate_id into r_pct, r_src, r_id
-    from accounts.resolve_rate(v_vendor, 'CMA Final', 'FT', false, null,
+    from accounts.resolve_rate(v_vendor, 'CMA Final', 'FT', false,
                                date '2026-07-15', null);
-  insert into _rr values (13, 'before the newer row, the older one still applies',
+  insert into _rr values (17, 'before the newer row, the older one still applies',
     'grid / 20.00', coalesce(r_src,'?') || ' / ' || coalesce(r_pct::text,'null'),
     r_src = 'grid' and r_pct = 20.00 and r_id = id_old);
 
   ------------------------------------------------- 14. the key normaliser
-  insert into _rr values (14, 'normalise_key cuts at "by" and hyphenates',
+  insert into _rr values (18, 'normalise_key cuts at "by" and hyphenates',
     'ca-final-afm-combo',
     coalesce(accounts.normalise_key('CA Final AFM (Combo) by CA Aaditya Jain'), 'null'),
     accounts.normalise_key('CA Final AFM (Combo) by CA Aaditya Jain') = 'ca-final-afm-combo');
 
-  insert into _rr values (15, 'normalise_key collapses punctuation runs',
+  insert into _rr values (19, 'normalise_key collapses punctuation runs',
     'ca-inter-law-set-a',
     coalesce(accounts.normalise_key('  CA Inter -- Law / Set A  '), 'null'),
     accounts.normalise_key('  CA Inter -- Law / Set A  ') = 'ca-inter-law-set-a');
 
-  insert into _rr values (16, 'normalise_key returns null for an empty title',
+  insert into _rr values (20, 'normalise_key returns null for an empty title',
     'null', coalesce(accounts.normalise_key('   ---  '), 'null'),
     accounts.normalise_key('   ---  ') is null);
 
   ------------------------------------------------------------------ cleanup
   delete from accounts.rate_grid   where vendor_id in (v_vendor, v_other);
-  delete from accounts.combo_rates where vendor_id in (v_vendor, v_other);
   delete from accounts.vendors     where id in (v_vendor, v_other);
 end $$;
 

@@ -3,17 +3,17 @@
 import { useActionState, useId, useState } from "react";
 
 import { Button, Input, Select, Textarea, FIELD_LABEL, cx } from "@/components/ui";
-import { normaliseKey } from "@/lib/accounts/normalise-key";
-import { addCombo, addRate, setLineOverride, updateRatePct } from "./actions";
+import { addRate, setLineOverride, updateRatePct } from "./actions";
 import {
-  EMPTY_COMBO_STATE, EMPTY_OVERRIDE_STATE, EMPTY_RATE_STATE,
-  type ComboFormState, type RateFormState,
+  EMPTY_OVERRIDE_STATE, EMPTY_RATE_STATE, type RateFormState,
 } from "./form-state";
 
 /* ------------------------------------------------------------ add a rate -- */
 
 type AddRateProps = {
   vendorId: string;
+  /** Which grid this form writes to: the single-product one or the combo one. */
+  saleKind: "single" | "combo";
   levels: readonly string[];
   types: readonly string[];
   states: readonly string[];
@@ -32,7 +32,7 @@ type AddRateProps = {
  * components would have drifted the moment the retrospective guard changed.
  */
 export function AddRate({
-  vendorId, levels, types, states, today, level, productType, label,
+  vendorId, saleKind, levels, types, states, today, level, productType, label,
 }: AddRateProps) {
   // `nonce` remounts the form, which is how a fresh useActionState is got:
   // React 19 has no reset for it, and syncing "did it save" into an effect
@@ -59,7 +59,7 @@ export function AddRate({
   return (
     <RateFormBody
       key={nonce}
-      vendorId={vendorId} levels={levels} types={types} states={states}
+      vendorId={vendorId} saleKind={saleKind} levels={levels} types={types} states={states}
       today={today} level={level} productType={productType}
       fixedCell={fixedCell} fieldId={id}
       onClose={() => setOpen(false)}
@@ -69,7 +69,7 @@ export function AddRate({
 }
 
 function RateFormBody({
-  vendorId, levels, types, states, today, level, productType,
+  vendorId, saleKind, levels, types, states, today, level, productType,
   fixedCell, fieldId, onClose, onAnother,
 }: Omit<AddRateProps, "label"> & {
   fixedCell: boolean;
@@ -108,6 +108,7 @@ function RateFormBody({
         data-testid="retro-guard"
       >
         <input type="hidden" name="vendor_id" value={vendorId} />
+        <input type="hidden" name="sale_kind" value={saleKind} />
         <input type="hidden" name="level" value={v.level} />
         <input type="hidden" name="product_type" value={v.product_type} />
         <input type="hidden" name="pct" value={v.pct} />
@@ -155,6 +156,7 @@ function RateFormBody({
       data-testid={fixedCell ? "add-rate-form" : "add-cell-form"}
     >
       <input type="hidden" name="vendor_id" value={vendorId} />
+      <input type="hidden" name="sale_kind" value={saleKind} />
 
       <div className="flex flex-wrap items-end gap-2.5">
         {fixedCell ? (
@@ -232,148 +234,6 @@ function RateFormBody({
       <div className="flex items-center gap-2">
         <Button type="submit" disabled={pending} data-testid="rate-save">
           {pending ? "Saving…" : "Save rate"}
-        </Button>
-        <Button type="button" variant="ghost" onClick={onClose}>
-          Cancel
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-/* ----------------------------------------------------------- add a combo -- */
-
-export function AddCombo({
-  vendors, today,
-}: {
-  vendors: { id: string; name: string }[];
-  today: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [nonce, setNonce] = useState(0);
-
-  if (!open) {
-    return (
-      <Button type="button" onClick={() => setOpen(true)} data-testid="add-combo">
-        Add combo rate
-      </Button>
-    );
-  }
-
-  return (
-    <ComboFormBody
-      key={nonce}
-      vendors={vendors} today={today}
-      onClose={() => setOpen(false)}
-      onAnother={() => setNonce((n) => n + 1)}
-    />
-  );
-}
-
-function ComboFormBody({
-  vendors, today, onClose, onAnother,
-}: {
-  vendors: { id: string; name: string }[];
-  today: string;
-  onClose: () => void;
-  onAnother: () => void;
-}) {
-  const [title, setTitle] = useState("");
-  const [key, setKey] = useState("");
-  const [touched, setTouched] = useState(false);
-  const [state, action, pending] = useActionState<ComboFormState, FormData>(
-    addCombo, EMPTY_COMBO_STATE);
-
-  // The key follows the title until somebody edits the key, after which it is
-  // theirs. Deriving it on every keystroke would throw away their edit.
-  const onTitle = (v: string) => {
-    setTitle(v);
-    if (!touched) setKey(normaliseKey(v) ?? "");
-  };
-
-  if (state.ok) {
-    return (
-      <div
-        className="flex flex-wrap items-center gap-2 rounded-lg border border-accent bg-sunk p-3 text-[12.5px] text-ink"
-        data-testid="combo-saved"
-      >
-        Combo rate saved.
-        <Button type="button" variant="ghost" onClick={onAnother}>Add another</Button>
-        <Button type="button" variant="ghost" onClick={onClose}>Close</Button>
-      </div>
-    );
-  }
-
-  return (
-    <form
-      action={action}
-      className="flex flex-col gap-2.5 rounded-lg border border-accent bg-sunk p-3"
-      data-testid="add-combo-form"
-    >
-      <div className="flex flex-wrap items-end gap-2.5">
-        <label className="flex flex-col gap-1">
-          <span className={FIELD_LABEL}>Paid to</span>
-          <Select name="vendor_id" defaultValue="" required className="w-[220px]"
-                  data-testid="combo-vendor">
-            <option value="" disabled>Choose…</option>
-            {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-          </Select>
-        </label>
-
-        <label className="flex flex-col gap-1">
-          <span className={FIELD_LABEL}>Combo title</span>
-          <Input
-            name="display_title" required className="w-[280px]"
-            value={title} onChange={(e) => onTitle(e.target.value)}
-            placeholder="CA Final DT and IDT Combo"
-            data-testid="combo-title"
-          />
-        </label>
-
-        <label className="flex flex-col gap-1">
-          <span className={FIELD_LABEL}>Combo key</span>
-          <Input
-            name="combo_key" required className="w-[280px] font-mono text-[12px]"
-            value={key}
-            onChange={(e) => { setTouched(true); setKey(e.target.value); }}
-            data-testid="combo-key"
-          />
-        </label>
-      </div>
-
-      <div className="flex flex-wrap items-end gap-2.5">
-        <label className="flex flex-col gap-1">
-          <span className={FIELD_LABEL}>Percent</span>
-          <Input name="pct" inputMode="decimal" required placeholder="18.00"
-                 className="w-[90px]" data-testid="combo-pct" />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className={FIELD_LABEL}>Effective from</span>
-          <Input type="date" name="effective_from" defaultValue={today} required
-                 className="w-[150px]" data-testid="combo-from" />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className={FIELD_LABEL}>Effective to</span>
-          <Input type="date" name="effective_to" className="w-[150px]" />
-        </label>
-        <label className="flex flex-1 flex-col gap-1">
-          <span className={FIELD_LABEL}>Note</span>
-          <Input name="note" placeholder="Optional" />
-        </label>
-      </div>
-
-      <p className="text-[11.5px] text-ink-3">
-        The key is what the importer matches on. It is derived from the title —
-        cut at “by”, lowercased, punctuation to hyphens — and you can edit it.
-      </p>
-
-      {state.error ? (
-        <p className="text-[12.5px] text-danger" data-testid="combo-error">{state.error}</p>
-      ) : null}
-
-      <div className="flex items-center gap-2">
-        <Button type="submit" disabled={pending} data-testid="combo-save">
-          {pending ? "Saving…" : "Save combo rate"}
         </Button>
         <Button type="button" variant="ghost" onClick={onClose}>
           Cancel
