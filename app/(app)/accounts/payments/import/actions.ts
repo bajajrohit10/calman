@@ -1,13 +1,11 @@
 "use server";
 
-import ExcelJS from "exceljs";
 import { revalidatePath } from "next/cache";
 
 import { requireAccountsProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/paged";
-import { parsePaymentsWorkbook, type PaymentParseResult } from "@/lib/accounts/payments-sheet";
-import type { SheetCell } from "@/lib/accounts/sales-sheet";
+import type { PaymentParseResult, ParsedPayment } from "@/lib/accounts/payments-sheet";
 import {
   EMPTY_PAYMENT_PREVIEW, EMPTY_PAYMENT_COMMIT,
   type PaymentPreview, type PaymentCommitResult,
@@ -15,31 +13,42 @@ import {
 
 /** §50F.2. Upload, read 126 tabs, show what will land, then commit. */
 
-async function readSheets(form: FormData) {
-  const file = form.get("file");
-  if (!(file instanceof File) || file.size === 0) {
-    return { error: "Choose a .xlsx file.", sheets: null, fileName: "" };
-  }
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(await file.arrayBuffer());
-  const sheets = wb.worksheets.map((ws) => {
-    const rows: SheetCell[][] = [];
-    for (let r = 1; r <= ws.rowCount; r++) {
-      const row: SheetCell[] = [];
-      for (let c = 1; c <= ws.columnCount; c++) row.push(ws.getRow(r).getCell(c).value);
-      rows.push(row);
-    }
-    return { name: ws.name, rows };
-  });
-  return { error: null, sheets, fileName: file.name };
-}
+/**
+ * §50F.2. The workbook is read in the browser, not here.
+ *
+ * It is 7MB, and Vercel refuses a request body over 4.5MB with a bare 413 — a
+ * platform limit, not the configurable server-action one, so the 3MB sales
+ * file fits and this never can. The page therefore runs the same parser
+ * client-side and posts what it extracted: 126 tabs of cells reduce to about
+ * 900 payment rows.
+ *
+ * What the browser sends is a proposal, not a decision. It carries tab names
+ * and values; vendor resolution and every write still happen here against the
+ * master, so a tampered payload can name a vendor that does not exist but
+ * cannot invent one, and cannot attach a payment to a vendor whose tab it did
+ * not come from.
+ */
+type ClientParse = Omit<PaymentParseResult, "payments" | "unresolvedTabs"> & {
+  payments: (Omit<ParsedPayment, "vendor_id"> & { vendor_id?: string | null })[];
+};
 
 async function parseUpload(form: FormData): Promise<
   { error: string; parsed: null; fileName: string } |
   { error: null; parsed: PaymentParseResult; fileName: string }
 > {
-  const { error, sheets, fileName } = await readSheets(form);
-  if (error || !sheets) return { error: error ?? "Unreadable file.", parsed: null, fileName };
+  const fileName = String(form.get("file_name") ?? "payments.xlsx");
+  const raw = String(form.get("parsed") ?? "");
+  if (!raw) return { error: "No workbook was read. Choose a .xlsx file.", parsed: null, fileName };
+
+  let client: ClientParse;
+  try {
+    client = JSON.parse(raw) as ClientParse;
+  } catch {
+    return { error: "The workbook could not be read.", parsed: null, fileName };
+  }
+  if (!Array.isArray(client.payments)) {
+    return { error: "The workbook produced no payment rows.", parsed: null, fileName };
+  }
 
   const supabase = await createClient();
   const vendors = await fetchAllRows<{ id: string; name: string }>((from, to) =>
@@ -49,7 +58,26 @@ async function parseUpload(form: FormData): Promise<
   if (vendors.error || aliases.error) {
     return { error: vendors.error ?? aliases.error ?? "", parsed: null, fileName };
   }
-  return { error: null, parsed: parsePaymentsWorkbook(sheets, vendors.rows, aliases.rows), fileName };
+
+  const key = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const byName = new Map<string, { id: string; name: string }>();
+  for (const v of vendors.rows) byName.set(key(v.name), v);
+  for (const a of aliases.rows) {
+    const v = vendors.rows.find((x) => x.id === a.vendor_id);
+    if (v && !byName.has(key(a.alias))) byName.set(key(a.alias), v);
+  }
+
+  const payments = client.payments.map((p) => ({
+    ...p,
+    vendor_id: byName.get(key(p.vendor_tab_name ?? ""))?.id ?? null,
+  }));
+  const unresolvedTabs = [...new Set(
+    payments.filter((p) => !p.vendor_id).map((p) => p.vendor_tab_name))].sort();
+
+  return {
+    error: null, fileName,
+    parsed: { ...client, payments, unresolvedTabs } as PaymentParseResult,
+  };
 }
 
 export async function previewPayments(

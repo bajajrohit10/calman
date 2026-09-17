@@ -1,8 +1,10 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import ExcelJS from "exceljs";
 
 import { Button, ErrorNote, Input, FIELD_LABEL, cx } from "@/components/ui";
+import { parsePaymentsWorkbook } from "@/lib/accounts/payments-sheet";
 import { previewPayments, commitPayments } from "./actions";
 import {
   EMPTY_PAYMENT_PREVIEW, EMPTY_PAYMENT_COMMIT,
@@ -20,12 +22,51 @@ const Count = ({ label, value, tone }: { label: string; value: string | number; 
 export function PaymentImportForm() {
   const [file, setFile] = useState<File | null>(null);
   const [month, setMonth] = useState("");
+  const [parsed, setParsed] = useState<string>("");
+  const [reading, setReading] = useState(false);
+  const [readError, setReadError] = useState<string | null>(null);
   const [preview, previewAction, previewing] =
     useActionState<PaymentPreview, FormData>(previewPayments, EMPTY_PAYMENT_PREVIEW);
   const [commit, commitAction, committing] =
     useActionState<PaymentCommitResult, FormData>(commitPayments, EMPTY_PAYMENT_COMMIT);
 
   const effectiveMonth = month || preview.modalMonth || "";
+
+  /**
+   * Read the workbook here rather than posting it.
+   *
+   * Vercel caps a request body at 4.5MB and this file is 7MB, so the upload
+   * itself can never reach the server. Parsing in the browser and posting the
+   * extracted rows is not an optimisation — it is the only way the file gets
+   * in at all. Vendor resolution still happens on the server.
+   */
+  const readFile = async (f: File) => {
+    setReading(true);
+    setReadError(null);
+    try {
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(await f.arrayBuffer());
+      const sheets = wb.worksheets.map((ws) => {
+        const rows: unknown[][] = [];
+        for (let r = 1; r <= ws.rowCount; r++) {
+          const row: unknown[] = [];
+          for (let c = 1; c <= ws.columnCount; c++) row.push(ws.getRow(r).getCell(c).value);
+          rows.push(row);
+        }
+        return { name: ws.name, rows };
+      });
+      // No vendor list in the browser: the server resolves tab names against
+      // the master, so every tab comes back unresolved here and is re-decided
+      // there.
+      const result = parsePaymentsWorkbook(sheets, [], []);
+      setParsed(JSON.stringify(result));
+    } catch (e) {
+      setReadError(e instanceof Error ? e.message : "The workbook could not be read.");
+      setParsed("");
+    } finally {
+      setReading(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -34,8 +75,12 @@ export function PaymentImportForm() {
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1">
             <span className={FIELD_LABEL}>Workbook (.xlsx)</span>
-            <input type="file" name="file" accept=".xlsx" required data-testid="pay-file"
-                   onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            <input type="file" accept=".xlsx" required data-testid="pay-file"
+                   onChange={(e) => {
+                     const f = e.target.files?.[0] ?? null;
+                     setFile(f);
+                     if (f) void readFile(f);
+                   }}
                    className="text-[12.5px] text-ink-2 file:mr-2 file:rounded-md file:border file:border-line-2 file:bg-surface file:px-2 file:py-1 file:text-[12.5px] file:text-ink" />
           </label>
           <label className="flex flex-col gap-1">
@@ -44,10 +89,16 @@ export function PaymentImportForm() {
                    onChange={(e) => setMonth(e.target.value)}
                    className="w-[160px]" data-testid="pay-month" />
           </label>
-          <Button type="submit" disabled={previewing || !file} data-testid="pay-preview">
-            {previewing ? "Reading…" : "Preview"}
+          <input type="hidden" name="parsed" value={parsed} />
+          <input type="hidden" name="file_name" value={file?.name ?? ""} />
+          <Button type="submit" disabled={previewing || reading || !parsed} data-testid="pay-preview">
+            {reading ? "Reading the workbook…" : previewing ? "Checking…" : "Preview"}
           </Button>
         </div>
+
+        {readError ? (
+          <ErrorNote><span data-testid="pay-read-error">{readError}</span></ErrorNote>
+        ) : null}
 
         {preview.error ? (
           <ErrorNote><span data-testid="pay-error">{preview.error}</span></ErrorNote>
@@ -145,11 +196,11 @@ export function PaymentImportForm() {
       {preview.ok ? (
         <form action={commitAction}
               className="flex flex-wrap items-center gap-2.5 rounded-lg border border-accent bg-sunk p-3">
-          <label className="flex flex-col gap-1">
-            <span className={FIELD_LABEL}>Confirm the same file</span>
-            <input type="file" name="file" accept=".xlsx" required data-testid="pay-commit-file"
-                   className="text-[12.5px] text-ink-2 file:mr-2 file:rounded-md file:border file:border-line-2 file:bg-surface file:px-2 file:py-1 file:text-[12.5px] file:text-ink" />
-          </label>
+          {/* The same rows the preview described, not a second read of the
+              file: the numbers above and the numbers written are then the
+              same numbers. */}
+          <input type="hidden" name="parsed" value={parsed} />
+          <input type="hidden" name="file_name" value={file?.name ?? ""} />
           <input type="hidden" name="month" value={effectiveMonth} />
           {preview.existingMonth ? <input type="hidden" name="replace" value="1" /> : null}
           <Button type="submit" disabled={committing} data-testid="pay-commit">
