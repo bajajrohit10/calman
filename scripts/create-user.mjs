@@ -15,7 +15,8 @@
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 
-const ROLES = ["super_admin", "manager", "counsellor", "ticket_team"];
+// §50A: `accounts` reaches the remittance module and no counselling table.
+const ROLES = ["super_admin", "manager", "counsellor", "ticket_team", "accounts"];
 
 function usage(problem) {
   if (problem) console.error(`\n  Error: ${problem}`);
