@@ -12,6 +12,585 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  accounts: {
+    Tables: {
+      adjustments: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          id: string
+          linked_order_id: string | null
+          month: string
+          reason: string | null
+          vendor_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          linked_order_id?: string | null
+          month: string
+          reason?: string | null
+          vendor_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          linked_order_id?: string | null
+          month?: string
+          reason?: string | null
+          vendor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "adjustments_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      combo_rates: {
+        Row: {
+          combo_key: string
+          created_at: string
+          display_title: string | null
+          effective_from: string
+          effective_to: string | null
+          id: string
+          note: string | null
+          pct: number
+          vendor_id: string
+        }
+        Insert: {
+          combo_key: string
+          created_at?: string
+          display_title?: string | null
+          effective_from: string
+          effective_to?: string | null
+          id?: string
+          note?: string | null
+          pct: number
+          vendor_id: string
+        }
+        Update: {
+          combo_key?: string
+          created_at?: string
+          display_title?: string | null
+          effective_from?: string
+          effective_to?: string | null
+          id?: string
+          note?: string | null
+          pct?: number
+          vendor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "combo_rates_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_batches: {
+        Row: {
+          file_name: string
+          id: string
+          month: string
+          row_count: number
+          uploaded_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          file_name: string
+          id?: string
+          month: string
+          row_count?: number
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          file_name?: string
+          id?: string
+          month?: string
+          row_count?: number
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: []
+      }
+      payments: {
+        Row: {
+          amount: number | null
+          batch_id: string
+          created_at: string
+          id: string
+          method: string | null
+          order_id: string | null
+          paid_on: string | null
+          raw_row: Json | null
+          transaction_id: string | null
+          vendor_id: string | null
+          vendor_tab_name: string | null
+        }
+        Insert: {
+          amount?: number | null
+          batch_id: string
+          created_at?: string
+          id?: string
+          method?: string | null
+          order_id?: string | null
+          paid_on?: string | null
+          raw_row?: Json | null
+          transaction_id?: string | null
+          vendor_id?: string | null
+          vendor_tab_name?: string | null
+        }
+        Update: {
+          amount?: number | null
+          batch_id?: string
+          created_at?: string
+          id?: string
+          method?: string | null
+          order_id?: string | null
+          paid_on?: string | null
+          raw_row?: Json | null
+          transaction_id?: string | null
+          vendor_id?: string | null
+          vendor_tab_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "payment_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portal_ledger: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          entry_date: string
+          id: string
+          kind: string
+          note: string | null
+          order_id: string | null
+          vendor_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          entry_date: string
+          id?: string
+          kind: string
+          note?: string | null
+          order_id?: string | null
+          vendor_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          entry_date?: string
+          id?: string
+          kind?: string
+          note?: string | null
+          order_id?: string | null
+          vendor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_ledger_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portal_prices: {
+        Row: {
+          center_adjustment: number
+          confirmed: boolean
+          created_at: string
+          effective_from: string
+          id: string
+          learned_from_order_id: string | null
+          price: number
+          product_key: string
+          vendor_id: string
+        }
+        Insert: {
+          center_adjustment?: number
+          confirmed?: boolean
+          created_at?: string
+          effective_from: string
+          id?: string
+          learned_from_order_id?: string | null
+          price: number
+          product_key: string
+          vendor_id: string
+        }
+        Update: {
+          center_adjustment?: number
+          confirmed?: boolean
+          created_at?: string
+          effective_from?: string
+          id?: string
+          learned_from_order_id?: string | null
+          price?: number
+          product_key?: string
+          vendor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_prices_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rate_grid: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          effective_from: string
+          effective_to: string | null
+          id: string
+          level: string
+          note: string | null
+          pct: number
+          product_type: string
+          state_scope: string[] | null
+          vendor_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          effective_from: string
+          effective_to?: string | null
+          id?: string
+          level: string
+          note?: string | null
+          pct: number
+          product_type: string
+          state_scope?: string[] | null
+          vendor_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string
+          effective_to?: string | null
+          id?: string
+          level?: string
+          note?: string | null
+          pct?: number
+          product_type?: string
+          state_scope?: string[] | null
+          vendor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rate_grid_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sales_batches: {
+        Row: {
+          file_name: string
+          id: string
+          month: string
+          row_count: number
+          uploaded_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          file_name: string
+          id?: string
+          month: string
+          row_count?: number
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          file_name?: string
+          id?: string
+          month?: string
+          row_count?: number
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: []
+      }
+      sales_lines: {
+        Row: {
+          actual_received: number | null
+          base_amount: number | null
+          base_source: string | null
+          batch_id: string
+          calculated_remittance: number | null
+          combo_key: string | null
+          contact: string | null
+          course_medium: string | null
+          course_title: string | null
+          created_at: string
+          faculty_name: string | null
+          has_books_addon: boolean
+          id: string
+          is_combo: boolean
+          level: string | null
+          list_price: number | null
+          no_remittance_reason: string | null
+          order_date: string | null
+          order_id: string
+          order_number: string | null
+          override_note: string | null
+          override_pct: number | null
+          payment_mode: string | null
+          payment_option: string | null
+          product_key: string | null
+          product_type: string | null
+          rate_pct: number | null
+          rate_source: string | null
+          remarks: string | null
+          state: string | null
+          status: string
+          student_name: string | null
+          teachers_price: number | null
+          vendor_id: string | null
+        }
+        Insert: {
+          actual_received?: number | null
+          base_amount?: number | null
+          base_source?: string | null
+          batch_id: string
+          calculated_remittance?: number | null
+          combo_key?: string | null
+          contact?: string | null
+          course_medium?: string | null
+          course_title?: string | null
+          created_at?: string
+          faculty_name?: string | null
+          has_books_addon?: boolean
+          id?: string
+          is_combo?: boolean
+          level?: string | null
+          list_price?: number | null
+          no_remittance_reason?: string | null
+          order_date?: string | null
+          order_id: string
+          order_number?: string | null
+          override_note?: string | null
+          override_pct?: number | null
+          payment_mode?: string | null
+          payment_option?: string | null
+          product_key?: string | null
+          product_type?: string | null
+          rate_pct?: number | null
+          rate_source?: string | null
+          remarks?: string | null
+          state?: string | null
+          status?: string
+          student_name?: string | null
+          teachers_price?: number | null
+          vendor_id?: string | null
+        }
+        Update: {
+          actual_received?: number | null
+          base_amount?: number | null
+          base_source?: string | null
+          batch_id?: string
+          calculated_remittance?: number | null
+          combo_key?: string | null
+          contact?: string | null
+          course_medium?: string | null
+          course_title?: string | null
+          created_at?: string
+          faculty_name?: string | null
+          has_books_addon?: boolean
+          id?: string
+          is_combo?: boolean
+          level?: string | null
+          list_price?: number | null
+          no_remittance_reason?: string | null
+          order_date?: string | null
+          order_id?: string
+          order_number?: string | null
+          override_note?: string | null
+          override_pct?: number | null
+          payment_mode?: string | null
+          payment_option?: string | null
+          product_key?: string | null
+          product_type?: string | null
+          rate_pct?: number | null
+          rate_source?: string | null
+          remarks?: string | null
+          state?: string | null
+          status?: string
+          student_name?: string | null
+          teachers_price?: number | null
+          vendor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_lines_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "sales_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_lines_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vendor_aliases: {
+        Row: {
+          alias: string
+          created_at: string
+          id: string
+          vendor_id: string
+        }
+        Insert: {
+          alias: string
+          created_at?: string
+          id?: string
+          vendor_id: string
+        }
+        Update: {
+          alias?: string
+          created_at?: string
+          id?: string
+          vendor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendor_aliases_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vendors: {
+        Row: {
+          created_at: string
+          default_payment_mode: string
+          id: string
+          institute: string | null
+          is_active: boolean
+          kind: string
+          name: string
+          note: string | null
+          opening_balance: number
+          opening_balance_date: string | null
+          portal_owner_vendor_id: string | null
+          tracks_portal_balance: boolean
+        }
+        Insert: {
+          created_at?: string
+          default_payment_mode?: string
+          id?: string
+          institute?: string | null
+          is_active?: boolean
+          kind: string
+          name: string
+          note?: string | null
+          opening_balance?: number
+          opening_balance_date?: string | null
+          portal_owner_vendor_id?: string | null
+          tracks_portal_balance?: boolean
+        }
+        Update: {
+          created_at?: string
+          default_payment_mode?: string
+          id?: string
+          institute?: string | null
+          is_active?: boolean
+          kind?: string
+          name?: string
+          note?: string | null
+          opening_balance?: number
+          opening_balance_date?: string | null
+          portal_owner_vendor_id?: string | null
+          tracks_portal_balance?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendors_portal_owner_vendor_id_fkey"
+            columns: ["portal_owner_vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+    }
+    Views: {
+      portal_balances: {
+        Row: {
+          amount: number | null
+          balance_after: number | null
+          entry_date: string | null
+          id: string | null
+          kind: string | null
+          note: string | null
+          order_id: string | null
+          vendor_id: string | null
+          vendor_name: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_ledger_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -2459,7 +3038,12 @@ export type Database = {
         | "followup_3"
         | "after_sale"
         | "any"
-      user_role: "super_admin" | "manager" | "counsellor" | "ticket_team"
+      user_role:
+        | "super_admin"
+        | "manager"
+        | "counsellor"
+        | "ticket_team"
+        | "accounts"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2585,6 +3169,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  accounts: {
+    Enums: {},
+  },
   graphql_public: {
     Enums: {},
   },
@@ -2648,7 +3235,13 @@ export const Constants = {
         "after_sale",
         "any",
       ],
-      user_role: ["super_admin", "manager", "counsellor", "ticket_team"],
+      user_role: [
+        "super_admin",
+        "manager",
+        "counsellor",
+        "ticket_team",
+        "accounts",
+      ],
     },
   },
 } as const

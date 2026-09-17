@@ -5,11 +5,15 @@ import { UsersTable } from "./users-table";
 
 export const metadata = { title: "Users · Settings · Calman" };
 
+import type { Role } from "@/lib/roles";
+
 export type UserRow = {
   id: string;
   email: string;
   fullName: string;
-  role: "super_admin" | "manager" | "counsellor" | "ticket_team";
+  // §50A: the shared Role type, not a copy of it — a role added to the enum
+  // has to reach this screen or nobody can grant it.
+  role: Role;
   isActive: boolean;
   banned: boolean;
   lastSignInAt: string | null;

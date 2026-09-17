@@ -1,0 +1,18 @@
+-- §50A. The `accounts` role, and the one change it forces elsewhere.
+--
+-- Its own migration because a value added to an enum cannot be *used* in the
+-- transaction that adds it, and the next migration's policies name it.
+--
+-- The second statement is the important one, and it is a deliberate change to
+-- a function that guards production counselling tables. app.is_staff() is
+-- `app.role() is not null`, so the moment `accounts` exists as a role, anybody
+-- holding it would satisfy every is_staff() policy in the public schema —
+-- every lead, every call, every ticket. That is the opposite of what this role
+-- is for, which is the accounts schema and nothing else.
+--
+-- So is_staff() now means "staff of the counselling product". Every existing
+-- role still answers true and nothing about today's access changes; only the
+-- new role is excluded, and it is excluded by name rather than by an allow
+-- list, so a future counselling role added to the enum keeps working without
+-- anybody remembering this line.
+alter type public.user_role add value if not exists 'accounts';

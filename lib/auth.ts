@@ -77,6 +77,25 @@ export async function requireUser() {
  * Server actions are public HTTP endpoints, so this is checked there too and
  * never inferred from the fact that the UI hid a button.
  */
+/**
+ * Super admin only — stricter than requireAdminProfile, which admits managers.
+ *
+ * §50A gives the Accounts module to super admins and to the accounts role.
+ * Managers run the counselling floor and have no business in remittance, so
+ * "admin" is the wrong test here even though it is the usual one.
+ */
+export async function requireAccountsProfile(): Promise<{
+  userId: string;
+  profile: Profile;
+}> {
+  const viewer = await requireUser();
+  const role = viewer.profile?.role;
+  if (!viewer.profile || (role !== "super_admin" && role !== "accounts")) {
+    redirect("/my-day");
+  }
+  return { userId: viewer.userId!, profile: viewer.profile };
+}
+
 export async function requireAdminProfile(): Promise<{
   userId: string;
   profile: Profile;

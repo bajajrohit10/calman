@@ -66,6 +66,20 @@ const ITEMS: Item[] = [
   { href: "/reports", label: "Reports", hint: "Daily and team reports", icon: "◔" },
 ];
 
+/**
+ * §50A. The Accounts module sits apart from the counselling rail.
+ *
+ * Its own entry rather than a Settings child: remittance is a different job
+ * done by different people, and burying it under Settings would say it is a
+ * configuration screen for the counselling product, which it is not.
+ */
+const ACCOUNTS: Item = {
+  href: "/accounts/vendors",
+  label: "Accounts",
+  hint: "Vendors and remittance",
+  icon: "₹",
+};
+
 const SETTINGS: Item = {
   href: "/settings/users",
   label: "Settings",
@@ -85,6 +99,7 @@ const SETTINGS: Item = {
  */
 export function Sidebar({
   showSettings,
+  showAccounts,
   fullName,
   roleLabel,
   theme,
@@ -92,6 +107,8 @@ export function Sidebar({
   signOut,
 }: {
   showSettings: boolean;
+  /** §50A: super admins and the accounts role; not managers. */
+  showAccounts: boolean;
   fullName: string;
   roleLabel: string;
   /** §43.2: which palette this person is looking at. */
@@ -111,9 +128,11 @@ export function Sidebar({
   const newCalls = useNewCallsCount();
   const collapsed = useRailCollapsed();
   const [themePending, startTheme] = useTransition();
-  const items = showSettings
-    ? [...ITEMS, SETTINGS]
-    : ITEMS.filter((item) => !item.adminOnly);
+  const items = [
+    ...(showSettings ? ITEMS : ITEMS.filter((item) => !item.adminOnly)),
+    ...(showAccounts ? [ACCOUNTS] : []),
+    ...(showSettings ? [SETTINGS] : []),
+  ];
 
   /** Hidden while the rail is icons-only, back on hover. */
   const label = collapsed ? "hidden group-hover:block" : "";

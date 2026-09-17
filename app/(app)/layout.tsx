@@ -140,6 +140,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               ),
             }}
             showSettings={isAdmin(profile.role)}
+            showAccounts={profile.role === "super_admin" || profile.role === "accounts"}
             fullName={profile.full_name}
             roleLabel={ROLE_LABELS[profile.role]}
             theme={profile.theme === "light" ? "light" : "dark"}

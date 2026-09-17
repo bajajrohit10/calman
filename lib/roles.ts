@@ -16,6 +16,8 @@ export const ROLE_LABELS: Record<Role, string> = {
   manager: "Manager",
   counsellor: "Counsellor",
   ticket_team: "Ticket Team",
+  // §50A. Accounts-only: the remittance module and nothing in counselling.
+  accounts: "Accounts",
 };
 
 export function isAdmin(role: Role | null | undefined): boolean {
