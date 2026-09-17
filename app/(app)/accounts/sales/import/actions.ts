@@ -7,6 +7,10 @@ import { requireAccountsProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/paged";
 import { parseSalesSheet, type ParseResult, type SheetCell } from "@/lib/accounts/sales-sheet";
+import {
+  EMPTY_PREVIEW, EMPTY_COMMIT,
+  type ImportPreview, type CommitResult,
+} from "./import-state";
 
 /**
  * §50E.2. Uploading a month of sales.
@@ -18,42 +22,6 @@ import { parseSalesSheet, type ParseResult, type SheetCell } from "@/lib/account
  * then guaranteed to be what the file says, not what a screen said some
  * minutes ago.
  */
-
-export type ImportPreview = {
-  ok: boolean;
-  error: string | null;
-  missingHeaders: string[];
-  tabs: string[];
-  tab: string | null;
-  modalMonth: string | null;
-  monthCounts: Record<string, number>;
-  totals: {
-    lines: number;
-    draft: number;
-    cancelled: number;
-    deferred: number;
-    vendorNull: number;
-    rateNone: number;
-    alreadyImported: number;
-    conversions: number;
-  };
-  droppedMarkers: Record<string, number>;
-  pairedMarkers: Record<string, number>;
-  centerArmSplit: Record<string, number>;
-  vendorNullNames: Record<string, number>;
-  duplicateOrders: string[];
-  /** Set when the month already exists, so the page can offer to replace. */
-  existingMonth: { month: string; rows: number; paid: number } | null;
-};
-
-export const EMPTY_PREVIEW: ImportPreview = {
-  ok: false, error: null, missingHeaders: [], tabs: [], tab: null,
-  modalMonth: null, monthCounts: {},
-  totals: { lines: 0, draft: 0, cancelled: 0, deferred: 0, vendorNull: 0,
-            rateNone: 0, alreadyImported: 0, conversions: 0 },
-  droppedMarkers: {}, pairedMarkers: {}, centerArmSplit: {},
-  vendorNullNames: {}, duplicateOrders: [], existingMonth: null,
-};
 
 const CONVERSION_TAB = "Converted Orders";
 
@@ -194,21 +162,6 @@ export async function previewImport(
     existingMonth,
   };
 }
-
-export type CommitResult = {
-  ok: boolean;
-  error: string | null;
-  inserted: number;
-  superseded: number;
-  skipped: { order_id: string; status: string }[];
-  conversions: number;
-  month: string | null;
-};
-
-export const EMPTY_COMMIT: CommitResult = {
-  ok: false, error: null, inserted: 0, superseded: 0, skipped: [],
-  conversions: 0, month: null,
-};
 
 export async function commitImport(
   _prev: CommitResult,

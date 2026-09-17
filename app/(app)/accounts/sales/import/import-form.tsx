@@ -3,10 +3,11 @@
 import { useActionState, useState } from "react";
 
 import { Button, ErrorNote, Input, Select, FIELD_LABEL, cx } from "@/components/ui";
+import { previewImport, commitImport } from "./actions";
 import {
-  previewImport, commitImport, EMPTY_PREVIEW, EMPTY_COMMIT,
+  EMPTY_PREVIEW, EMPTY_COMMIT,
   type ImportPreview, type CommitResult,
-} from "./actions";
+} from "./import-state";
 
 const Count = ({ label, value, tone }: { label: string; value: number; tone?: "warn" | "danger" }) => (
   <div className="rounded-md border border-line bg-surface px-2.5 py-1.5">
