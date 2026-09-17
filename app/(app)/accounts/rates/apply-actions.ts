@@ -144,6 +144,30 @@ export async function editCellPct(_prev: ApplyState, form: FormData): Promise<Ap
     return { ok: false, error: "Missing cell.", confirm: null, message: null };
   }
 
+  // §6.2. The same guard the Apply panel shows. An inline edit is a smaller
+  // gesture but it writes the same kind of row, and back-dating one over
+  // settled lines deserves the same pause — otherwise the quick path is the
+  // one that skips the warning.
+  const confirmed = str(form, "confirmed") === "1";
+  if (from < istToday() && !confirmed) {
+    const { data } = await supabase.schema("accounts").rpc("retro_line_counts", {
+      p_vendor_id: vendorId, p_level: level, p_product_type: productType,
+      p_is_combo: saleKind === "combo", p_from: from,
+      p_to: undefined as unknown as string,
+    });
+    const row = (Array.isArray(data) ? data[0] : data) as
+      { paid_count: number; ready_count: number } | undefined;
+    return {
+      ok: false, error: null, message: null,
+      confirm: {
+        paid: Number(row?.paid_count ?? 0),
+        ready: Number(row?.ready_count ?? 0),
+        from, pct: String(pct), language, sale_kind: saleKind,
+        cells: [{ level, product_type: productType }],
+      },
+    };
+  }
+
   // A new row per edit, so the history survives — except when a row already
   // starts on this date, which is the row being edited. Inserting a second one
   // is impossible (the unique index says so) and would be meaningless anyway:

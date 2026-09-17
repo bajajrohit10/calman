@@ -192,6 +192,38 @@ export function InlinePct({
   const [editing, setEditing] = useState(false);
   const [state, action, pending] = useActionState<ApplyState, FormData>(editCellPct, EMPTY_APPLY_STATE);
 
+  // §6.2. Back-dated: the same guard the panel shows, re-posting what the
+  // server validated because React resets the field once an action has run.
+  if (state.confirm) {
+    const c = state.confirm;
+    return (
+      <form action={action} className="flex flex-col gap-1 rounded-md border border-warn bg-warn-soft p-1.5"
+            data-testid={`inline-guard-${level}-${productType}`}>
+        <input type="hidden" name="vendor_id" value={vendorId} />
+        <input type="hidden" name="sale_kind" value={c.sale_kind} />
+        <input type="hidden" name="level" value={level} />
+        <input type="hidden" name="product_type" value={productType} />
+        {c.language ? <input type="hidden" name="language" value={c.language} /> : null}
+        <input type="hidden" name="effective_from" value={c.from} />
+        <input type="hidden" name="pct" value={c.pct} />
+        <input type="hidden" name="confirmed" value="1" />
+        <span className="text-[11px] text-ink">
+          {c.pct}% from {c.from} — changes {c.paid} paid and {c.ready} ready line
+          {c.ready === 1 ? "" : "s"}.
+        </span>
+        <span className="flex gap-1">
+          <Button type="submit" size="sm" disabled={pending}
+                  data-testid={`inline-confirm-${level}-${productType}`}>
+            {pending ? "…" : "Save anyway"}
+          </Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(false)}>
+            Cancel
+          </Button>
+        </span>
+      </form>
+    );
+  }
+
   if (!editing) {
     return (
       <button type="button" onClick={() => setEditing(true)}
