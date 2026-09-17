@@ -4,11 +4,13 @@ import { Badge, ErrorNote, Input, PageHeader, Select, CELL, TABLE_HEAD_ROW, cx }
 import { requireAccountsProfile } from "@/lib/auth";
 import { istToday } from "@/lib/format";
 import {
-  LEVELS, PRODUCT_TYPES, STATES,
-  loadRateCells, loadReviewQueue, loadUnknownLines, loadVendor, loadVendorOptions,
+  LEVELS, PRODUCT_TYPES,
+  loadCellOptions, loadRateCells, loadReviewQueue, loadUnknownLines,
+  loadVendor, loadVendorOptions, loadVendorsWithoutRates,
 } from "@/lib/accounts/rates";
 import type { SaleKind } from "@/lib/accounts/classify";
-import { AddRate, ConfirmRatePct, SetLinePct } from "./rate-forms";
+import { ConfirmRatePct, SetLinePct } from "./rate-forms";
+import { ApplyPanel, InlinePct } from "./apply-panel";
 
 export const metadata = { title: "Rates · Accounts · Calman" };
 
@@ -122,11 +124,20 @@ async function RateGrid({
   saleKind: SaleKind; search: string; kind: string; vendorId: string; today: string;
 }) {
   const tab = saleKind === "combo" ? "combos" : "single";
-  const { rows: vendors, error: vErr } = await loadVendorOptions(search, kind);
+  const { rows: vendorRows, error: vErr } = await loadVendorOptions(search, kind);
+  const unrated = await loadVendorsWithoutRates(saleKind);
+  // §50H.3. A vendor selling into an empty grid earns nothing on paper, which
+  // is the most urgent thing this screen can say — so those come first.
+  const vendors = [...vendorRows].sort((a, b) => {
+    const ua = unrated.has(a.id) ? 0 : 1;
+    const ub = unrated.has(b.id) ? 0 : 1;
+    return ua - ub || a.name.localeCompare(b.name);
+  });
   const vendor = vendorId ? await loadVendor(vendorId) : null;
   const { cells, error: cErr } = vendor
     ? await loadRateCells(vendor.id, saleKind)
     : { cells: [], error: null };
+  const cellOptions = vendor ? await loadCellOptions(vendor.id, saleKind) : [];
 
   return (
     <div className="flex flex-col gap-4">
@@ -170,14 +181,20 @@ async function RateGrid({
             href={`/accounts/rates?tab=${tab}&vendor=${v.id}${search ? `&q=${encodeURIComponent(search)}` : ""}${kind ? `&kind=${kind}` : ""}`}
             data-testid="vendor-option"
             aria-current={v.id === vendorId ? "true" : undefined}
+            data-unrated={unrated.has(v.id) ? "1" : undefined}
             className={cx(
               "rounded-md px-2 py-1 text-[12px]",
               v.id === vendorId
                 ? "bg-accent text-accent-ink"
-                : "border border-line-2 bg-surface text-ink-2 hover:bg-surface-2",
+                : unrated.has(v.id)
+                  ? "border border-danger bg-surface text-danger hover:bg-surface-2"
+                  : "border border-line-2 bg-surface text-ink-2 hover:bg-surface-2",
             )}
           >
             {v.name}
+            {unrated.has(v.id) && v.id !== vendorId ? (
+              <span className="ml-1 text-[10.5px]">· No rates yet</span>
+            ) : null}
           </Link>
         ))}
       </div>
@@ -201,14 +218,10 @@ async function RateGrid({
             {vendor.institute ? (
               <span className="text-[12px] text-ink-3">{vendor.institute}</span>
             ) : null}
-            <div className="ml-auto">
-              <AddRate
-                vendorId={vendor.id} saleKind={saleKind}
-                levels={LEVELS} types={PRODUCT_TYPES}
-                states={STATES} today={today} label="Add cell"
-              />
-            </div>
           </div>
+
+          <ApplyPanel vendorId={vendor.id} saleKind={saleKind} cells={cellOptions}
+                      levels={LEVELS} types={PRODUCT_TYPES} today={today} />
 
           <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
             <table className="w-full min-w-[820px] text-left text-[12.5px]">
@@ -216,6 +229,7 @@ async function RateGrid({
                 <tr>
                   <th className="px-2 py-[7px]">Level</th>
                   <th className="px-2 py-[7px]">Type</th>
+                  <th className="px-2 py-[7px]">Language</th>
                   <th className="px-2 py-[7px] text-right">Current %</th>
                   <th className="px-2 py-[7px]">Effective from</th>
                   <th className="px-2 py-[7px]">Effective to</th>
@@ -228,6 +242,9 @@ async function RateGrid({
                   <tr key={`${c.level} ${c.product_type}`} className="border-b border-line last:border-b-0 align-top">
                     <td className={cx(CELL, "text-ink")}>{c.level}</td>
                     <td className={cx(CELL, "text-ink-2")}>{c.product_type}</td>
+                    <td className={cx(CELL, "text-ink-3")}>
+                      {c.current?.language === "english" ? "English" : "Any"}
+                    </td>
                     <td className={cx(CELL, "text-right tabular-nums")}>
                       {c.current ? (
                         // §50C(c). A seeded, unconfirmed rate is shown in red
@@ -235,15 +252,19 @@ async function RateGrid({
                         // really holds today is nothing — and the screen has
                         // to be honest that the figure beside it is August's
                         // observation, not an agreed rate.
-                        <span
-                          className={c.current.needs_review ? "text-danger" : "text-ink"}
-                          data-testid={c.current.needs_review ? "rate-needs-review" : "rate-live"}
-                        >
-                          {pctText(c.current.pct)}
-                          {c.current.needs_review ? " — review" : ""}
+                        <span data-testid={c.current.needs_review ? "rate-needs-review" : "rate-live"}>
+                          <InlinePct vendorId={vendor.id} saleKind={saleKind}
+                                     level={c.level} productType={c.product_type}
+                                     language={c.current.language} pct={c.current.pct}
+                                     from={today} needsReview={c.current.needs_review} />
                         </span>
                       ) : (
-                        <span className="text-ink-3" data-testid="no-current-rate">none</span>
+                        <span data-testid="no-current-rate">
+                          <InlinePct vendorId={vendor.id} saleKind={saleKind}
+                                     level={c.level} productType={c.product_type}
+                                     language={null} pct={null} from={today}
+                                     needsReview={false} />
+                        </span>
                       )}
                     </td>
                     <td className={cx(CELL, "text-ink-2")}>
@@ -291,20 +312,13 @@ async function RateGrid({
                             <ConfirmRatePct rateId={c.current.id} />
                           </>
                         ) : null}
-                        <AddRate
-                          vendorId={vendor.id} saleKind={saleKind}
-                          levels={LEVELS} types={PRODUCT_TYPES}
-                          states={STATES} today={today}
-                          level={c.level} productType={c.product_type}
-                          label="Add rate"
-                        />
                       </div>
                     </td>
                   </tr>
                 ))}
                 {cells.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-3 py-8 text-center text-ink-3"
+                    <td colSpan={8} className="px-3 py-8 text-center text-ink-3"
                         data-testid="no-cells">
                       No {saleKind === "combo" ? "combo " : ""}rates or sales lines for this
                       vendor yet. Use “Add cell”.

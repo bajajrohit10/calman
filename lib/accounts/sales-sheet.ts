@@ -62,6 +62,8 @@ export type ParsedLine = {
   has_books_addon: boolean;
   combo_key: string | null;
   product_key: string | null;
+  language: string;
+  is_center: boolean;
   status: "draft" | "cancelled" | "deferred";
   no_remittance_reason: string | null;
   /** Diagnostics for the preview; not sent to the database. */
@@ -373,6 +375,10 @@ export function parseSalesSheet(
       has_books_addon: cls.has_books_addon,
       combo_key: normaliseKey(courseTitle),
       product_key: normaliseKey(courseTitle),
+      language: cls.language,
+      // §50H.2(b). Collected from a branch, not shipped: the base rule reads
+      // this together with the vendor's centre arrangement.
+      is_center: /copy\s+from\s+cent(er|re)/i.test(courseTitle),
       status,
       no_remittance_reason: reason,
       _sheetVendor: sheetVendor,

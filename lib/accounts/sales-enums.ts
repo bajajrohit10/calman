@@ -23,3 +23,13 @@ export const NO_REMITTANCE_REASONS = [
 export type RateSource = (typeof RATE_SOURCES)[number];
 export type LineStatus = (typeof LINE_STATUSES)[number];
 export type NoRemittanceReason = (typeof NO_REMITTANCE_REASONS)[number];
+
+/** §50H.4. The four sales tabs, by how the vendor gets paid. */
+export const SALES_TABS = [
+  { id: "online", label: "Online payments", mode: "online_instant" },
+  { id: "portal", label: "Portal", mode: "portal_balance" },
+  { id: "sheet", label: "Google sheet", mode: "later" },
+  { id: "all", label: "All", mode: null },
+] as const;
+
+export type SalesTab = (typeof SALES_TABS)[number]["id"];

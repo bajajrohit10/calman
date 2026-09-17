@@ -22,13 +22,31 @@
 export const SALE_KINDS = ["single", "combo"] as const;
 export type SaleKind = (typeof SALE_KINDS)[number];
 
+export const LANGUAGES = ["hindi", "english"] as const;
+export type Language = (typeof LANGUAGES)[number];
+
 export type Classified = {
   level: string | null;
   product_type: string | null;
   is_combo: boolean;
   has_books_addon: boolean;
   sale_kind: SaleKind;
+  language: Language;
 };
+
+/**
+ * §50H.1(a). Which language the course is taught in.
+ *
+ * An English title says so; a Hindi one does not. So the test is one-sided and
+ * the default is hindi — "In English", "English Medium", "(English)" all
+ * announce themselves, and everything else is the house language.
+ *
+ * Whole word only, on the head. "Englishwala" is a name, and a teacher named
+ * after the suffix of the word would otherwise reprice their whole catalogue.
+ */
+export function classifyLanguage(title: string): Language {
+  return /\benglish\b/i.test(head(title ?? "")) ? "english" : "hindi";
+}
 
 /** "By" ends the product and starts the teacher; the head is everything before. */
 function head(title: string): string {
@@ -112,6 +130,8 @@ export function classify(title: string, medium?: string | null): Classified {
   const med = medium ? mediumHead(medium) : "";
   const addonFromMedium = med ? MEDIUM_ADDON.test(med) : false;
 
+  const language = classifyLanguage(raw);
+
   // 1. Books first, and it settles the matter. The medium is believed over the
   // title: a title can mention notes it merely includes, the medium cannot.
   const isBooks = med ? MEDIUM_BOOKS.test(med) : BOOKS.test(h);
@@ -122,6 +142,7 @@ export function classify(title: string, medium?: string | null): Classified {
       is_combo: false,
       has_books_addon: false,
       sale_kind: "single",
+      language,
     };
   }
 
@@ -142,6 +163,7 @@ export function classify(title: string, medium?: string | null): Classified {
     is_combo: isCombo,
     has_books_addon: hasBooksAddon,
     sale_kind: isCombo ? "combo" : "single",
+    language,
   };
 }
 

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Badge, ErrorNote, PageHeader, Select, CELL, TABLE_HEAD_ROW, cx } from "@/components/ui";
 import { requireAccountsProfile } from "@/lib/auth";
 import { LEVELS, PRODUCT_TYPES } from "@/lib/accounts/rates";
-import { LINE_STATUSES, RATE_SOURCES } from "@/lib/accounts/sales-enums";
+import { LINE_STATUSES, RATE_SOURCES, SALES_TABS, type SalesTab } from "@/lib/accounts/sales-enums";
 import { loadBatches, loadSalesLines, loadVendorChoices } from "@/lib/accounts/sales";
 import { LineFix, Truncated } from "./line-actions";
 
@@ -40,8 +40,11 @@ export default async function Page({
   const batchId = one(sp.batch) || batches[0]?.id || "";
   const batch = batches.find((b) => b.id === batchId) ?? batches[0] ?? null;
 
+  const tab = (SALES_TABS.find((t) => t.id === one(sp.tab))?.id ?? "all") as SalesTab;
+
   const filters = {
     batchId,
+    tab,
     vendor: one(sp.vendor),
     status: one(sp.status),
     rateSource: one(sp.source),
@@ -53,6 +56,15 @@ export default async function Page({
   const { rows, error } = batch
     ? await loadSalesLines(filters)
     : { rows: [], error: null };
+  // The tab counts describe the month, not the current filter — otherwise the
+  // numbers on the tabs would move every time somebody narrowed the view.
+  const { rows: monthRows } = batch
+    ? await loadSalesLines({ batchId })
+    : { rows: [] };
+  const tabCount = (id: SalesTab) => {
+    const mode = SALES_TABS.find((t) => t.id === id)?.mode ?? null;
+    return mode ? monthRows.filter((r) => r.payment_mode === mode).length : monthRows.length;
+  };
   const vendors = await loadVendorChoices();
 
   // One entry per vendor for the filter, from the names only.
@@ -70,6 +82,34 @@ export default async function Page({
         description="Every line of the month, what it was rated at, and what the teacher is owed."
       />
 
+      {batch ? (
+        <nav className="flex flex-wrap gap-1.5" data-testid="sales-tabs">
+          {SALES_TABS.map((t) => {
+            const p = new URLSearchParams();
+            p.set("batch", batch.id);
+            if (t.id !== "all") p.set("tab", t.id);
+            for (const [k, v] of Object.entries({
+              vendor: filters.vendor, status: filters.status, source: filters.rateSource,
+              level: filters.level, type: filters.productType,
+            })) if (v) p.set(k, v as string);
+            if (filters.attention) p.set("attention", "1");
+            return (
+              <Link key={t.id} href={`/accounts/sales?${p}`}
+                    data-testid={`sales-tab-${t.id}`}
+                    aria-current={t.id === tab ? "page" : undefined}
+                    className={cx("rounded-md px-2.5 py-1 text-[12.5px]",
+                      t.id === tab ? "bg-accent text-accent-ink"
+                                   : "border border-line-2 bg-surface text-ink-2 hover:bg-surface-2")}>
+                {t.label}{" "}
+                <span className="tabular-nums" data-testid={`sales-tab-count-${t.id}`}>
+                  {tabCount(t.id)}
+                </span>
+              </Link>
+            );
+          })}
+        </nav>
+      ) : null}
+
       {!batch ? (
         <p className="rounded-lg border border-line bg-surface px-3 py-8 text-center text-[12.5px] text-ink-3"
            data-testid="no-batches">
@@ -81,6 +121,8 @@ export default async function Page({
 
           <form method="GET"
                 className="flex flex-wrap items-end gap-2.5 rounded-lg border border-line bg-surface px-3 py-2.5 shadow-card">
+            {/* Filtering keeps you in the tab you were reading. */}
+            <input type="hidden" name="tab" value={tab} />
             <Field label="Month">
               <Select name="batch" defaultValue={batch.id} className="w-[150px]" data-testid="filter-batch">
                 {batches.map((b) => (
@@ -127,7 +169,7 @@ export default async function Page({
                     className="h-[30px] rounded-md bg-accent px-3 text-[12.5px] font-medium text-accent-ink">
               Apply
             </button>
-            <Link href={`/accounts/sales?batch=${batch.id}`}
+            <Link href={`/accounts/sales?batch=${batch.id}${tab !== "all" ? `&tab=${tab}` : ""}`}
                   className="text-[12.5px] text-ink-3 underline-offset-2 hover:underline">
               Clear
             </Link>

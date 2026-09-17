@@ -40,6 +40,9 @@ export async function setReviewed(
 /**
  * §50F.4. Save the price the payment implies, and rebase the month.
  *
+ * §50H.2 removed the centre branch: a centre base is computed from the
+ * vendor's arrangement, never learned from one payment.
+ *
  * The rebase is the point: a portal price is a property of the product, so the
  * one order that revealed it is not the only line that was mis-based. The
  * function does the whole thing in one statement and reports how many lines
@@ -53,7 +56,6 @@ export async function savePortalPrice(
 
   const lineId = str(form, "line_id");
   const price = Number(str(form, "price"));
-  const source = str(form, "base_source");
   if (!lineId) return { ok: false, error: "No line.", message: null };
   if (!Number.isFinite(price) || price <= 0) {
     return { ok: false, error: "The implied price is not a usable number.", message: null };
@@ -61,16 +63,15 @@ export async function savePortalPrice(
 
   const { data, error } = await supabase
     .schema("accounts").rpc("save_portal_price", {
-      p_line_id: lineId, p_price: price, p_base_source: source || "portal_price",
+      p_line_id: lineId, p_price: price,
     });
   if (error) return { ok: false, error: error.message, message: null };
 
-  const s = data as { price: number; lines_rebased: number; center_adjustment: number };
+  const s = data as { price: number; lines_rebased: number };
   revalidatePath("/accounts/reconcile");
   revalidatePath("/accounts/sales");
   return {
     ok: true, error: null,
-    message: `Saved ₹${s.price}; ${s.lines_rebased} line(s) rebased` +
-      (s.center_adjustment ? `, centre adjustment ₹${s.center_adjustment}` : "") + ".",
+    message: `Saved ₹${s.price}; ${s.lines_rebased} line(s) rebased.`,
   };
 }

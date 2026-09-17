@@ -235,7 +235,6 @@ export type Database = {
       }
       portal_prices: {
         Row: {
-          center_adjustment: number
           confirmed: boolean
           created_at: string
           effective_from: string
@@ -246,7 +245,6 @@ export type Database = {
           vendor_id: string
         }
         Insert: {
-          center_adjustment?: number
           confirmed?: boolean
           created_at?: string
           effective_from: string
@@ -257,7 +255,6 @@ export type Database = {
           vendor_id: string
         }
         Update: {
-          center_adjustment?: number
           confirmed?: boolean
           created_at?: string
           effective_from?: string
@@ -284,6 +281,7 @@ export type Database = {
           effective_from: string
           effective_to: string | null
           id: string
+          language: string | null
           level: string
           needs_review: boolean
           note: string | null
@@ -299,6 +297,7 @@ export type Database = {
           effective_from: string
           effective_to?: string | null
           id?: string
+          language?: string | null
           level: string
           needs_review?: boolean
           note?: string | null
@@ -314,6 +313,7 @@ export type Database = {
           effective_from?: string
           effective_to?: string | null
           id?: string
+          language?: string | null
           level?: string
           needs_review?: boolean
           note?: string | null
@@ -375,7 +375,9 @@ export type Database = {
           faculty_name: string | null
           has_books_addon: boolean
           id: string
+          is_center: boolean
           is_combo: boolean
+          language: string
           level: string | null
           list_price: number | null
           no_remittance_reason: string | null
@@ -411,7 +413,9 @@ export type Database = {
           faculty_name?: string | null
           has_books_addon?: boolean
           id?: string
+          is_center?: boolean
           is_combo?: boolean
+          language?: string
           level?: string | null
           list_price?: number | null
           no_remittance_reason?: string | null
@@ -447,7 +451,9 @@ export type Database = {
           faculty_name?: string | null
           has_books_addon?: boolean
           id?: string
+          is_center?: boolean
           is_combo?: boolean
+          language?: string
           level?: string | null
           list_price?: number | null
           no_remittance_reason?: string | null
@@ -582,6 +588,8 @@ export type Database = {
       }
       vendors: {
         Row: {
+          center_discount_amount: number | null
+          center_discount_threshold: number | null
           created_at: string
           default_payment_mode: string
           id: string
@@ -596,6 +604,8 @@ export type Database = {
           tracks_portal_balance: boolean
         }
         Insert: {
+          center_discount_amount?: number | null
+          center_discount_threshold?: number | null
           created_at?: string
           default_payment_mode?: string
           id?: string
@@ -610,6 +620,8 @@ export type Database = {
           tracks_portal_balance?: boolean
         }
         Update: {
+          center_discount_amount?: number | null
+          center_discount_threshold?: number | null
           created_at?: string
           default_payment_mode?: string
           id?: string
@@ -694,9 +706,23 @@ export type Database = {
         Returns: Json
       }
       normalise_key: { Args: { p_text: string }; Returns: string }
+      resolve_base: {
+        Args: {
+          p_is_center: boolean
+          p_order_date: string
+          p_product_key: string
+          p_teachers_price: number
+          p_vendor_id: string
+        }
+        Returns: {
+          base_amount: number
+          base_source: string
+        }[]
+      }
       resolve_rate: {
         Args: {
           p_is_combo: boolean
+          p_language?: string
           p_level: string
           p_order_date: string
           p_product_type: string
@@ -741,7 +767,7 @@ export type Database = {
         }[]
       }
       save_portal_price: {
-        Args: { p_base_source: string; p_line_id: string; p_price: number }
+        Args: { p_line_id: string; p_price: number }
         Returns: Json
       }
       sync_wallet_deductions: { Args: { p_batch_id: string }; Returns: number }

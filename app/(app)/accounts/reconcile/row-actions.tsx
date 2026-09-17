@@ -16,18 +16,16 @@ import { EMPTY_RECON_STATE } from "./recon-state";
  * what it is about to do rather than just "Save".
  */
 export function SavePortalPrice({
-  lineId, price, method,
-}: { lineId: string; price: number; method: string }) {
-  const isCenter = /center|centre/i.test(method);
+  lineId, price,
+}: { lineId: string; price: number }) {
   const [state, action, pending] = useActionState(savePortalPrice, EMPTY_RECON_STATE);
   return (
     <form action={action} className="flex flex-col gap-1">
       <input type="hidden" name="line_id" value={lineId} />
       <input type="hidden" name="price" value={price} />
-      <input type="hidden" name="base_source" value={isCenter ? "center_price" : "portal_price"} />
       <Button type="submit" variant="ghost" size="sm" disabled={pending}
               data-testid={`save-price-${lineId}`}>
-        {pending ? "…" : `Save ₹${price.toLocaleString("en-IN")} as ${isCenter ? "centre" : "portal"} price`}
+        {pending ? "…" : `Save ₹${price.toLocaleString("en-IN")} as portal price`}
       </Button>
       {state.error ? <span className="text-[11px] text-danger">{state.error}</span> : null}
       {state.message ? (

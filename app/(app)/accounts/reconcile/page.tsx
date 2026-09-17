@@ -206,8 +206,7 @@ export default async function Page({
                       {r.implied_price !== null && r.line_id ? (
                         <div className="flex flex-col gap-0.5" data-testid="implied-price">
                           <span className="tabular-nums text-ink">{money(r.implied_price)}</span>
-                          <SavePortalPrice lineId={r.line_id} price={r.implied_price}
-                                           method={r.methods.join(",")} />
+                          <SavePortalPrice lineId={r.line_id} price={r.implied_price} />
                         </div>
                       ) : <span className="text-ink-3">—</span>}
                     </td>

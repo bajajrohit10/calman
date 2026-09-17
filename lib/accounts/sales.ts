@@ -21,7 +21,12 @@ export type SalesLine = {
   level: string | null;
   product_type: string | null;
   is_combo: boolean;
+  is_center: boolean;
+  language: string;
   teachers_price: number | null;
+  base_amount: number | null;
+  base_source: string | null;
+  payment_mode: string | null;
   rate_pct: number | null;
   rate_source: string | null;
   override_pct: number | null;
@@ -44,8 +49,13 @@ export async function loadBatches(): Promise<Batch[]> {
   return (data ?? []) as Batch[];
 }
 
+export { SALES_TABS, type SalesTab } from "@/lib/accounts/sales-enums";
+import { SALES_TABS } from "@/lib/accounts/sales-enums";
+import type { SalesTab } from "@/lib/accounts/sales-enums";
+
 export type SalesFilters = {
   batchId: string;
+  tab?: SalesTab;
   vendor?: string;
   status?: string;
   rateSource?: string;
@@ -65,9 +75,10 @@ export async function loadSalesLines(
     let q = supabase
       .schema("accounts").from("sales_lines")
       .select(`id, order_id, order_number, order_date, student_name, course_title,
-               vendor_id, level, product_type, is_combo, teachers_price, rate_pct,
+               vendor_id, level, product_type, is_combo, is_center, language,
+               teachers_price, base_amount, base_source, rate_pct,
                rate_source, override_pct, override_note, calculated_remittance,
-               no_remittance_reason, status, remarks, vendors ( name )`)
+               no_remittance_reason, payment_mode, status, remarks, vendors ( name )`)
       .eq("batch_id", f.batchId)
       .order("order_date", { ascending: true })
       .range(from, to);
@@ -80,12 +91,19 @@ export async function loadSalesLines(
   });
   if (error) return { rows: [], error };
 
+  // The tab is the line's own payment_mode, which the import copied from the
+  // vendor — so a line stays in the tab it was imported under even if the
+  // vendor's default changes later, which is what somebody reconciling a
+  // closed month expects.
+  const mode = SALES_TABS.find((t) => t.id === (f.tab ?? "all"))?.mode ?? null;
+  const byTab = mode ? rows.filter((r) => r.payment_mode === mode) : rows;
+
   // "Needs attention" is an OR across two columns, which PostgREST can express
   // but not alongside the other filters without getting hard to read; 1,500
   // rows are already in memory, so it is applied here.
   const filtered = f.attention
-    ? rows.filter((r) => !r.vendor_id || r.rate_source === "none")
-    : rows;
+    ? byTab.filter((r) => !r.vendor_id || r.rate_source === "none")
+    : byTab;
 
   const orderNumbers = [...new Set(filtered.map((r) => r.order_number).filter(Boolean))] as string[];
   const conversions = new Map<string, { difference_amount: number | null; reason: string | null }>();
@@ -115,7 +133,12 @@ export async function loadSalesLines(
       level: (r.level as string) ?? null,
       product_type: (r.product_type as string) ?? null,
       is_combo: Boolean(r.is_combo),
+      is_center: Boolean(r.is_center),
+      language: (r.language as string) ?? "hindi",
       teachers_price: r.teachers_price === null ? null : Number(r.teachers_price),
+      base_amount: r.base_amount === null ? null : Number(r.base_amount),
+      base_source: (r.base_source as string) ?? null,
+      payment_mode: (r.payment_mode as string) ?? null,
       rate_pct: r.rate_pct === null || r.rate_pct === undefined ? null : Number(r.rate_pct),
       rate_source: (r.rate_source as string) ?? null,
       override_pct: r.override_pct === null || r.override_pct === undefined ? null : Number(r.override_pct),

@@ -181,6 +181,56 @@ begin
     'none / null', coalesce(r_src,'?') || ' / ' || coalesce(r_pct::text,'null'),
     r_src = 'none' and r_pct is null);
 
+  ---------------------------------------------- 21. the language dimension
+  --
+  -- §50H.1(b). null language means "either"; 'english' means only English.
+  -- There is deliberately no 'hindi' row — a Hindi line takes the general one.
+  insert into accounts.rate_grid (vendor_id, sale_kind, level, product_type, pct,
+                                  effective_from, language)
+       values (v_vendor, 'single', 'CS', 'Full', 30.00, date '2026-08-01', null);
+  insert into accounts.rate_grid (vendor_id, sale_kind, level, product_type, pct,
+                                  effective_from, language)
+       values (v_vendor, 'single', 'CS', 'Full', 40.00, date '2026-08-01', 'english')
+    returning id into id_state;
+
+  select pct, source, rate_id into r_pct, r_src, r_id
+    from accounts.resolve_rate(v_vendor, 'CS', 'Full', false,
+                               date '2026-08-15', null, 'english');
+  insert into _rr values (21, 'an english line prefers the english row',
+    'grid / 40.00', coalesce(r_src,'?') || ' / ' || coalesce(r_pct::text,'null'),
+    r_src = 'grid' and r_pct = 40.00 and r_id = id_state);
+
+  select pct, source into r_pct, r_src
+    from accounts.resolve_rate(v_vendor, 'CS', 'Full', false,
+                               date '2026-08-15', null, 'hindi');
+  insert into _rr values (22, 'a hindi line ignores the english row',
+    'grid / 30.00', coalesce(r_src,'?') || ' / ' || coalesce(r_pct::text,'null'),
+    r_src = 'grid' and r_pct = 30.00);
+
+  -- A cell with only a general rate serves English too.
+  insert into accounts.rate_grid (vendor_id, sale_kind, level, product_type, pct,
+                                  effective_from, language)
+       values (v_vendor, 'single', 'ACCA', 'Full', 27.00, date '2026-08-01', null);
+
+  select pct, source into r_pct, r_src
+    from accounts.resolve_rate(v_vendor, 'ACCA', 'Full', false,
+                               date '2026-08-15', null, 'english');
+  insert into _rr values (23, 'english line falls back to the general row',
+    'grid / 27.00', coalesce(r_src,'?') || ' / ' || coalesce(r_pct::text,'null'),
+    r_src = 'grid' and r_pct = 27.00);
+
+  -- A cell with ONLY an english rate must not pay a hindi line.
+  insert into accounts.rate_grid (vendor_id, sale_kind, level, product_type, pct,
+                                  effective_from, language)
+       values (v_vendor, 'single', 'CFA', 'Full', 33.00, date '2026-08-01', 'english');
+
+  select pct, source into r_pct, r_src
+    from accounts.resolve_rate(v_vendor, 'CFA', 'Full', false,
+                               date '2026-08-15', null, 'hindi');
+  insert into _rr values (24, 'an english-only cell pays a hindi line nothing',
+    'none / null', coalesce(r_src,'?') || ' / ' || coalesce(r_pct::text,'null'),
+    r_src = 'none' and r_pct is null);
+
   ------------------------------------------ 12. overlapping rows, later wins
   insert into accounts.rate_grid (vendor_id, level, product_type, pct, effective_from)
        values (v_vendor, 'CMA Final', 'FT', 20.00, date '2026-06-01')
