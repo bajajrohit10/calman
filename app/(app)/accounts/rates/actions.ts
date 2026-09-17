@@ -126,8 +126,60 @@ export async function addRate(
     return { ok: false, error: error.message, confirm: null };
   }
 
+  // §50C(c). A new rate for this cell means somebody has looked at it, so the
+  // cell stops asking to be reviewed.
+  //
+  // Only rows that already carry a real percentage are cleared. The seeded
+  // placeholders are 0% on purpose — needs_review is the only thing stopping
+  // resolve_rate from using them, and clearing the flag on a 0% row would turn
+  // "no rate agreed, send it to Unknown" into "the rate is nothing, pay zero"
+  // for every order in that row's window. Those rows stay flagged and inert;
+  // the cell still stops showing red, because the rate just saved becomes the
+  // current row and the placeholder drops into history.
+  await supabase
+    .schema("accounts")
+    .from("rate_grid")
+    .update({ needs_review: false })
+    .eq("vendor_id", vendorId)
+    .eq("level", level)
+    .eq("product_type", productType)
+    .eq("needs_review", true)
+    .gt("pct", 0);
+
   revalidatePath("/accounts/rates");
   return { ok: true, error: null, confirm: null };
+}
+
+/**
+ * §50C(c). Put a real percentage on a seeded row.
+ *
+ * The primary way a flagged cell gets resolved: the August figure is in the
+ * note, somebody decides whether it is the agreed rate, and types it. Writing
+ * a percentage is what clears needs_review — the flag means "no human has
+ * confirmed a number here", so a human confirming a number is exactly what
+ * should end it.
+ */
+export async function updateRatePct(
+  _prev: OverrideState,
+  form: FormData,
+): Promise<OverrideState> {
+  await requireAccountsProfile();
+  const supabase = await createClient();
+
+  const id = str(form, "id");
+  if (!id) return { ok: false, error: "Missing rate row." };
+  const pct = parsePct(str(form, "pct"));
+  if (typeof pct === "string") return { ok: false, error: pct };
+
+  const { error } = await supabase
+    .schema("accounts")
+    .from("rate_grid")
+    .update({ pct, needs_review: false })
+    .eq("id", id);
+
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/accounts/rates");
+  return { ok: true, error: null };
 }
 
 export async function addCombo(

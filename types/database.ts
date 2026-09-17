@@ -279,6 +279,7 @@ export type Database = {
           effective_to: string | null
           id: string
           level: string
+          needs_review: boolean
           note: string | null
           pct: number
           product_type: string
@@ -292,6 +293,7 @@ export type Database = {
           effective_to?: string | null
           id?: string
           level: string
+          needs_review?: boolean
           note?: string | null
           pct: number
           product_type: string
@@ -305,6 +307,7 @@ export type Database = {
           effective_to?: string | null
           id?: string
           level?: string
+          needs_review?: boolean
           note?: string | null
           pct?: number
           product_type?: string

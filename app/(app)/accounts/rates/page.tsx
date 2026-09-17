@@ -8,7 +8,7 @@ import {
   loadCombos, loadRateCells, loadUnknownLines, loadVendor, loadVendorOptions,
 } from "@/lib/accounts/rates";
 import { endCombo } from "./actions";
-import { AddCombo, AddRate, SetLinePct } from "./rate-forms";
+import { AddCombo, AddRate, ConfirmRatePct, SetLinePct } from "./rate-forms";
 
 export const metadata = { title: "Rates · Accounts · Calman" };
 
@@ -210,8 +210,21 @@ async function SingleCourses({
                   <tr key={`${c.level} ${c.product_type}`} className="border-b border-line last:border-b-0 align-top">
                     <td className={cx(CELL, "text-ink")}>{c.level}</td>
                     <td className={cx(CELL, "text-ink-2")}>{c.product_type}</td>
-                    <td className={cx(CELL, "text-right tabular-nums text-ink")}>
-                      {c.current ? pctText(c.current.pct) : (
+                    <td className={cx(CELL, "text-right tabular-nums")}>
+                      {c.current ? (
+                        // §50C(c). A seeded, unconfirmed rate is shown in red
+                        // and says so. resolve_rate skips it, so what the cell
+                        // really holds today is nothing — and the screen has
+                        // to be honest that the figure beside it is August's
+                        // observation, not an agreed rate.
+                        <span
+                          className={c.current.needs_review ? "text-danger" : "text-ink"}
+                          data-testid={c.current.needs_review ? "rate-needs-review" : "rate-live"}
+                        >
+                          {pctText(c.current.pct)}
+                          {c.current.needs_review ? " — review" : ""}
+                        </span>
+                      ) : (
                         <span className="text-ink-3" data-testid="no-current-rate">none</span>
                       )}
                     </td>
@@ -249,6 +262,17 @@ async function SingleCourses({
                             ) : null}
                           </ul>
                         </details>
+                        {c.current?.needs_review ? (
+                          <>
+                            {c.current.note ? (
+                              <span className="text-[11.5px] text-ink-3"
+                                    data-testid="review-note">
+                                {c.current.note}
+                              </span>
+                            ) : null}
+                            <ConfirmRatePct rateId={c.current.id} />
+                          </>
+                        ) : null}
                         <AddRate
                           vendorId={vendor.id} levels={LEVELS} types={PRODUCT_TYPES}
                           states={STATES} today={today}

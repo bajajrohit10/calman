@@ -4,7 +4,7 @@ import { useActionState, useId, useState } from "react";
 
 import { Button, Input, Select, Textarea, FIELD_LABEL, cx } from "@/components/ui";
 import { normaliseKey } from "@/lib/accounts/normalise-key";
-import { addCombo, addRate, setLineOverride } from "./actions";
+import { addCombo, addRate, setLineOverride, updateRatePct } from "./actions";
 import {
   EMPTY_COMBO_STATE, EMPTY_OVERRIDE_STATE, EMPTY_RATE_STATE,
   type ComboFormState, type RateFormState,
@@ -399,6 +399,37 @@ export function SetLinePct({ lineId }: { lineId: string }) {
       </Button>
       {state.error ? (
         <span className={cx("text-[11.5px]", "text-danger")}>{state.error}</span>
+      ) : null}
+    </form>
+  );
+}
+
+/* ------------------------------------------------- confirm a seeded rate -- */
+
+/**
+ * §50C(c). Inline percentage editor for a row the seeder flagged.
+ *
+ * Deliberately the smallest possible affordance — one field and one button on
+ * the row itself. The August figure is already on screen in the note, so this
+ * is a decision being recorded, not a form being filled in.
+ */
+export function ConfirmRatePct({ rateId }: { rateId: string }) {
+  const [state, action, pending] = useActionState(updateRatePct, EMPTY_OVERRIDE_STATE);
+  return (
+    <form action={action} className="flex items-center gap-1.5" data-testid="confirm-rate-form">
+      <input type="hidden" name="id" value={rateId} />
+      <Input
+        name="pct" inputMode="decimal" required placeholder="%"
+        className="w-[70px]" aria-label="Confirmed percent"
+        data-testid="confirm-rate-pct"
+      />
+      <Button type="submit" variant="ghost" disabled={pending} data-testid="confirm-rate-save">
+        {pending ? "…" : "Confirm %"}
+      </Button>
+      {state.error ? (
+        <span className="text-[11.5px] text-danger" data-testid="confirm-rate-error">
+          {state.error}
+        </span>
       ) : null}
     </form>
   );
