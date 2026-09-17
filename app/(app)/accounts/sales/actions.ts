@@ -19,9 +19,7 @@ import { NO_REMITTANCE_REASONS } from "@/lib/accounts/sales-enums";
  * they have to move together: remittance = base × (1 − pct/100).
  */
 
-export type LineActionState = { ok: boolean; error: string | null };
-const EMPTY: LineActionState = { ok: false, error: null };
-export const EMPTY_LINE_STATE = EMPTY;
+import type { LineActionState } from "./line-state";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 

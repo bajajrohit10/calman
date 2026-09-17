@@ -4,10 +4,8 @@ import { useActionState, useState } from "react";
 
 import { Button, Input, Select, cx } from "@/components/ui";
 import { NO_REMITTANCE_REASONS } from "@/lib/accounts/sales-enums";
-import {
-  changeVendor, setOverride, clearOverride, setNoRemittance,
-  EMPTY_LINE_STATE, type LineActionState,
-} from "./actions";
+import { changeVendor, setOverride, clearOverride, setNoRemittance } from "./actions";
+import { EMPTY_LINE_STATE, type LineActionState } from "./line-state";
 
 /**
  * §50E.3. The corrections a person makes while reading the month.
