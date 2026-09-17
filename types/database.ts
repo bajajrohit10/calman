@@ -133,6 +133,8 @@ export type Database = {
           order_id: string | null
           paid_on: string | null
           raw_row: Json | null
+          review_note: string | null
+          reviewed: boolean
           transaction_id: string | null
           vendor_id: string | null
           vendor_tab_name: string | null
@@ -146,6 +148,8 @@ export type Database = {
           order_id?: string | null
           paid_on?: string | null
           raw_row?: Json | null
+          review_note?: string | null
+          reviewed?: boolean
           transaction_id?: string | null
           vendor_id?: string | null
           vendor_tab_name?: string | null
@@ -159,6 +163,8 @@ export type Database = {
           order_id?: string | null
           paid_on?: string | null
           raw_row?: Json | null
+          review_note?: string | null
+          reviewed?: boolean
           transaction_id?: string | null
           vendor_id?: string | null
           vendor_tab_name?: string | null
@@ -585,6 +591,16 @@ export type Database = {
       }
     }
     Functions: {
+      commit_payment_batch: {
+        Args: {
+          p_file_name: string
+          p_month: string
+          p_replace?: boolean
+          p_rows: Json
+          p_uploaded_by: string
+        }
+        Returns: Json
+      }
       commit_sales_batch: {
         Args: {
           p_conversions: Json
@@ -642,6 +658,10 @@ export type Database = {
           vendor_id: string
           vendor_name: string
         }[]
+      }
+      save_portal_price: {
+        Args: { p_base_source: string; p_line_id: string; p_price: number }
+        Returns: Json
       }
     }
     Enums: {

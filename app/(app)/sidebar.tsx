@@ -82,6 +82,11 @@ const ACCOUNTS: Item = {
   icon: "₹",
   sub: [
     {
+      href: "/accounts/reconcile",
+      label: "Reconcile",
+      hint: "What we owe against what was paid",
+    },
+    {
       href: "/accounts/rates",
       label: "Rates",
       hint: "What each vendor earns, and the lines no rate reached",

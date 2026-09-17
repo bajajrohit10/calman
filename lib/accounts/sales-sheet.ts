@@ -104,12 +104,19 @@ const vendorKey = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").tri
  */
 export function cellText(v: SheetCell): string {
   if (v === null || v === undefined) return "";
-  if (v instanceof Date) return v.toISOString();
+  // An invalid Date is a real thing in these workbooks: a formula whose cached
+  // result is a broken date. toISOString throws on it, which took down the
+  // whole parse from inside a balance-note scan.
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? "" : v.toISOString();
   if (typeof v === "object") {
     const o = v as Record<string, unknown>;
     if (o.error !== undefined) return "";
-    if (o.result !== undefined) return o.result instanceof Date
-      ? (o.result as Date).toISOString() : String(o.result);
+    if (o.result !== undefined) {
+      if (o.result instanceof Date) {
+        return Number.isNaN(o.result.getTime()) ? "" : o.result.toISOString();
+      }
+      return String(o.result);
+    }
     if (o.text !== undefined) return String(o.text);
     if (Array.isArray(o.richText)) {
       return (o.richText as { text: string }[]).map((t) => t.text).join("");
