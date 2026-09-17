@@ -13,7 +13,9 @@
  */
 
 export const RATE_SOURCES = ["grid", "combo", "state_rule", "line_override", "none"] as const;
-export const LINE_STATUSES = ["draft", "ready", "paid", "disputed", "deferred"] as const;
+export const LINE_STATUSES = [
+  "draft", "ready", "paid", "disputed", "deferred", "cancelled",
+] as const;
 export const NO_REMITTANCE_REASONS = [
   "cancelled", "serial_key", "replacement", "internal", "other",
 ] as const;
