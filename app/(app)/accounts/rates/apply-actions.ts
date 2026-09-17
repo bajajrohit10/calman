@@ -144,18 +144,30 @@ export async function editCellPct(_prev: ApplyState, form: FormData): Promise<Ap
     return { ok: false, error: "Missing cell.", confirm: null, message: null };
   }
 
-  const { error } = await supabase.schema("accounts").from("rate_grid").insert({
-    vendor_id: vendorId, sale_kind: saleKind, level, product_type: productType,
-    pct, effective_from: from, effective_to: null, state_scope: null,
-    language, created_by: profile.id,
-  });
-  if (error) {
-    if (error.code === "23505") {
-      return { ok: false, confirm: null, message: null,
-        error: `A rate already starts on ${from} for this cell.` };
-    }
-    return { ok: false, error: error.message, confirm: null, message: null };
-  }
+  // A new row per edit, so the history survives — except when a row already
+  // starts on this date, which is the row being edited. Inserting a second one
+  // is impossible (the unique index says so) and would be meaningless anyway:
+  // two rates for the same cell from the same day is not a history, it is a
+  // contradiction. So that case updates in place.
+  const existing = await supabase
+    .schema("accounts").from("rate_grid")
+    .select("id")
+    .eq("vendor_id", vendorId).eq("sale_kind", saleKind)
+    .eq("level", level).eq("product_type", productType)
+    .eq("effective_from", from)
+    .is("state_scope", null)
+    .filter("language", language === null ? "is" : "eq", language === null ? null : language)
+    .maybeSingle();
+
+  const { error } = existing.data
+    ? await supabase.schema("accounts").from("rate_grid")
+        .update({ pct, needs_review: false }).eq("id", existing.data.id)
+    : await supabase.schema("accounts").from("rate_grid").insert({
+        vendor_id: vendorId, sale_kind: saleKind, level, product_type: productType,
+        pct, effective_from: from, effective_to: null, state_scope: null,
+        language, created_by: profile.id,
+      });
+  if (error) return { ok: false, error: error.message, confirm: null, message: null };
 
   const dayBefore = new Date(`${from}T00:00:00Z`);
   dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
