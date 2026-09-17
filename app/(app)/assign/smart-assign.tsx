@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import { Button, ErrorNote, Input, Select, cx } from "@/components/ui";
 import { IMPORTANCE_LABELS, STAGE_FILTER_LABELS } from "@/lib/enquiry-labels";
@@ -10,6 +10,7 @@ import { formatDate } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
 
 import {
+  pendingByCounsellor,
   smartAssign,
   smartAssignLoad,
   type SmartRow,
@@ -98,9 +99,35 @@ export function SmartAssignPanel({
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
+  /**
+   * §50.2. What this sitting has handed out, in the order it happened.
+   *
+   * Session-scoped and deliberately not persisted: it answers "what have I
+   * just done", which is a question about the last ten minutes. Something
+   * durable would be the assignments table, and that is already the answer to
+   * the durable version of the question.
+   */
+  const [tally, setTally] = useState<
+    { at: string; total: number; split: { id: string; count: number }[] }[]
+  >([]);
+  /** Each counsellor's whole-day pending, refreshed after every batch. */
+  const [dayPending, setDayPending] = useState<Record<string, number>>({});
   const [label, setLabel] = useState("");
   const [pending, start] = useTransition();
   const seq = useRef(0);
+
+  // §50.2. The pending figures are useful before anything is handed out —
+  // that is when a manager is deciding who to give it to — so they are loaded
+  // once when the panel opens as well as after every batch.
+  useEffect(() => {
+    let live = true;
+    pendingByCounsellor(date).then((r) => {
+      if (live && !r.error) setDayPending(r.pending ?? {});
+    });
+    return () => {
+      live = false;
+    };
+  }, [date]);
 
   const nameOf = (list: Master[], id: string) =>
     list.find((m) => m.id === id)?.name ?? id;
@@ -215,30 +242,47 @@ export function SmartAssignPanel({
   }, [facets, masters, roster, pinned, search]);
 
   /** What is selected: every option a column offers, minus the cleared ones. */
-  const selection = useMemo((): SmartSelection => {
-    const out: Record<string, string[]> = {};
-    for (const col of columns) {
-      const gone = cleared[col.key] ?? new Set<string>();
-      const ids: string[] = [];
-      for (const o of col.options) {
-        if (gone.has(o.id)) continue;
-        if (o.covers) ids.push(...o.covers);
-        else ids.push(o.id);
+  /**
+   * The selection these columns describe, with `gone` taken out.
+   *
+   * Shared by the live selection and by the widened one §50.2 re-counts
+   * against after a batch, because "everything selected" has to be built the
+   * same way "this much selected" is — a column counts as unfiltered only
+   * when it holds every id it offers, so an empty array would mean the
+   * opposite of what the reset intends.
+   */
+  const buildSelection = useCallback(
+    (gone: Record<string, Set<string>>): SmartSelection => {
+      const out: Record<string, string[]> = {};
+      for (const col of columns) {
+        const dropped = gone[col.key] ?? new Set<string>();
+        const ids: string[] = [];
+        for (const o of col.options) {
+          if (dropped.has(o.id)) continue;
+          if (o.covers) ids.push(...o.covers);
+          else ids.push(o.id);
+        }
+        out[col.key] = ids;
       }
-      out[col.key] = ids;
-    }
-    return {
-      date,
-      campaign,
-      content: out.content ?? [],
-      stage: out.stage ?? [],
-      importance: out.importance ?? [],
-      teacher: out.teacher ?? [],
-      institute: out.institute ?? [],
-      source: out.source ?? [],
-      lastCalledBy: out.lastCalledBy ?? [],
-    };
-  }, [columns, cleared, date, campaign]);
+      return {
+        date,
+        campaign,
+        content: out.content ?? [],
+        stage: out.stage ?? [],
+        importance: out.importance ?? [],
+        teacher: out.teacher ?? [],
+        institute: out.institute ?? [],
+        source: out.source ?? [],
+        lastCalledBy: out.lastCalledBy ?? [],
+      };
+    },
+    [columns, date, campaign],
+  );
+
+  const selection = useMemo(
+    () => buildSelection(cleared),
+    [buildSelection, cleared],
+  );
 
   /** How many ids each column *could* offer, so the server can spot "all". */
   const offered = useMemo(() => {
@@ -299,18 +343,47 @@ export function SmartAssignPanel({
         setError(res.error);
         return;
       }
-      const who = (res.split ?? [])
-        .map((s) => `${nameOf(roster, s.name)} ${s.count}`)
-        .join(", ");
+      const split = (res.split ?? []).map((s) => ({ id: s.name, count: s.count }));
+      const who = split.map((s) => `${nameOf(roster, s.id)} ${s.count}`).join(", ");
       setToast(`${res.ok}: ${who}`);
-      // The panel stays open and re-counts: the leads just handed out have
-      // left the needs-assignment set, and the numbers should say so.
-      const again = await smartAssignLoad(selection, offered);
+      setTally((t) => [
+        ...t,
+        {
+          at: new Intl.DateTimeFormat("en-IN", {
+            hour: "2-digit", minute: "2-digit", hour12: false,
+            timeZone: "Asia/Kolkata",
+          }).format(new Date()),
+          total: split.reduce((n, s) => n + s.count, 0),
+          split,
+        },
+      ]);
+
+      /**
+       * §50.2. Every column back to all-selected after a batch.
+       *
+       * A manager hands out one pile and then asks a different question; the
+       * panel used to keep the narrowing that produced the pile just handed
+       * out, so the next question started from a filter nobody had asked for
+       * on a set that had just shrunk. The date and Campaign mode stay,
+       * because those describe the sitting rather than the batch.
+       */
+      setCleared({});
+      setSearch({});
+      setPinned({});
+
+      // Re-counted against the widened selection, not the one that was just
+      // assigned from — otherwise the totals would describe a filter that is
+      // no longer on screen.
+      const [again, load] = await Promise.all([
+        smartAssignLoad(buildSelection({}), offered),
+        pendingByCounsellor(selection.date),
+      ]);
       if (!again.error) {
         setFacets(again.facets ?? null);
         setTotal(again.total ?? 0);
         setPreview(again.preview ?? []);
       }
+      if (!load.error) setDayPending(load.pending ?? {});
     });
   }
 
@@ -558,8 +631,103 @@ export function SmartAssignPanel({
             Split deals one each in turn, oldest follow-up first, so the backlog
             is shared rather than landing on whoever is first in the list.
           </p>
+
+          <SessionTally
+            tally={tally}
+            roster={roster}
+            dayPending={dayPending}
+            onReset={() => setTally([])}
+          />
         </aside>
       </div>
+    </div>
+  );
+}
+
+/**
+ * What this sitting has handed out (§50.2).
+ *
+ * Two numbers per counsellor, because one of them alone misleads. "Susmita 12"
+ * says what just happened; "12 · 30 pending" says whether the next batch
+ * should go to her — a manager splitting work needs the load, not the delta,
+ * and the delta is the only thing the toast could ever show.
+ *
+ * The lines below it are the audit trail of the sitting: each batch, who got
+ * what, and when. Managers hand out four or five piles in a morning and are
+ * asked afterwards which one somebody was in.
+ */
+function SessionTally({
+  tally,
+  roster,
+  dayPending,
+  onReset,
+}: {
+  tally: { at: string; total: number; split: { id: string; count: number }[] }[];
+  roster: Master[];
+  dayPending: Record<string, number>;
+  onReset: () => void;
+}) {
+  const perCounsellor = new Map<string, number>();
+  for (const batch of tally) {
+    for (const s of batch.split) {
+      perCounsellor.set(s.id, (perCounsellor.get(s.id) ?? 0) + s.count);
+    }
+  }
+  const grand = [...perCounsellor.values()].reduce((n, v) => n + v, 0);
+  const nameOf = (id: string) => roster.find((r) => r.id === id)?.name ?? id;
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-line bg-surface px-3 py-2.5 shadow-card">
+      <div className="flex items-center gap-2">
+        <h3 className="text-[12px] font-semibold text-ink">Assigned this session</h3>
+        {tally.length ? (
+          <button
+            type="button"
+            onClick={onReset}
+            className="ml-auto text-[11.5px] text-ink-3 underline-offset-2 hover:text-ink hover:underline"
+          >
+            Reset
+          </button>
+        ) : null}
+      </div>
+
+      {!tally.length ? (
+        <p className="text-[11.5px] text-ink-3">
+          Nothing handed out yet. Each batch is listed here as it goes.
+        </p>
+      ) : (
+        <>
+          <ul className="flex flex-col gap-0.5">
+            {[...perCounsellor.entries()]
+              .sort((a, b) => b[1] - a[1])
+              .map(([id, n]) => (
+                <li key={id} className="flex items-baseline gap-1.5 text-[12px]">
+                  <span className="min-w-0 flex-1 truncate text-ink-2">{nameOf(id)}</span>
+                  <span className="tabular-nums font-medium text-ink">{n}</span>
+                  {/* The whole day, not this sitting — see above. */}
+                  <span className="tabular-nums text-[11px] text-ink-3">
+                    · {dayPending[id] ?? 0} pending
+                  </span>
+                </li>
+              ))}
+          </ul>
+
+          <div className="flex items-baseline gap-1.5 border-t border-line pt-1 text-[12px]">
+            <span className="min-w-0 flex-1 text-ink-2">Total</span>
+            <span className="tabular-nums font-semibold text-ink">{grand}</span>
+          </div>
+
+          <ul className="flex flex-col gap-0.5 border-t border-line pt-1">
+            {tally.map((b, i) => (
+              <li key={i} className="text-[11px] leading-snug text-ink-3">
+                Assigned {b.total}: {b.split.map((s) => `${nameOf(s.id)} ${s.count}`).join(", ")}
+                {" · "}
+                {b.at}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </div>
   );
 }

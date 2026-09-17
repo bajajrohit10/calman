@@ -158,6 +158,7 @@ export function CommonFilterFields({
   facets,
   multi,
   noDetail = false,
+  quickRange,
 }: {
   masters: FilterMasters;
   selected: Record<string, string>;
@@ -172,6 +173,8 @@ export function CommonFilterFields({
    * there would post __none__ into a uuid parameter.
    */
   noDetail?: boolean;
+  /** §50.1: the Enquiries screen's range buttons. Absent on the desk. */
+  quickRange?: React.ReactNode;
 }) {
   const contentChoices = contentOptions(masters.contents, facets?.byFacet.content);
   const subjectsForCourse = useMemo(
@@ -317,6 +320,10 @@ export function CommonFilterFields({
       </Labelled>
 
       <Labelled label="Enquired between" wide>
+        {/* §50.1. The quick ranges sit above the free dates rather than
+            replacing them: one click covers the four windows anybody actually
+            asks for, and the boxes are still there for the fifth. */}
+        {quickRange}
         <div className="flex min-w-0 items-center gap-1.5">
           <Input className="min-w-0 flex-1" type="date" name="createdFrom" defaultValue={selected.createdFrom ?? ""} />
           <span className="text-[12px] text-ink-3">→</span>

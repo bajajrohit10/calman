@@ -3,6 +3,7 @@
 import { isAdmin, requireUser } from "@/lib/auth";
 import { NO_DETAIL_ID, type FacetMap } from "@/lib/facet-shape";
 import { loadDeskFacets } from "@/lib/facets";
+import { loadTeamDay } from "@/lib/my-day-team";
 import { loadRecommended, type RecommendedFilters } from "@/lib/recommended";
 
 import { assignEnquiries } from "./actions";
@@ -250,4 +251,33 @@ export async function smartAssign(input: {
 
   const total = split.reduce((n, s) => n + s.count, 0);
   return { error: null, ok: `Assigned ${total}`, split };
+}
+
+/**
+ * Each counsellor's total pending for a day (§50.2).
+ *
+ * The session tally answers "what have I handed out just now"; this answers
+ * "what are they already carrying". Side by side they are the question a
+ * manager is actually asking — a counsellor who has been given twelve today
+ * and still has thirty outstanding is not the one to give the next batch to.
+ *
+ * my_day_team already computes it per counsellor for the whole day, so this is
+ * a projection of a function that exists rather than a second count that could
+ * disagree with the one My Day shows.
+ */
+export async function pendingByCounsellor(
+  date: string,
+): Promise<{ error: string | null; pending?: Record<string, number> }> {
+  const viewer = await requireUser();
+  if (!viewer.profile) return { error: "Your account is not active." };
+  if (!isAdmin(viewer.profile.role)) {
+    return { error: "Only an admin or manager can see the team's load." };
+  }
+
+  const team = await loadTeamDay(date);
+  if (team.error) return { error: team.error };
+
+  const pending: Record<string, number> = {};
+  for (const row of team.rows) pending[row.counsellorId] = row.total.pending;
+  return { error: null, pending };
 }

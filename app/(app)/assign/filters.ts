@@ -1,3 +1,8 @@
+import {
+  isEnquiryRange,
+  rangeDates,
+  type EnquiryRangeId,
+} from "@/lib/enquiry-range";
 import type {
   CloseReason,
   EnquiryStatus,
@@ -144,29 +149,47 @@ export function parseEnquiriesParams(get: ParamReader): {
   page: number;
   sort: string;
   dir: "asc" | "desc";
+  range: EnquiryRangeId;
   filters: EnquiryFilters;
 } {
   const page = Math.max(1, Number(str(get, "page") ?? 1) || 1);
   const sort = str(get, "sort") ?? "created_at";
   /**
-   * §48.1, corrected. The arrival column reads oldest first.
+   * §50.1 overrides §48.1 here, and only here.
    *
-   * Every other column keeps its newest/highest-first default, which is what
-   * you want of a last-call date or an importance grade. Arrival is the
-   * exception because this list is worked top to bottom like the other two,
-   * and the lead that has waited longest should be the one you reach first.
-   *
-   * An explicit ?dir= still wins, so the column header can still be clicked
-   * to reverse it — this sets where the screen opens, not what it allows.
+   * Brief 48 made the arrival column read oldest first on all three lists,
+   * which is right for New Calls and the desk: they are queues, worked top to
+   * bottom, and the lead that has waited longest should be reached first.
+   * Enquiries is not a queue. It is where somebody goes to look up what came
+   * in, and newest first is what that question wants. An explicit ?dir= still
+   * wins either way — this sets where the screen opens, not what it allows.
    */
   const asked = str(get, "dir");
-  const dir: "asc" | "desc" =
-    asked === "asc" ? "asc" : asked === "desc" ? "desc" : sort === "created_at" ? "asc" : "desc";
+  const dir: "asc" | "desc" = asked === "asc" ? "asc" : "desc";
+
+  /**
+   * §50.1. The window, and where it comes from.
+   *
+   * Real dates in the URL are always obeyed — they are the free range, and
+   * somebody who typed them meant them. Otherwise `range` decides, and with
+   * neither present the screen opens on today. "all" resolves to no dates at
+   * all, which is what removes the restriction rather than widening it.
+   */
+  const rawFrom = str(get, "createdFrom");
+  const rawTo = str(get, "createdTo");
+  const askedRange = str(get, "range");
+  const range: EnquiryRangeId = isEnquiryRange(askedRange)
+    ? askedRange
+    : rawFrom || rawTo
+      ? "custom"
+      : "today";
+  const span = range === "custom" ? { from: rawFrom, to: rawTo } : rangeDates(range);
 
   return {
     page,
     sort,
     dir,
+    range,
     filters: {
       type: str(get, "type") as EnquiryType | null,
       status: str(get, "status") as EnquiryStatus | null,
@@ -180,8 +203,8 @@ export function parseEnquiriesParams(get: ParamReader): {
       termId: str(get, "term"),
       sourceId: str(get, "source"),
       importance: many(get, "importance"),
-      createdFrom: str(get, "createdFrom"),
-      createdTo: str(get, "createdTo"),
+      createdFrom: span.from,
+      createdTo: span.to,
       followUpFrom: str(get, "followUpFrom"),
       followUpTo: str(get, "followUpTo"),
       discussion: str(get, "q"),

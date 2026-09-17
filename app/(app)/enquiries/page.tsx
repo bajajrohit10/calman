@@ -34,7 +34,7 @@ export default async function Page({
 }) {
   const viewer = await requireUser();
   const sp = await searchParams;
-  const { page, sort, dir, filters } = parseEnquiriesParams(read(sp));
+  const { page, sort, dir, range, filters } = parseEnquiriesParams(read(sp));
   const includeArchived = filters.includeArchived ?? false;
 
   // Passed down rather than read from window.location during render: on the
@@ -79,6 +79,7 @@ export default async function Page({
         page={page}
         pageSize={PAGE_SIZE}
         sort={sort}
+        range={range}
         dir={dir}
         search={search}
         counsellorName={viewer.profile?.full_name ?? null}
@@ -123,8 +124,11 @@ export default async function Page({
           lostReason: one(sp.lostReason) ?? "",
           closeReason: one(sp.closeReason) ?? "",
           mobile: one(sp.mobile) ?? "",
-          createdFrom: one(sp.createdFrom) ?? "",
-          createdTo: one(sp.createdTo) ?? "",
+          // §50.1. The boxes show the window that is actually in force, not
+          // the raw query string — otherwise the default view filters to today
+          // while the two date fields sit empty, which reads as a bug.
+          createdFrom: filters.createdFrom ?? "",
+          createdTo: filters.createdTo ?? "",
           followUpFrom: one(sp.followUpFrom) ?? "",
           followUpTo: one(sp.followUpTo) ?? "",
           q: one(sp.q) ?? "",

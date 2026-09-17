@@ -139,3 +139,15 @@ export function istWeekStart(): string {
   d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
   return d.toISOString().slice(0, 10);
 }
+
+/**
+ * The first of the current IST month, for the Enquiries range picker (§50.1).
+ *
+ * Built from the IST calendar day rather than the machine's, like everything
+ * else here — a server in another timezone must not decide that the month
+ * turned over at half past six in the evening.
+ */
+export function istMonthStart(): string {
+  const [y, m] = istToday().split("-");
+  return `${y}-${m}-01`;
+}

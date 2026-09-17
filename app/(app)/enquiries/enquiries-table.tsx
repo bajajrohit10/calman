@@ -35,6 +35,11 @@ import {
   statusTone,
 } from "@/lib/enquiry-labels";
 import type { EnquiryRow } from "@/lib/enquiries";
+import {
+  ENQUIRY_RANGES,
+  rangeCountLabel,
+  type EnquiryRangeId,
+} from "@/lib/enquiry-range";
 import { formatArrived, formatDate } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
 
@@ -66,6 +71,7 @@ export function EnquiriesTable({
   pageSize,
   sort,
   dir,
+  range,
   search,
   counsellorName,
   roster,
@@ -84,6 +90,8 @@ export function EnquiriesTable({
   sort: string;
   dir: "asc" | "desc";
   search: string;
+  /** §50.1: which created-date window the screen is showing. */
+  range: EnquiryRangeId;
   counsellorName: string | null;
   roster: { id: string; name: string }[];
   /** §45.3: every active user, for the escalate-to picker. */
@@ -152,6 +160,7 @@ export function EnquiriesTable({
             selected={selected}
             multi={multi}
             roster={roster}
+            quickRange={<QuickRange active={range} search={search} />}
           />
 
           <Labelled label="Type">
@@ -220,8 +229,11 @@ export function EnquiriesTable({
           >
             Clear
           </Link>
+          {/* §50.1. The window is named, because a screen that silently
+              shows one day and says only "42 enquiries" is stating a fact
+              about the business that is really a fact about today. */}
           <span className="ml-auto text-[12px] text-ink-3">
-            {total} enquir{total === 1 ? "y" : "ies"}
+            {rangeCountLabel(range, total)}
           </span>
           <ExportButton source="enquiries" />
         </div>
@@ -399,6 +411,45 @@ export function EnquiriesTable({
       <p className="text-[11.5px] text-ink-3">
         Open a row to log a call, or follow the number for its full history.
       </p>
+    </div>
+  );
+}
+
+/**
+ * Today · Yesterday · This week · This month · All (§50.1).
+ *
+ * Links rather than form buttons. A range is a view worth bookmarking and
+ * worth sharing, and the back button should undo picking one — all of which a
+ * GET link gives for nothing. Each clears the free dates as it goes, so the
+ * two controls cannot end up disagreeing about which window is on screen.
+ */
+function QuickRange({ active, search }: { active: EnquiryRangeId; search: string }) {
+  const href = (id: string) => {
+    const params = new URLSearchParams(search);
+    params.set("range", id);
+    // The free boxes are the other way of saying the same thing; a quick range
+    // replaces whatever they held rather than fighting it.
+    params.delete("createdFrom");
+    params.delete("createdTo");
+    params.delete("page");
+    return `/enquiries?${params.toString()}`;
+  };
+  return (
+    <div className="mb-1 inline-flex overflow-hidden rounded-md border border-line-2">
+      {ENQUIRY_RANGES.map((r) => (
+        <Link
+          key={r.id}
+          href={href(r.id)}
+          aria-current={active === r.id ? "page" : undefined}
+          className={
+            active === r.id
+              ? "bg-accent px-2 py-[3px] text-[11.5px] font-medium text-accent-ink"
+              : "bg-surface px-2 py-[3px] text-[11.5px] text-ink-2 hover:bg-surface-2"
+          }
+        >
+          {r.label}
+        </Link>
+      ))}
     </div>
   );
 }
