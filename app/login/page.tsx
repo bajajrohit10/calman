@@ -1,14 +1,15 @@
 import { redirect } from "next/navigation";
 
 import { getViewer } from "@/lib/auth";
+import { landingPathFor } from "@/lib/accounts/landing";
 
 import { LoginForm } from "./login-form";
 
 export const metadata = { title: "Sign in · Calman" };
 
 export default async function LoginPage() {
-  const { userId } = await getViewer();
-  if (userId) redirect("/my-day");
+  const { userId, profile } = await getViewer();
+  if (userId) redirect(landingPathFor(profile?.role));
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-ground px-6 py-12">

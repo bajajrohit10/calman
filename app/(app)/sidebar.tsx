@@ -74,15 +74,22 @@ const ITEMS: Item[] = [
  * configuration screen for the counselling product, which it is not.
  */
 const ACCOUNTS: Item = {
-  href: "/accounts/vendors",
+  // §50E.3. Sales is the month's work and the accounts role's landing page;
+  // vendors and rates are the reference data behind it.
+  href: "/accounts/sales",
   label: "Accounts",
-  hint: "Vendors and remittance",
+  hint: "The month's sales and what each line earns",
   icon: "₹",
   sub: [
     {
       href: "/accounts/rates",
       label: "Rates",
       hint: "What each vendor earns, and the lines no rate reached",
+    },
+    {
+      href: "/accounts/vendors",
+      label: "Vendors",
+      hint: "Everyone remittance can be paid to",
     },
   ],
 };
@@ -106,6 +113,7 @@ const SETTINGS: Item = {
  */
 export function Sidebar({
   showSettings,
+  showCounselling,
   showAccounts,
   fullName,
   roleLabel,
@@ -114,6 +122,12 @@ export function Sidebar({
   signOut,
 }: {
   showSettings: boolean;
+  /**
+   * §50E.3. False for the accounts role, which has no rows in any counselling
+   * table — showing it seven links to empty screens would be worse than
+   * showing it none.
+   */
+  showCounselling: boolean;
   /** §50A: super admins and the accounts role; not managers. */
   showAccounts: boolean;
   fullName: string;
@@ -135,8 +149,9 @@ export function Sidebar({
   const newCalls = useNewCallsCount();
   const collapsed = useRailCollapsed();
   const [themePending, startTheme] = useTransition();
+  const counselling = showSettings ? ITEMS : ITEMS.filter((item) => !item.adminOnly);
   const items = [
-    ...(showSettings ? ITEMS : ITEMS.filter((item) => !item.adminOnly)),
+    ...(showCounselling ? counselling : []),
     ...(showAccounts ? [ACCOUNTS] : []),
     ...(showSettings ? [SETTINGS] : []),
   ];

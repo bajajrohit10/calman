@@ -11,6 +11,7 @@ import { timed } from "@/lib/server-timing";
 import { createClient } from "@/lib/supabase/server";
 
 import { Sidebar } from "./sidebar";
+import { showsCounselling } from "@/lib/accounts/landing";
 
 /**
  * The number on the New Calls badge (§5.12).
@@ -140,6 +141,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               ),
             }}
             showSettings={isAdmin(profile.role)}
+            showCounselling={showsCounselling(profile.role)}
             showAccounts={profile.role === "super_admin" || profile.role === "accounts"}
             fullName={profile.full_name}
             roleLabel={ROLE_LABELS[profile.role]}

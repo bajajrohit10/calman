@@ -69,8 +69,31 @@ export function classifyLevel(title: string): string | null {
   return null;
 }
 
-/** Books, by any of the ways a books line announces itself. */
-const BOOKS = /\bbooks?\b|\bhard\s*copy\b|\bstudy\s*material\b|\bmodule\s*set\b/;
+/**
+ * Books, by the ways a books product names itself in the title head.
+ *
+ * "Hard copy" is deliberately NOT here, and that distinction is the whole
+ * reason this brief re-read the sheet. 651 August lines have a Course Medium
+ * of "Google Drive with Hard Copy": those are lectures that ship with printed
+ * notes, not books products. Treating "hard copy" as Books classified 97% of
+ * the month as Books and would have rated almost every lecture against the
+ * books percentage.
+ */
+const BOOKS = /\bbooks?\b|\bnotes?\b|\bquestion\s*bank\b|\bcracker\b|\bcompiler\b|\bstudy\s*material\b|\bmodule\s*set\b/;
+
+/**
+ * The Course Medium column, which answers the question outright when present.
+ *
+ * Its first segment is the format — "Books / Sep 26", "Google Drive with Hard
+ * Copy / May 27" — and a medium of Books means a books product no matter what
+ * the title says. Where there is no medium the title head decides.
+ */
+const MEDIUM_BOOKS = /^e?\s*books?\b/;
+const MEDIUM_ADDON = /with\s+(hard\s*copy|books?)/;
+
+function mediumHead(medium: string): string {
+  return norm(medium.split("/")[0]).trim();
+}
 
 /**
  * §50A.6. Delivery types, matched on the head only. "Batch" and "Lectures"
@@ -83,13 +106,16 @@ const TYPE_PATTERNS: [RegExp, string][] = [
   [/\bfull\b|\bregular\b|\bbatch\b|\blectures?\b|\bclasses\b|\bcomplete\b/, "Full"],
 ];
 
-export function classify(title: string): Classified {
+export function classify(title: string, medium?: string | null): Classified {
   const raw = title ?? "";
   const h = norm(head(raw));
-  const whole = norm(raw);
+  const med = medium ? mediumHead(medium) : "";
+  const addonFromMedium = med ? MEDIUM_ADDON.test(med) : false;
 
-  // 1. Books first, and it settles the matter.
-  if (BOOKS.test(whole)) {
+  // 1. Books first, and it settles the matter. The medium is believed over the
+  // title: a title can mention notes it merely includes, the medium cannot.
+  const isBooks = med ? MEDIUM_BOOKS.test(med) : BOOKS.test(h);
+  if (isBooks) {
     return {
       level: classifyLevel(raw),
       product_type: "Books",
@@ -101,7 +127,7 @@ export function classify(title: string): Classified {
 
   // 2. A lecture product. Combo only if the head says so.
   const isCombo = /\bcombo\b/.test(h);
-  const hasBooksAddon = /\bcombo\b|\bbooks?\b/.test(norm(suffix(raw)));
+  const hasBooksAddon = addonFromMedium || /\bbooks?\b|\bhard\s*copy\b/.test(norm(suffix(raw)));
 
   let type: string | null = null;
   for (const [re, t] of TYPE_PATTERNS) {

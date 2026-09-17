@@ -55,6 +55,47 @@ export type Database = {
           },
         ]
       }
+      order_conversions: {
+        Row: {
+          batch_id: string
+          created_at: string
+          difference_amount: number | null
+          id: string
+          order_number: string
+          payment_date: string | null
+          payment_mode: string | null
+          reason: string | null
+        }
+        Insert: {
+          batch_id: string
+          created_at?: string
+          difference_amount?: number | null
+          id?: string
+          order_number: string
+          payment_date?: string | null
+          payment_mode?: string | null
+          reason?: string | null
+        }
+        Update: {
+          batch_id?: string
+          created_at?: string
+          difference_amount?: number | null
+          id?: string
+          order_number?: string
+          payment_date?: string | null
+          payment_mode?: string | null
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_conversions_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "sales_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment_batches: {
         Row: {
           file_name: string
@@ -544,6 +585,17 @@ export type Database = {
       }
     }
     Functions: {
+      commit_sales_batch: {
+        Args: {
+          p_conversions: Json
+          p_file_name: string
+          p_month: string
+          p_replace?: boolean
+          p_rows: Json
+          p_uploaded_by: string
+        }
+        Returns: Json
+      }
       normalise_key: { Args: { p_text: string }; Returns: string }
       resolve_rate: {
         Args: {
