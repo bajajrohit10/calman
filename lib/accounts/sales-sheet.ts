@@ -120,28 +120,60 @@ export function cellText(v: SheetCell): string {
 }
 
 /**
- * A cell as an ISO instant.
+ * A cell as an instant, pinned to IST whatever the server's clock says.
  *
- * Excel dates arrive as Date objects already in UTC. Text dates arrive as the
- * operator typed them, which in this sheet is day-first — "14-08-2026" is the
- * fourteenth of August, and reading it the American way would move a line into
- * a month it does not belong to and rate it against the wrong grid.
+ * §50F.0(b). This was wrong and the error was invisible until the same file
+ * was parsed on two machines. Excel has no timezone: a date cell holds a
+ * serial that means a wall clock, and the business writing it means IST.
+ * exceljs converts that serial with pure UTC arithmetic, so the Date it hands
+ * back carries the wall clock in its *UTC* fields — 31 July 19:22 IST arrives
+ * as 19:22 UTC, not as an instant in July.
+ *
+ * Treating that as a UTC instant and adding 5:30 to "convert it to IST" —
+ * which is what this did — moves every evening row into the next day. On a
+ * machine in IST it also interacted with local-time construction elsewhere, so
+ * the same workbook read as 19 July rows locally and 6 on Vercel.
+ *
+ * So: read the wall clock out of whichever fields hold it, and return it with
+ * an explicit +05:30 offset. The result is one unambiguous instant, identical
+ * on every machine, and Postgres stores it in timestamptz without guessing.
  */
 export function cellDate(v: SheetCell): string | null {
-  if (v instanceof Date) return v.toISOString();
+  if (v instanceof Date) {
+    if (Number.isNaN(v.getTime())) return null;
+    return istWallClock(
+      v.getUTCFullYear(), v.getUTCMonth() + 1, v.getUTCDate(),
+      v.getUTCHours(), v.getUTCMinutes(), v.getUTCSeconds());
+  }
   const raw = cellText(v).trim();
   if (!raw) return null;
 
-  const dmy = raw.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+  // Day-first, as the operators type it: "14-08-2026" is the fourteenth.
+  const dmy = raw.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
   if (dmy) {
-    const [, d, m, y] = dmy;
-    // Recorded at midnight IST, which is 18:30 UTC the day before.
-    const dt = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
-    dt.setUTCMinutes(dt.getUTCMinutes() - 330);
-    return Number.isNaN(dt.getTime()) ? null : dt.toISOString();
+    const [, d, m, y, hh, mm, ss] = dmy;
+    return istWallClock(Number(y), Number(m), Number(d),
+      Number(hh ?? 0), Number(mm ?? 0), Number(ss ?? 0));
   }
-  const parsed = new Date(raw);
-  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+
+  // An ISO string already carries its own offset; anything else is not a date.
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (iso) {
+    const [, y, m, d, hh, mm, ss] = iso;
+    return istWallClock(Number(y), Number(m), Number(d),
+      Number(hh ?? 0), Number(mm ?? 0), Number(ss ?? 0));
+  }
+  return null;
+}
+
+const pad = (n: number, w = 2) => String(n).padStart(w, "0");
+
+/** An IST wall clock as an offset-qualified instant: no ambiguity, no local clock. */
+function istWallClock(
+  y: number, m: number, d: number, hh: number, mm: number, ss: number,
+): string | null {
+  if (!y || !m || !d) return null;
+  return `${pad(y, 4)}-${pad(m)}-${pad(d)}T${pad(hh)}:${pad(mm)}:${pad(ss)}+05:30`;
 }
 
 const num = (v: SheetCell): string | null => {
@@ -150,11 +182,15 @@ const num = (v: SheetCell): string | null => {
   return Number.isNaN(Number(t)) ? null : t;
 };
 
-/** IST calendar date of an instant, as YYYY-MM-DD. */
+/**
+ * IST calendar date of a value cellDate produced.
+ *
+ * cellDate returns the wall clock with its offset attached, so the date is the
+ * first ten characters. No clock arithmetic, and nothing for a server in
+ * another timezone to get wrong.
+ */
 export function istDate(iso: string): string {
-  const d = new Date(iso);
-  d.setUTCMinutes(d.getUTCMinutes() + 330);
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+  return iso.slice(0, 10);
 }
 
 /** IST calendar month of an instant, as YYYY-MM. */

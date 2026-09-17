@@ -626,6 +626,23 @@ export type Database = {
           ready_count: number
         }[]
       }
+      review_queue: {
+        Args: never
+        Returns: {
+          effective_from: string
+          effective_to: string
+          level: string
+          line_count: number
+          note: string
+          pct: number
+          product_type: string
+          rate_id: string
+          sale_kind: string
+          teachers_price_sum: number
+          vendor_id: string
+          vendor_name: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

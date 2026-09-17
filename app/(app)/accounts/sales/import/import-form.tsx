@@ -47,6 +47,8 @@ export function ImportForm() {
           {preview.tabs.length > 1 ? (
             <label className="flex flex-col gap-1">
               <span className={FIELD_LABEL}>Tab</span>
+              {/* The server decides which sheet the preview actually read;
+                  the dropdown shows that until somebody chooses otherwise. */}
               <Select name="tab" value={tab || preview.tab || ""}
                       onChange={(e) => setTab(e.target.value)}
                       className="w-[190px]" data-testid="import-tab">

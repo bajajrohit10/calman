@@ -5,7 +5,7 @@ import { requireAccountsProfile } from "@/lib/auth";
 import { istToday } from "@/lib/format";
 import {
   LEVELS, PRODUCT_TYPES, STATES,
-  loadRateCells, loadUnknownLines, loadVendor, loadVendorOptions,
+  loadRateCells, loadReviewQueue, loadUnknownLines, loadVendor, loadVendorOptions,
 } from "@/lib/accounts/rates";
 import type { SaleKind } from "@/lib/accounts/classify";
 import { AddRate, ConfirmRatePct, SetLinePct } from "./rate-forms";
@@ -18,6 +18,7 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) 
 const TABS = [
   { id: "single", label: "Single courses" },
   { id: "combos", label: "Combos" },
+  { id: "review", label: "Review queue" },
   { id: "unknown", label: "Unknown" },
 ] as const;
 
@@ -107,6 +108,7 @@ export default async function Page({
           today={today}
         />
       ) : null}
+      {tab === "review" ? <ReviewQueue /> : null}
       {tab === "unknown" ? <Unknown /> : null}
     </div>
   );
@@ -314,6 +316,82 @@ async function RateGrid({
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/* --------------------------------------------------------- review queue -- */
+
+/**
+ * §50F.0(d). Every unconfirmed rate, most expensive first.
+ *
+ * The same one-field confirm as the cell view, because it is the same act —
+ * somebody deciding a percentage — and doing it from here saves finding the
+ * vendor, picking it, and locating the row.
+ */
+async function ReviewQueue() {
+  const { rows, error } = await loadReviewQueue();
+  const totalHeld = rows.reduce((a, r) => a + r.teachers_price_sum, 0);
+  const totalLines = rows.reduce((a, r) => a + r.line_count, 0);
+
+  return (
+    <div className="flex flex-col gap-4">
+      {error ? <ErrorNote>{error}</ErrorNote> : null}
+
+      <p className="text-[12.5px] text-ink-2" data-testid="review-summary">
+        <span data-testid="review-count">{rows.length}</span> unconfirmed rate
+        {rows.length === 1 ? "" : "s"}, holding{" "}
+        <span data-testid="review-total">₹{totalHeld.toLocaleString("en-IN")}</span>{" "}
+        across {totalLines} sales line{totalLines === 1 ? "" : "s"}.
+      </p>
+
+      <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
+        <table className="w-full min-w-[980px] text-left text-[12.5px]">
+          <thead className={TABLE_HEAD_ROW}>
+            <tr>
+              <th className="px-2 py-[7px]">Vendor</th>
+              <th className="px-2 py-[7px]">Grid</th>
+              <th className="px-2 py-[7px]">Level</th>
+              <th className="px-2 py-[7px]">Type</th>
+              <th className="px-2 py-[7px] text-right">Lines</th>
+              <th className="px-2 py-[7px] text-right">Teacher’s price held</th>
+              <th className="px-2 py-[7px] text-right">Seeded %</th>
+              <th className="px-2 py-[7px]">Note</th>
+              <th className="px-2 py-[7px]">Confirm</th>
+            </tr>
+          </thead>
+          <tbody data-testid="review-rows">
+            {rows.map((r) => (
+              <tr key={r.rate_id} className="border-b border-line align-top last:border-b-0">
+                <td className={cx(CELL, "text-ink")}>{r.vendor_name}</td>
+                <td className={CELL}>
+                  <Badge tone={r.sale_kind === "combo" ? "info" : "neutral"}>{r.sale_kind}</Badge>
+                </td>
+                <td className={cx(CELL, "text-ink-2")}>{r.level}</td>
+                <td className={cx(CELL, "text-ink-2")}>{r.product_type}</td>
+                <td className={cx(CELL, "text-right tabular-nums text-ink-2")}>{r.line_count}</td>
+                <td className={cx(CELL, "text-right tabular-nums text-ink")}
+                    data-testid="review-held">
+                  ₹{r.teachers_price_sum.toLocaleString("en-IN")}
+                </td>
+                <td className={cx(CELL, "text-right tabular-nums text-danger")}>
+                  {pctText(r.pct)}
+                </td>
+                <td className={cx(CELL, "text-[11.5px] text-ink-3")}>{r.note ?? "—"}</td>
+                <td className={CELL}><ConfirmRatePct rateId={r.rate_id} /></td>
+              </tr>
+            ))}
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={9} className="px-3 py-8 text-center text-ink-3"
+                    data-testid="review-empty">
+                  Nothing is waiting to be confirmed.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

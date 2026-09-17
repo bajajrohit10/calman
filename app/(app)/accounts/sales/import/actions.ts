@@ -35,6 +35,19 @@ function grid(ws: ExcelJS.Worksheet): SheetCell[][] {
   return out;
 }
 
+/** The first worksheet whose first three rows name an "Order Number" column. */
+function findSalesTab(wb: ExcelJS.Workbook): string | null {
+  for (const ws of wb.worksheets) {
+    for (let r = 1; r <= Math.min(3, ws.rowCount); r++) {
+      for (let c = 1; c <= ws.columnCount; c++) {
+        const h = String(ws.getRow(r).getCell(c).value ?? "").replace(/\s+/g, " ").trim();
+        if (h.toLowerCase() === "order number") return ws.name;
+      }
+    }
+  }
+  return null;
+}
+
 async function readWorkbook(form: FormData) {
   const file = form.get("file");
   if (!(file instanceof File) || file.size === 0) {
@@ -62,9 +75,17 @@ async function parseUpload(form: FormData): Promise<
   const { error, wb, tabs } = await readWorkbook(form);
   if (error || !wb) return { error: error ?? "Unreadable file.", parsed: null, tabs, tab: null };
 
+  // §50F.0(c). Which sheet holds the sales.
+  //
+  // "Course" by name, and failing that the first tab whose top three rows
+  // contain an "Order Number" header. The workbook opens on Sheet33 — a
+  // scratch list — so falling back to the first tab picked a sheet with no
+  // sales in it and, worse, showed "Sheet33" in the dropdown while having
+  // silently parsed Course, so the screen disagreed with what it had done.
   const wanted = String(form.get("tab") ?? "").trim();
-  const tab = wanted && tabs.includes(wanted) ? wanted
-    : tabs.includes("Course") ? "Course" : tabs[0];
+  const tab = wanted && tabs.includes(wanted)
+    ? wanted
+    : tabs.includes("Course") ? "Course" : (findSalesTab(wb) ?? tabs[0]);
   const ws = wb.getWorksheet(tab);
   if (!ws) return { error: `No tab named ${tab}.`, parsed: null, tabs, tab: null };
 
