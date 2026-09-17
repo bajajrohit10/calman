@@ -582,31 +582,35 @@ export type Database = {
       }
     }
     Functions: {
-      [_ in never]: never
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
+      normalise_key: { Args: { p_text: string }; Returns: string }
+      resolve_rate: {
         Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
+          p_combo_key: string
+          p_is_combo: boolean
+          p_level: string
+          p_order_date: string
+          p_product_type: string
+          p_state: string
+          p_vendor_id: string
         }
-        Returns: Json
+        Returns: {
+          pct: number
+          rate_id: string
+          source: string
+        }[]
+      }
+      retro_line_counts: {
+        Args: {
+          p_from: string
+          p_level: string
+          p_product_type: string
+          p_to: string
+          p_vendor_id: string
+        }
+        Returns: {
+          paid_count: number
+          ready_count: number
+        }[]
       }
     }
     Enums: {
@@ -3170,9 +3174,6 @@ export type CompositeTypes<
 
 export const Constants = {
   accounts: {
-    Enums: {},
-  },
-  graphql_public: {
     Enums: {},
   },
   public: {

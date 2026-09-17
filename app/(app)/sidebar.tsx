@@ -78,6 +78,13 @@ const ACCOUNTS: Item = {
   label: "Accounts",
   hint: "Vendors and remittance",
   icon: "₹",
+  sub: [
+    {
+      href: "/accounts/rates",
+      label: "Rates",
+      hint: "What each vendor earns, and the lines no rate reached",
+    },
+  ],
 };
 
 const SETTINGS: Item = {
