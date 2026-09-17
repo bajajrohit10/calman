@@ -94,6 +94,60 @@ function RateFormBody({
     );
   }
 
+  // The retrospective guard, rendered as its own form rather than as a panel
+  // inside the main one. The fields the user typed have already been reset by
+  // React, so this posts the values the server validated and counted, as
+  // hidden inputs. Confirming can therefore only ever save the rate the
+  // warning is describing.
+  if (state.confirm) {
+    const v = state.confirm.values;
+    return (
+      <form
+        action={action}
+        className="flex flex-col gap-2 rounded-lg border border-warn bg-warn-soft p-3"
+        data-testid="retro-guard"
+      >
+        <input type="hidden" name="vendor_id" value={vendorId} />
+        <input type="hidden" name="level" value={v.level} />
+        <input type="hidden" name="product_type" value={v.product_type} />
+        <input type="hidden" name="pct" value={v.pct} />
+        <input type="hidden" name="effective_from" value={v.effective_from} />
+        {v.effective_to ? (
+          <input type="hidden" name="effective_to" value={v.effective_to} />
+        ) : null}
+        {v.note ? <input type="hidden" name="note" value={v.note} /> : null}
+        {v.state_scope.map((sc) => (
+          <input key={sc} type="hidden" name="state_scope" value={sc} />
+        ))}
+        <input type="hidden" name="confirmed" value="1" />
+
+        <p className="text-[12.5px] text-ink">
+          This will change {state.confirm.paid} sales line
+          {state.confirm.paid === 1 ? "" : "s"} already in status paid and{" "}
+          {state.confirm.ready} in status ready.
+        </p>
+        <p className="text-[11.5px] text-ink-2">
+          {v.level} · {v.product_type} · {v.pct}% from {v.effective_from}
+          {v.effective_to ? ` to ${v.effective_to}` : " onwards"}
+          {v.state_scope.length ? ` · ${v.state_scope.join(", ")}` : ""}.
+          Saving records the rate only. Nothing is recalculated in this
+          release, and no difference statement is issued.
+        </p>
+
+        {state.error ? (
+          <p className="text-[12.5px] text-danger" data-testid="rate-error">{state.error}</p>
+        ) : null}
+
+        <div className="flex items-center gap-2">
+          <Button type="submit" disabled={pending} data-testid="retro-confirm">
+            {pending ? "Saving…" : "Save anyway"}
+          </Button>
+          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+        </div>
+      </form>
+    );
+  }
+
   return (
     <form
       action={action}
@@ -171,39 +225,14 @@ function RateFormBody({
                   placeholder="Why this rate, and who agreed it." />
       </label>
 
-      {/* The retrospective guard. The server refuses the first submit of a
-          back-dated rate and sends back what it would land on; confirming
-          re-submits the same form with the flag set. */}
-      {state.confirm ? (
-        <div
-          className="rounded-md border border-warn bg-warn-soft px-2.5 py-2 text-[12.5px] text-ink"
-          data-testid="retro-guard"
-        >
-          This will change {state.confirm.paid} sales line
-          {state.confirm.paid === 1 ? "" : "s"} already in status paid and{" "}
-          {state.confirm.ready} in status ready.
-          <span className="mt-1 block text-[11.5px] text-ink-2">
-            Saving records the rate only. Nothing is recalculated in this
-            release, and no difference statement is issued.
-          </span>
-          <input type="hidden" name="confirmed" value="1" />
-          <Button type="submit" className="mt-2" disabled={pending}
-                  data-testid="retro-confirm">
-            {pending ? "Saving…" : "Save anyway"}
-          </Button>
-        </div>
-      ) : null}
-
       {state.error ? (
         <p className="text-[12.5px] text-danger" data-testid="rate-error">{state.error}</p>
       ) : null}
 
       <div className="flex items-center gap-2">
-        {state.confirm ? null : (
-          <Button type="submit" disabled={pending} data-testid="rate-save">
-            {pending ? "Saving…" : "Save rate"}
-          </Button>
-        )}
+        <Button type="submit" disabled={pending} data-testid="rate-save">
+          {pending ? "Saving…" : "Save rate"}
+        </Button>
         <Button type="button" variant="ghost" onClick={onClose}>
           Cancel
         </Button>

@@ -92,6 +92,14 @@ export async function addRate(
         paid: Number(row?.paid_count ?? 0),
         ready: Number(row?.ready_count ?? 0),
         from, to,
+        // Echoed back because the form's own fields are reset by the time the
+        // user sees this, so the confirm has to carry the values rather than
+        // re-read them.
+        values: {
+          level, product_type: productType, pct: String(pct),
+          effective_from: from, effective_to: to, note,
+          state_scope: states,
+        },
       },
     };
   }

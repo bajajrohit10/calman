@@ -7,11 +7,34 @@
  * values are real objects and have to live somewhere else.
  */
 
+/**
+ * What the server validated, echoed back so the confirming submit carries it.
+ *
+ * React resets an uncontrolled form after a server action runs, so by the time
+ * the retrospective warning is on screen the fields the user typed are already
+ * back at their defaults. Re-submitting the form would then save something
+ * other than what was counted — a different date, or nothing at all. The
+ * confirm step therefore posts these values back as hidden inputs rather than
+ * reading the fields again, which also means the numbers in the warning always
+ * describe the rate that actually gets saved.
+ */
+export type RateValues = {
+  level: string;
+  product_type: string;
+  pct: string;
+  effective_from: string;
+  effective_to: string | null;
+  note: string | null;
+  state_scope: string[];
+};
+
 export type RateFormState = {
   ok: boolean;
   error: string | null;
   /** Set when a back-dated rate needs the user to look before saving. */
-  confirm: { paid: number; ready: number; from: string; to: string | null } | null;
+  confirm:
+    | { paid: number; ready: number; from: string; to: string | null; values: RateValues }
+    | null;
 };
 
 export const EMPTY_RATE_STATE: RateFormState = { ok: false, error: null, confirm: null };
