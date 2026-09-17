@@ -76,15 +76,35 @@ const ITEMS: Item[] = [
 const ACCOUNTS: Item = {
   // §50E.3. Sales is the month's work and the accounts role's landing page;
   // vendors and rates are the reference data behind it.
-  href: "/accounts/sales",
+  href: "/accounts",
   label: "Accounts",
-  hint: "The month's sales and what each line earns",
+  hint: "The month by vendor",
   icon: "₹",
   sub: [
+    {
+      href: "/accounts/sales",
+      label: "Sales",
+      hint: "Every line of the month",
+    },
     {
       href: "/accounts/reconcile",
       label: "Reconcile",
       hint: "What we owe against what was paid",
+    },
+    {
+      href: "/accounts/statements",
+      label: "Statements",
+      hint: "What each vendor is owed, and closing the month",
+    },
+    {
+      href: "/accounts/wallets",
+      label: "Wallets",
+      hint: "What each portal holds",
+    },
+    {
+      href: "/accounts/adjustments",
+      label: "Adjustments",
+      hint: "Manual credits and deductions",
     },
     {
       href: "/accounts/rates",

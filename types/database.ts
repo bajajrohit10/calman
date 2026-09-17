@@ -22,6 +22,7 @@ export type Database = {
           id: string
           linked_order_id: string | null
           month: string
+          note: string | null
           reason: string | null
           vendor_id: string
         }
@@ -32,6 +33,7 @@ export type Database = {
           id?: string
           linked_order_id?: string | null
           month: string
+          note?: string | null
           reason?: string | null
           vendor_id: string
         }
@@ -42,6 +44,7 @@ export type Database = {
           id?: string
           linked_order_id?: string | null
           month?: string
+          note?: string | null
           reason?: string | null
           vendor_id?: string
         }
@@ -483,6 +486,71 @@ export type Database = {
           },
         ]
       }
+      statements: {
+        Row: {
+          change_note: string | null
+          generated_at: string
+          generated_by: string | null
+          id: string
+          line_count: number
+          month: string
+          net_payable: number
+          paid_on: string | null
+          payment_reference: string | null
+          snapshot: Json
+          status: string
+          total_adjustments: number
+          total_paid: number
+          total_remittance: number
+          vendor_id: string
+          version: number
+        }
+        Insert: {
+          change_note?: string | null
+          generated_at?: string
+          generated_by?: string | null
+          id?: string
+          line_count?: number
+          month: string
+          net_payable?: number
+          paid_on?: string | null
+          payment_reference?: string | null
+          snapshot?: Json
+          status?: string
+          total_adjustments?: number
+          total_paid?: number
+          total_remittance?: number
+          vendor_id: string
+          version?: number
+        }
+        Update: {
+          change_note?: string | null
+          generated_at?: string
+          generated_by?: string | null
+          id?: string
+          line_count?: number
+          month?: string
+          net_payable?: number
+          paid_on?: string | null
+          payment_reference?: string | null
+          snapshot?: Json
+          status?: string
+          total_adjustments?: number
+          total_paid?: number
+          total_remittance?: number
+          vendor_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "statements_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vendor_aliases: {
         Row: {
           alias: string
@@ -612,6 +680,19 @@ export type Database = {
         }
         Returns: Json
       }
+      mark_vendor_paid: {
+        Args: {
+          p_month: string
+          p_paid_on: string
+          p_reference: string
+          p_vendor_id: string
+        }
+        Returns: Json
+      }
+      mark_vendor_ready: {
+        Args: { p_change_note?: string; p_month: string; p_vendor_id: string }
+        Returns: Json
+      }
       normalise_key: { Args: { p_text: string }; Returns: string }
       resolve_rate: {
         Args: {
@@ -663,6 +744,7 @@ export type Database = {
         Args: { p_base_source: string; p_line_id: string; p_price: number }
         Returns: Json
       }
+      sync_wallet_deductions: { Args: { p_batch_id: string }; Returns: number }
     }
     Enums: {
       [_ in never]: never

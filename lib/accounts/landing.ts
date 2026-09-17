@@ -12,7 +12,7 @@
  * that takes a long time to notice.
  */
 export function landingPathFor(role: string | null | undefined): string {
-  return role === "accounts" ? "/accounts/sales" : "/my-day";
+  return role === "accounts" ? "/accounts" : "/my-day";
 }
 
 /** Whether the counselling rail should be shown at all. */

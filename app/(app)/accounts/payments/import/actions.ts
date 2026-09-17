@@ -161,10 +161,22 @@ export async function commitPayments(
     });
   if (rpcError) return { ...EMPTY_PAYMENT_COMMIT, error: rpcError.message };
 
-  const s = data as { inserted: number; duplicates_dropped: number; month: string };
+  const s = data as { inserted: number; duplicates_dropped: number; month: string; batch_id: string };
+
+  // §50G.1(b). A portal or centre payment is the vendor spending the wallet we
+  // topped up, so it lands in the ledger as a deduction. Written here rather
+  // than typed: a deduction somebody forgets to enter is a balance that reads
+  // high for a month.
+  const { error: ledgerError } = await supabase
+    .schema("accounts").rpc("sync_wallet_deductions", { p_batch_id: s.batch_id });
+
   revalidatePath("/accounts/reconcile");
+  revalidatePath("/accounts/wallets");
   return {
-    ok: true, error: null,
+    ok: true,
+    // The payments are in; a ledger that did not sync is worth saying so
+    // rather than hiding behind a success message.
+    error: ledgerError ? `Payments imported, but the wallet ledger did not update: ${ledgerError.message}` : null,
     inserted: Number(s.inserted ?? 0),
     duplicatesDropped: Number(s.duplicates_dropped ?? 0),
     month: s.month ?? month,
