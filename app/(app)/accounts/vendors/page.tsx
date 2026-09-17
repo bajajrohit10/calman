@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Badge, PageHeader, Select, ErrorNote } from "@/components/ui";
 import { requireAccountsProfile } from "@/lib/auth";
 import { instituteOptions, loadVendors } from "@/lib/accounts/vendors";
+import { VendorEdit } from "./vendor-edit";
 
 export const metadata = { title: "Vendors · Accounts · Calman" };
 
@@ -109,7 +110,7 @@ export default async function Page({
       </form>
 
       <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
-        <table className="w-full min-w-[900px] text-left text-[12.5px]">
+        <table className="w-full min-w-[1180px] text-left text-[12.5px]">
           <thead className="border-b border-line bg-sunk text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
             <tr>
               <th className="px-2 py-[7px]">Vendor</th>
@@ -120,6 +121,8 @@ export default async function Page({
               <th className="px-2 py-[7px]">Settled through</th>
               <th className="px-2 py-[7px] text-right">Aliases</th>
               <th className="px-2 py-[7px] text-right">Opening</th>
+              <th className="px-2 py-[7px]">Centre</th>
+              <th className="px-2 py-[7px]" />
             </tr>
           </thead>
           <tbody data-testid="vendor-rows">
@@ -165,11 +168,30 @@ export default async function Page({
                 <td className="px-2 py-[5px] text-right tabular-nums text-ink-2">
                   {v.opening_balance ? `₹${v.opening_balance}` : "—"}
                 </td>
+                <td className="px-2 py-[5px] text-ink-2" data-testid={`vendor-centre-${v.id}`}>
+                  {v.center_discount_amount === null
+                    ? "—"
+                    : `₹${v.center_discount_amount} above ₹${v.center_discount_threshold}`}
+                </td>
+                <td className="px-2 py-[5px] align-top">
+                  <VendorEdit
+                    vendor={{
+                      id: v.id, name: v.name, institute: v.institute, kind: v.kind,
+                      default_payment_mode: v.default_payment_mode,
+                      tracks_portal_balance: v.tracks_portal_balance,
+                      portal_owner_vendor_id: v.portal_owner_vendor_id,
+                      center_discount_amount: v.center_discount_amount,
+                      center_discount_threshold: v.center_discount_threshold,
+                      is_active: v.is_active, note: v.note, aliases: v.aliases,
+                    }}
+                    owners={all.map((o) => ({ id: o.id, name: o.name }))}
+                  />
+                </td>
               </tr>
             ))}
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-3 py-8 text-center text-ink-3">
+                <td colSpan={10} className="px-3 py-8 text-center text-ink-3">
                   No vendors match these filters.
                 </td>
               </tr>
@@ -179,8 +201,9 @@ export default async function Page({
       </div>
 
       <p className="text-[11.5px] text-ink-3">
-        Read-only for now. Rates are not seeded — nobody has agreed them in
-        Calman yet, and an empty grid says so where a screen of zeroes would not.
+        The name is the one field that cannot be edited: it is what next
+        month’s sales and payments sheets are matched against. A vendor that
+        needs another spelling gets an alias.
       </p>
     </div>
   );

@@ -26,6 +26,10 @@ export type VendorRow = {
   is_active: boolean;
   note: string | null;
   alias_count: number;
+  /** §6.3. The editor needs the spellings themselves, not just how many. */
+  aliases: { id: string; alias: string }[];
+  center_discount_amount: number | null;
+  center_discount_threshold: number | null;
 };
 
 export type VendorFilters = { kind?: string | null; institute?: string | null };
@@ -41,8 +45,9 @@ export async function loadVendors(
     .select(
       `id, name, institute, kind, default_payment_mode, tracks_portal_balance,
        portal_owner_vendor_id, opening_balance, opening_balance_date, is_active, note,
+       center_discount_amount, center_discount_threshold,
        owner:portal_owner_vendor_id ( name ),
-       vendor_aliases ( id )`,
+       vendor_aliases ( id, alias )`,
     )
     .order("name");
 
@@ -69,6 +74,15 @@ export async function loadVendors(
     // here, which is the number worth seeing at a glance; the spellings
     // themselves belong on a detail screen that does not exist yet.
     alias_count: ((v.vendor_aliases as unknown[]) ?? []).length,
+    aliases: (((v.vendor_aliases as { id: string; alias: string }[]) ?? []))
+      .slice()
+      .sort((a, b) => a.alias.localeCompare(b.alias)),
+    center_discount_amount:
+      v.center_discount_amount === null || v.center_discount_amount === undefined
+        ? null : Number(v.center_discount_amount),
+    center_discount_threshold:
+      v.center_discount_threshold === null || v.center_discount_threshold === undefined
+        ? null : Number(v.center_discount_threshold),
   }));
 
   return { rows, error: null };

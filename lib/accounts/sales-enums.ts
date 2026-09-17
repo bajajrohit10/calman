@@ -24,12 +24,27 @@ export type RateSource = (typeof RATE_SOURCES)[number];
 export type LineStatus = (typeof LINE_STATUSES)[number];
 export type NoRemittanceReason = (typeof NO_REMITTANCE_REASONS)[number];
 
-/** §50H.4. The four sales tabs, by how the vendor gets paid. */
+/**
+ * §50H.4 / §6.1. The sales tabs, by how the vendor gets paid.
+ *
+ * "Unassigned" exists because the first four did not add up: a line whose
+ * vendor never resolved has no payment mode, so it appeared only under All and
+ * the tab counts were quietly short of the total. A tab that holds them is
+ * better than a discrepancy nobody can explain.
+ */
 export const SALES_TABS = [
   { id: "online", label: "Online payments", mode: "online_instant" },
   { id: "portal", label: "Portal", mode: "portal_balance" },
   { id: "sheet", label: "Google sheet", mode: "later" },
+  { id: "unassigned", label: "Unassigned", mode: null },
   { id: "all", label: "All", mode: null },
 ] as const;
+
+/** Rows a tab shows. `all` is everything; `unassigned` is the modeless ones. */
+export function tabMatches(tab: SalesTab, paymentMode: string | null): boolean {
+  if (tab === "all") return true;
+  if (tab === "unassigned") return paymentMode === null;
+  return paymentMode === (SALES_TABS.find((t) => t.id === tab)?.mode ?? null);
+}
 
 export type SalesTab = (typeof SALES_TABS)[number]["id"];

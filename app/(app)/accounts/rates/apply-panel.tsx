@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 
 import { Button, Input, Select, FIELD_LABEL, cx } from "@/components/ui";
+import { EffectiveDate } from "./effective-date";
 import { applyRate, editCellPct } from "./apply-actions";
 import { EMPTY_APPLY_STATE, type ApplyState } from "./apply-state";
 
@@ -18,19 +19,19 @@ type Cell = { level: string; product_type: string; hasRate: boolean; lines: numb
  * rather than about each row of it.
  */
 export function ApplyPanel({
-  vendorId, saleKind, cells, levels, types, today,
+  vendorId, saleKind, cells, levels, types, from,
 }: {
   vendorId: string;
   saleKind: "single" | "combo";
   cells: Cell[];
   levels: readonly string[];
   types: readonly string[];
-  today: string;
+  /** §6.2. From the URL, so the inline editor uses the same date. */
+  from: string;
 }) {
   const [state, action, pending] = useActionState<ApplyState, FormData>(applyRate, EMPTY_APPLY_STATE);
   const [selected, setSelected] = useState<string[]>([]);
   const [addingCell, setAddingCell] = useState(false);
-  const [from, setFrom] = useState(today);
 
   const all = selected.length === 0;
   const toggle = (k: string) =>
@@ -92,12 +93,8 @@ export function ApplyPanel({
             <option value="english">English only</option>
           </Select>
         </label>
-        <label className="flex flex-col gap-1">
-          <span className={FIELD_LABEL}>Effective from</span>
-          <Input type="date" name="effective_from" value={from}
-                 onChange={(e) => setFrom(e.target.value)}
-                 className="w-[150px]" data-testid="apply-from" />
-        </label>
+        <EffectiveDate value={from} />
+        <input type="hidden" name="effective_from" value={from} />
         <Button type="submit" disabled={pending} data-testid="apply-save">
           {pending ? "Applying…" : all ? `Apply to all ${cells.length} cells` : `Apply to ${selected.length}`}
         </Button>

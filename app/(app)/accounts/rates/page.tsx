@@ -63,6 +63,8 @@ export default async function Page({
   const kind = one(sp.kind);
   const vendorId = one(sp.vendor);
   const today = istToday();
+  // §6.2. One date for the panel and the inline editor, read from the URL.
+  const effectiveFrom = /^\d{4}-\d{2}-\d{2}$/.test(one(sp.from)) ? one(sp.from) : today;
 
   const tabHref = (id: string) => {
     const p = new URLSearchParams();
@@ -107,7 +109,7 @@ export default async function Page({
           search={search}
           kind={sp.kind === undefined ? DEFAULT_KIND[tab === "combos" ? "combo" : "single"] : kind}
           vendorId={vendorId}
-          today={today}
+          effectiveFrom={effectiveFrom}
         />
       ) : null}
       {tab === "review" ? <ReviewQueue /> : null}
@@ -119,9 +121,11 @@ export default async function Page({
 /* ------------------------------------------------------------ the grid -- */
 
 async function RateGrid({
-  saleKind, search, kind, vendorId, today,
+  saleKind, search, kind, vendorId, effectiveFrom,
 }: {
-  saleKind: SaleKind; search: string; kind: string; vendorId: string; today: string;
+  saleKind: SaleKind; search: string; kind: string; vendorId: string;
+  /** §6.2. The date the panel and the inline editor both write from. */
+  effectiveFrom: string;
 }) {
   const tab = saleKind === "combo" ? "combos" : "single";
   const { rows: vendorRows, error: vErr } = await loadVendorOptions(search, kind);
@@ -178,7 +182,7 @@ async function RateGrid({
         {vendors.slice(0, 60).map((v) => (
           <Link
             key={v.id}
-            href={`/accounts/rates?tab=${tab}&vendor=${v.id}${search ? `&q=${encodeURIComponent(search)}` : ""}${kind ? `&kind=${kind}` : ""}`}
+            href={`/accounts/rates?tab=${tab}&vendor=${v.id}${search ? `&q=${encodeURIComponent(search)}` : ""}${kind ? `&kind=${kind}` : ""}&from=${effectiveFrom}`}
             data-testid="vendor-option"
             aria-current={v.id === vendorId ? "true" : undefined}
             data-unrated={unrated.has(v.id) ? "1" : undefined}
@@ -221,7 +225,7 @@ async function RateGrid({
           </div>
 
           <ApplyPanel vendorId={vendor.id} saleKind={saleKind} cells={cellOptions}
-                      levels={LEVELS} types={PRODUCT_TYPES} today={today} />
+                      levels={LEVELS} types={PRODUCT_TYPES} from={effectiveFrom} />
 
           <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
             <table className="w-full min-w-[820px] text-left text-[12.5px]">
@@ -256,13 +260,13 @@ async function RateGrid({
                           <InlinePct vendorId={vendor.id} saleKind={saleKind}
                                      level={c.level} productType={c.product_type}
                                      language={c.current.language} pct={c.current.pct}
-                                     from={today} needsReview={c.current.needs_review} />
+                                     from={effectiveFrom} needsReview={c.current.needs_review} />
                         </span>
                       ) : (
                         <span data-testid="no-current-rate">
                           <InlinePct vendorId={vendor.id} saleKind={saleKind}
                                      level={c.level} productType={c.product_type}
-                                     language={null} pct={null} from={today}
+                                     language={null} pct={null} from={effectiveFrom}
                                      needsReview={false} />
                         </span>
                       )}

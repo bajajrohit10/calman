@@ -49,8 +49,8 @@ export async function loadBatches(): Promise<Batch[]> {
   return (data ?? []) as Batch[];
 }
 
-export { SALES_TABS, type SalesTab } from "@/lib/accounts/sales-enums";
-import { SALES_TABS } from "@/lib/accounts/sales-enums";
+export { SALES_TABS, tabMatches, type SalesTab } from "@/lib/accounts/sales-enums";
+import { tabMatches } from "@/lib/accounts/sales-enums";
 import type { SalesTab } from "@/lib/accounts/sales-enums";
 
 export type SalesFilters = {
@@ -95,8 +95,8 @@ export async function loadSalesLines(
   // vendor — so a line stays in the tab it was imported under even if the
   // vendor's default changes later, which is what somebody reconciling a
   // closed month expects.
-  const mode = SALES_TABS.find((t) => t.id === (f.tab ?? "all"))?.mode ?? null;
-  const byTab = mode ? rows.filter((r) => r.payment_mode === mode) : rows;
+  const byTab = rows.filter((r) =>
+    tabMatches(f.tab ?? "all", (r.payment_mode as string | null) ?? null));
 
   // "Needs attention" is an OR across two columns, which PostgREST can express
   // but not alongside the other filters without getting hard to read; 1,500

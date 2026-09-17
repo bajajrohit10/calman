@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Badge, ErrorNote, PageHeader, Select, CELL, TABLE_HEAD_ROW, cx } from "@/components/ui";
 import { requireAccountsProfile } from "@/lib/auth";
 import { LEVELS, PRODUCT_TYPES } from "@/lib/accounts/rates";
-import { LINE_STATUSES, RATE_SOURCES, SALES_TABS, type SalesTab } from "@/lib/accounts/sales-enums";
+import { LINE_STATUSES, RATE_SOURCES, SALES_TABS, tabMatches, type SalesTab } from "@/lib/accounts/sales-enums";
 import { loadBatches, loadSalesLines, loadVendorChoices } from "@/lib/accounts/sales";
 import { LineFix, Truncated } from "./line-actions";
 
@@ -61,10 +61,8 @@ export default async function Page({
   const { rows: monthRows } = batch
     ? await loadSalesLines({ batchId })
     : { rows: [] };
-  const tabCount = (id: SalesTab) => {
-    const mode = SALES_TABS.find((t) => t.id === id)?.mode ?? null;
-    return mode ? monthRows.filter((r) => r.payment_mode === mode).length : monthRows.length;
-  };
+  const tabCount = (id: SalesTab) =>
+    monthRows.filter((r) => tabMatches(id, r.payment_mode)).length;
   const vendors = await loadVendorChoices();
 
   // One entry per vendor for the filter, from the names only.
