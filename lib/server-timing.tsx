@@ -44,6 +44,21 @@ export async function timed<T>(name: string, fn: () => PromiseLike<T>): Promise<
   }
 }
 
+/**
+ * §53.1. Which server process answered, and how long it had been alive.
+ *
+ * The stall under investigation happens on "the first request after an idle
+ * gap", and the thing that makes a gap matter is whether the gap ended on a
+ * process that was already running or on a new one. Nothing in the Vercel
+ * request headers says which, so the process says it itself: an id minted when
+ * the module is first evaluated, the age of that module, and how many requests
+ * it has answered. A stall on `reqs=1` is a cold process; a stall on `reqs=40`
+ * is not, and they are different bugs.
+ */
+const INSTANCE = Math.random().toString(36).slice(2, 10);
+const BOOTED = Date.now();
+let served = 0;
+
 /** The phases recorded so far, as a Server-Timing field value. */
 export function serverTiming(): string {
   return collector()
@@ -64,11 +79,15 @@ export function serverTiming(): string {
  * complete. The layout's streamed badges finish later and are not in it.
  */
 export function ServerTiming({ route }: { route: string }) {
+  served += 1;
   return (
     <span
       hidden
       data-server-timing={serverTiming()}
       data-server-timing-route={route}
+      data-server-instance={INSTANCE}
+      data-server-age-ms={String(Date.now() - BOOTED)}
+      data-server-reqs={String(served)}
       data-server-timing-total={collector()
         .phases.reduce((n, p) => Math.max(n, p.at + p.ms), 0)
         .toFixed(1)}
