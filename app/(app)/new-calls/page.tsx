@@ -11,7 +11,7 @@ import { loadEscalatees } from "@/lib/escalatees";
 import { requireUser } from "@/lib/auth";
 import { facetsAgreeWithList, loadNewCallsFacets } from "@/lib/facets";
 import { loadMasters } from "@/lib/masters";
-import { logServerTiming } from "@/lib/server-timing";
+import { ServerTiming, logServerTiming, timed } from "@/lib/server-timing";
 import { createClient } from "@/lib/supabase/server";
 
 import { PAGE_SIZE, parseNewCallsParams } from "./filters";
@@ -56,13 +56,16 @@ export default async function Page({
   // §45.3: every active user, for the escalate-to picker in the call window.
   const escalatees = await loadEscalatees();
 
+
   // Both totals on every render: the sub-tabs carry counts, and a count that
   // only appears once you are on the tab is no use for deciding to go there.
-  const afterSale = await supabase.rpc("new_calls_after_sale", {
-    p_limit: pipeline === "after_sale" ? PAGE_SIZE : 1,
-    p_offset: pipeline === "after_sale" ? (page - 1) * PAGE_SIZE : 0,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any);
+  const afterSale = await timed("rpc:after_sale", () =>
+    supabase.rpc("new_calls_after_sale", {
+      p_limit: pipeline === "after_sale" ? PAGE_SIZE : 1,
+      p_offset: pipeline === "after_sale" ? (page - 1) * PAGE_SIZE : 0,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any),
+  );
   const afterSaleRows = (afterSale.data ?? []) as unknown as AfterSaleRow[];
   const afterSaleTotal = afterSaleRows[0]?.total_count ?? 0;
   // §47.5. The tab counts describe the whole pool under the *other* filters,
@@ -71,17 +74,21 @@ export default async function Page({
   const { p_call_types: _chosen, ...countFilters } = filters;
   const [list, facetResult, typeCounts] =
     await Promise.all([
-      supabase.rpc("new_calls_pool", {
-        ...filters,
-        p_limit: PAGE_SIZE,
-        p_offset: (page - 1) * PAGE_SIZE,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any),
-      loadNewCallsFacets(filters),
-      supabase.rpc("new_calls_type_counts", {
-        ...countFilters,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any),
+      timed("rpc:pool", () =>
+        supabase.rpc("new_calls_pool", {
+          ...filters,
+          p_limit: PAGE_SIZE,
+          p_offset: (page - 1) * PAGE_SIZE,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any),
+      ),
+      timed("rpc:facets", () => loadNewCallsFacets(filters)),
+      timed("rpc:type_counts", () =>
+        supabase.rpc("new_calls_type_counts", {
+          ...countFilters,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any),
+      ),
     ]);
 
   // The function returns a row only for a type that has leads, so the three
@@ -108,6 +115,8 @@ export default async function Page({
         title="New Calls"
         description="Leads nobody has spoken to or claimed yet. Take what you can call."
       />
+      {/* §53.1. The phase breakdown, where a browser can read it. */}
+      <ServerTiming route="/new-calls" />
 
       <NewCallsPipelineTabs
         pipeline={pipeline}

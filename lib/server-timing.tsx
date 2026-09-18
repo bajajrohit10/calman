@@ -13,9 +13,20 @@ import { cache } from "react";
  * `cache()` gives one collector per request: React memoises the call for the
  * lifetime of a single render, which is exactly the scope wanted here.
  */
-type Phase = { name: string; ms: number };
+type Phase = { name: string; ms: number; at: number };
 
-const collector = cache((): { phases: Phase[] } => ({ phases: [] }));
+/**
+ * §53.1. When each phase started, not only how long it took.
+ *
+ * A stall that is one slow await and a stall that is a gap between two fast
+ * ones look identical in a list of durations, and they have different causes.
+ * `at` is milliseconds from the first call of this collector in the request,
+ * so the two can be told apart by reading the row.
+ */
+const collector = cache((): { phases: Phase[]; t0: number } => ({
+  phases: [],
+  t0: performance.now(),
+}));
 
 /**
  * Time one awaited phase. Returns whatever the callback returns.
@@ -24,19 +35,45 @@ const collector = cache((): { phases: Phase[] } => ({ phases: [] }));
  * not a Promise, and requiring the latter would mean wrapping every call site.
  */
 export async function timed<T>(name: string, fn: () => PromiseLike<T>): Promise<T> {
+  const c = collector();
   const started = performance.now();
   try {
     return await fn();
   } finally {
-    collector().phases.push({ name, ms: performance.now() - started });
+    c.phases.push({ name, ms: performance.now() - started, at: started - c.t0 });
   }
 }
 
 /** The phases recorded so far, as a Server-Timing field value. */
 export function serverTiming(): string {
   return collector()
-    .phases.map((p) => `${p.name};dur=${p.ms.toFixed(1)}`)
+    .phases.map((p) => `${p.name};dur=${p.ms.toFixed(1)};at=${p.at.toFixed(1)}`)
     .join(", ");
+}
+
+/**
+ * §53.1. The same breakdown, where a browser can read it.
+ *
+ * An App Router page cannot set a response header — the proxy runs before the
+ * render and there is nothing to append to afterwards — and the Vercel
+ * function log is not reachable from here. So the phases are rendered into the
+ * page instead, on an element nobody sees, and read back with
+ * `document.querySelector("[data-server-timing]")`.
+ *
+ * Rendered last, after every await the page makes, which is what makes it
+ * complete. The layout's streamed badges finish later and are not in it.
+ */
+export function ServerTiming({ route }: { route: string }) {
+  return (
+    <span
+      hidden
+      data-server-timing={serverTiming()}
+      data-server-timing-route={route}
+      data-server-timing-total={collector()
+        .phases.reduce((n, p) => Math.max(n, p.at + p.ms), 0)
+        .toFixed(1)}
+    />
+  );
 }
 
 /**

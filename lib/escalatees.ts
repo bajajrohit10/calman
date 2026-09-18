@@ -1,5 +1,6 @@
 import "server-only";
 
+import { timed } from "@/lib/server-timing";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -23,11 +24,13 @@ export type Escalatee = { id: string; name: string };
 
 export async function loadEscalatees(): Promise<Escalatee[]> {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("profiles")
-    .select("id, full_name")
-    .eq("is_active", true)
-    .order("full_name");
+  const { data } = await timed("escalatees", () =>
+    supabase
+      .from("profiles")
+      .select("id, full_name")
+      .eq("is_active", true)
+      .order("full_name"),
+  );
 
   return (data ?? []).map((p) => ({ id: p.id, name: p.full_name ?? "(no name)" }));
 }

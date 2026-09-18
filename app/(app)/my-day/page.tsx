@@ -2,7 +2,7 @@ import { PageHeader } from "@/components/ui";
 import { isAdmin, requireUser } from "@/lib/auth";
 import { dayAfter, istDatePlus, istToday } from "@/lib/format";
 import { loadMasters } from "@/lib/masters";
-import { logServerTiming } from "@/lib/server-timing";
+import { ServerTiming, logServerTiming, timed } from "@/lib/server-timing";
 import { loadMyDay } from "@/lib/my-day";
 import { loadEscalatees } from "@/lib/escalatees";
 import { TICKET_OWNER_MINE } from "@/lib/ticket-tabs";
@@ -91,33 +91,45 @@ export default async function Page({
   const masters = await loadMasters();
 
   const [day, roster, dismissal, nextWorkingDay] = await Promise.all([
-    loadMyDay({ date, counsellorId }),
+    timed("myday", () => loadMyDay({ date, counsellorId })),
     admin
-      ? supabase
-          .from("profiles")
-          .select("id, full_name")
-          .eq("is_active", true)
-          .neq("role", "ticket_team")
-          .order("full_name")
+      ? timed("roster", () =>
+          supabase
+            .from("profiles")
+            .select("id, full_name")
+            .eq("is_active", true)
+            .neq("role", "ticket_team")
+            .order("full_name"),
+        )
       : Promise.resolve({ data: null }),
     admin
-      ? supabase.from("overdue_dismissals").select("date").eq("date", date).maybeSingle()
+      ? timed("dismissal", () =>
+          supabase
+            .from("overdue_dismissals")
+            .select("date")
+            .eq("date", date)
+            .maybeSingle(),
+        )
       : Promise.resolve({ data: null }),
     // §30.6's default: the next day work happens on, after this one.
-    supabase.rpc("next_working_day", {
-      p_from: dayAfter(date),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any),
+    timed("rpc:next_working_day", () =>
+      supabase.rpc("next_working_day", {
+        p_from: dayAfter(date),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any),
+    ),
   ]);
 
   // §5.8 overdue report: open follow-ups whose date has passed, uncalled since.
   const overdue = admin
-    ? await loadRecommended({
-        date,
-        includeNotDue: true,
-        followUpTo: istDatePlus(-1),
-        limit: 500,
-      })
+    ? await timed("overdue", () =>
+        loadRecommended({
+          date,
+          includeNotDue: true,
+          followUpTo: istDatePlus(-1),
+          limit: 500,
+        }),
+      )
     : { rows: [], total: 0, error: null };
 
 
@@ -126,7 +138,9 @@ export default async function Page({
   // the rows are still right, they simply say less.
   // §46.1, as on the desk: no offer running, no badge to draw, no round trip.
   const offerCalls = day.offerTabs.length
-    ? await loadOfferCallBadges(day.rows.map((r) => r.enquiry_id))
+    ? await timed("offerbadges", () =>
+        loadOfferCallBadges(day.rows.map((r) => r.enquiry_id)),
+      )
     : {};
   // §45.3. Not the admin-only roster above: the escalate-to picker is on every
   // counsellor's ticket rows, and for them that list was empty.
@@ -140,6 +154,8 @@ export default async function Page({
         title="My Day"
         description="Today's assigned calls, in the order the spec recommends working them."
       />
+      {/* §53.1. The phase breakdown, where a browser can read it. */}
+      <ServerTiming route="/my-day" />
       <MyDay
         initial={day}
         date={date}
