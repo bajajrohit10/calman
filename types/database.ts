@@ -1555,6 +1555,7 @@ export type Database = {
       }
       enquiry_sources: {
         Row: {
+          checkout_ref: string | null
           enquiry_id: number
           id: string
           import_batch_id: string | null
@@ -1563,6 +1564,7 @@ export type Database = {
           source_id: string | null
         }
         Insert: {
+          checkout_ref?: string | null
           enquiry_id: number
           id?: string
           import_batch_id?: string | null
@@ -1571,6 +1573,7 @@ export type Database = {
           source_id?: string | null
         }
         Update: {
+          checkout_ref?: string | null
           enquiry_id?: number
           id?: string
           import_batch_id?: string | null
@@ -1605,6 +1608,89 @@ export type Database = {
             columns: ["source_id"]
             isOneToOne: false
             referencedRelation: "sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      held_checkouts: {
+        Row: {
+          arrived_at: string | null
+          batch_id: string | null
+          checkout_ref: string
+          created_at: string
+          email: string | null
+          id: string
+          name: string | null
+          product_text: string | null
+          raw_phones: Json
+          resolution: string | null
+          resolution_note: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          resolved_enquiry_id: number | null
+          vendor: string | null
+        }
+        Insert: {
+          arrived_at?: string | null
+          batch_id?: string | null
+          checkout_ref: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string | null
+          product_text?: string | null
+          raw_phones?: Json
+          resolution?: string | null
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          resolved_enquiry_id?: number | null
+          vendor?: string | null
+        }
+        Update: {
+          arrived_at?: string | null
+          batch_id?: string | null
+          checkout_ref?: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string | null
+          product_text?: string | null
+          raw_phones?: Json
+          resolution?: string | null
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          resolved_enquiry_id?: number | null
+          vendor?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "held_checkouts_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "import_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "held_checkouts_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "held_checkouts_resolved_enquiry_id_fkey"
+            columns: ["resolved_enquiry_id"]
+            isOneToOne: false
+            referencedRelation: "enquiries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "held_checkouts_resolved_enquiry_id_fkey"
+            columns: ["resolved_enquiry_id"]
+            isOneToOne: false
+            referencedRelation: "live_enquiries"
             referencedColumns: ["id"]
           },
         ]
@@ -1703,6 +1789,7 @@ export type Database = {
       import_rows: {
         Row: {
           batch_id: string
+          checkout_ref: string | null
           enquiry_id: number | null
           id: number
           normalised_mobile: string | null
@@ -1716,6 +1803,7 @@ export type Database = {
         }
         Insert: {
           batch_id: string
+          checkout_ref?: string | null
           enquiry_id?: number | null
           id?: never
           normalised_mobile?: string | null
@@ -1729,6 +1817,7 @@ export type Database = {
         }
         Update: {
           batch_id?: string
+          checkout_ref?: string | null
           enquiry_id?: number | null
           id?: never
           normalised_mobile?: string | null
@@ -2860,6 +2949,7 @@ export type Database = {
           type: Database["public"]["Enums"]["enquiry_type"]
         }[]
       }
+      held_checkouts_count: { Args: never; Returns: number }
       import_add_warning: {
         Args: { p_batch_id: string; p_warning: string }
         Returns: undefined
@@ -3251,6 +3341,12 @@ export type Database = {
       reopen_via_offer: {
         Args: { p_enquiry_id: number; p_offer_id: string }
         Returns: number
+      }
+      seen_checkout_refs: {
+        Args: { p_refs: string[] }
+        Returns: {
+          checkout_ref: string
+        }[]
       }
       set_my_quick_add_tab: { Args: { p_tab: string }; Returns: string }
       set_my_theme: { Args: { p_theme: string }; Returns: string }

@@ -5,7 +5,9 @@ import { requireUser } from "@/lib/auth";
 import { formatDateTime, hoursAgoIso } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 
+import { loadHeldCheckouts } from "./actions";
 import { Importer } from "./importer";
+import { ImportTabs, MissingNumbers } from "./missing-numbers";
 
 export const metadata = { title: "Import · Calman" };
 
@@ -19,6 +21,8 @@ export default async function Page({
   await requireUser();
   const sp = await searchParams;
   const older = (Array.isArray(sp.older) ? sp.older[0] : sp.older) === "1";
+  const tab =
+    (Array.isArray(sp.tab) ? sp.tab[0] : sp.tab) === "missing" ? "missing" : "upload";
   const supabase = await createClient();
 
   // §31.4. A day's worth by default: the list is a working tool for "did this
@@ -29,7 +33,7 @@ export default async function Page({
   // came from.
   const since = hoursAgoIso(24);
 
-  const [sources, terms, batches, recentCount] = await Promise.all([
+  const [sources, terms, batches, recentCount, held] = await Promise.all([
     supabase.from("sources").select("id, name").eq("is_active", true).order("name"),
     supabase.from("terms").select("id, name").eq("is_active", true).order("sort_order"),
     (() => {
@@ -44,6 +48,9 @@ export default async function Page({
       .from("import_batches")
       .select("*", { count: "exact", head: true })
       .gte("uploaded_at", since),
+    // §55.3. Loaded on both tabs: the badge on the Upload tab has to say how
+    // many are waiting, which means knowing before anybody clicks.
+    loadHeldCheckouts(),
   ]);
 
   return (
@@ -53,7 +60,13 @@ export default async function Page({
         description="Bring a day's leads in from a CSV or XLSX, one review pass before anything is written."
       />
 
-      <Importer masters={{ sources: sources.data ?? [], terms: terms.data ?? [] }} />
+      <ImportTabs active={tab} heldCount={held.rows.length} />
+
+      {tab === "missing" ? (
+        <MissingNumbers rows={held.rows} />
+      ) : (
+        <Importer masters={{ sources: sources.data ?? [], terms: terms.data ?? [] }} />
+      )}
 
       <section>
         <div className="mb-2 flex flex-wrap items-baseline gap-2">

@@ -28,6 +28,13 @@ export type ParserMasters = {
   contents: Named[];
   terms: Named[];
   teachers: Named[];
+  /**
+   * §55.1. Only used to resolve a teacher hint that names a house rather than
+   * a person — "Vsmart Academy" on a Shopify line item. Optional, because
+   * every existing caller builds masters without it and the parser must read
+   * exactly the same without one.
+   */
+  institutes?: (Named & { teacherIds?: string[] })[];
 };
 
 export type ParsedLine = {
@@ -54,6 +61,8 @@ export type ParsedProduct = {
     term: string | null;
     teachers: { raw: string; matched: string | null; how: "exact" | "fuzzy" | "none" }[];
     pairing: "one-to-one" | "cross" | "none";
+    /** §55.1: the teacher came from the file's Vendor, not from the title. */
+    usedTeacherHint?: boolean;
   };
 };
 
@@ -346,9 +355,29 @@ export function matchTeacher(
  * §49.1: on ", " only where what follows opens with a course word. A title is
  * full of commas that separate subjects and teachers, and splitting on all of
  * them would shred one product into nonsense.
+ *
+ * §55.1 adds a pipe. Where the comma rule has to guess — is this comma between
+ * two products or between two subjects? — a " | " never does: nothing in the
+ * catalogue's own titles contains one, so it only ever appears because
+ * something joined two titles together. The Shopify import does exactly that
+ * when one student abandoned two checkouts, and without this the two titles
+ * reached the parser as one blob and produced one interest line.
+ *
+ * Pipes are split first and unconditionally; each piece then goes through the
+ * comma rule as before, so a piece that is itself two comma-joined products
+ * still comes apart.
  */
 export function splitProducts(text: string): string[] {
   const t = tidy(text);
+  if (!t) return [];
+  return t
+    .split("|")
+    .flatMap((piece) => splitOnCourseOpeners(tidy(piece)))
+    .map(tidy)
+    .filter(Boolean);
+}
+
+function splitOnCourseOpeners(t: string): string[] {
   if (!t) return [];
   const parts: string[] = [];
   let start = 0;
@@ -362,7 +391,7 @@ export function splitProducts(text: string): string[] {
     }
   }
   parts.push(t.slice(start));
-  return parts.map(tidy).filter(Boolean);
+  return parts;
 }
 
 function findCourse(text: string, masters: ParserMasters) {
@@ -455,7 +484,21 @@ function findContent(text: string, masters: ParserMasters) {
 }
 
 /** One product title → the lines it describes. */
-export function parseProduct(text: string, masters: ParserMasters): ParsedProduct {
+/**
+ * §55.1. A teacher named by the file rather than by the title.
+ *
+ * Shopify's export carries a Vendor per line item, which is usually the
+ * teacher and sometimes the house they sell through. It is a hint and never
+ * more than that: the title is the thing the student actually read, so a
+ * teacher found by scanning it always wins. The hint only fills a gap.
+ */
+export type ParseOptions = { teacherHint?: string | null };
+
+export function parseProduct(
+  text: string,
+  masters: ParserMasters,
+  options: ParseOptions = {},
+): ParsedProduct {
   const raw = tidy(text);
 
   // The term lives after the last "/", which also ends the delivery segment.
@@ -488,10 +531,19 @@ export function parseProduct(text: string, masters: ParserMasters): ParsedProduc
     .map(tidy)
     .filter((s) => s.length > 1);
 
-  const teachers = teacherNames.map((rawName) => {
+  const scanned = teacherNames.map((rawName) => {
     const m = matchTeacher(rawName, masters.teachers);
     return { raw: rawName, matched: m.name, id: m.id, how: m.how };
   });
+
+  // §55.1. The hint is consulted only when the scan found nobody at all. A
+  // scan that found a name the master list does not know still counts as
+  // having found somebody — the title said who taught it, and overruling that
+  // with a vendor field would be the file correcting the student.
+  const hinted =
+    scanned.length === 0 ? resolveTeacherHint(options.teacherHint, masters) : null;
+  const teachers = hinted ? [hinted] : scanned;
+  const usedHint = Boolean(hinted);
 
   // §49.1's pairing rule: teacher i with subject i when the counts agree —
   // "DT and IDT By A and B" is two courses taught by two people — otherwise
@@ -536,11 +588,50 @@ export function parseProduct(text: string, masters: ParserMasters): ParsedProduc
       term: termName,
       teachers: teachers.map((t) => ({ raw: t.raw, matched: t.matched, how: t.how })),
       pairing,
+      usedTeacherHint: usedHint,
     },
   };
 }
 
+/**
+ * A vendor string to one teacher, or nothing.
+ *
+ * Two ways in: the vendor names a teacher the master list knows, or it names
+ * an institute that has exactly one teacher behind it. An institute with
+ * several teachers resolves to none of them — "Vsmart Academy" does not say
+ * which of its faculty this title is, and guessing would put a real person's
+ * name on a lead they never spoke to.
+ */
+function resolveTeacherHint(
+  hint: string | null | undefined,
+  masters: ParserMasters,
+): {
+  raw: string;
+  matched: string | null;
+  id: string | null;
+  how: "exact" | "fuzzy" | "none";
+} | null {
+  const raw = tidy(hint ?? "");
+  if (!raw) return null;
+
+  const direct = matchTeacher(raw, masters.teachers);
+  if (direct.id) return { raw, matched: direct.name, id: direct.id, how: direct.how };
+
+  const house = (masters.institutes ?? []).find(
+    (i) => squash(i.name) === squash(raw),
+  );
+  if (house?.teacherIds?.length === 1) {
+    const t = masters.teachers.find((x) => x.id === house.teacherIds![0]);
+    if (t) return { raw, matched: t.name, id: t.id, how: "fuzzy" };
+  }
+  return null;
+}
+
 /** A whole product-text field, which may name more than one product. */
-export function parseProductText(text: string, masters: ParserMasters): ParsedProduct[] {
-  return splitProducts(text).map((p) => parseProduct(p, masters));
+export function parseProductText(
+  text: string,
+  masters: ParserMasters,
+  options: ParseOptions = {},
+): ParsedProduct[] {
+  return splitProducts(text).map((p) => parseProduct(p, masters, options));
 }

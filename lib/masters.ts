@@ -29,10 +29,12 @@ import { createClient } from "@/lib/supabase/server";
  * the TTL is a minute rather than an hour.
  */
 export type Master = { id: string; name: string };
+/** §55.1: which house a teacher sells through, for the Vendor hint. */
+export type TeacherMaster = Master & { institute_id: string | null };
 export type SubjectMaster = Master & { course_id: string };
 
 export type Masters = {
-  teachers: Master[];
+  teachers: TeacherMaster[];
   institutes: Master[];
   courses: Master[];
   subjects: SubjectMaster[];
@@ -45,7 +47,11 @@ async function readMasters(): Promise<Masters> {
   const supabase = await createClient();
   const [teachers, institutes, courses, subjects, contents, terms, sources] =
     await Promise.all([
-      supabase.from("teachers").select("id, name").eq("is_active", true).order("name"),
+      supabase
+        .from("teachers")
+        .select("id, name, institute_id")
+        .eq("is_active", true)
+        .order("name"),
       supabase.from("institutes").select("id, name").eq("is_active", true).order("name"),
       supabase
         .from("courses")

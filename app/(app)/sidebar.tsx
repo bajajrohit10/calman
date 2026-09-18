@@ -19,7 +19,7 @@ type Item = {
   icon: string;
   adminOnly?: boolean;
   /** Key into the counts prop, for a live badge. */
-  badge?: "newCalls" | "myDay";
+  badge?: "newCalls" | "myDay" | "heldCheckouts";
   /**
    * A second way into the same area, shown under it (§40.1). One level only:
    * a rail that grows a tree is a rail nobody reads.
@@ -46,7 +46,16 @@ const ITEMS: Item[] = [
     badge: "newCalls",
   },
   { href: "/quick-add", label: "Quick Add", hint: "Log a ringing phone", icon: "✎" },
-  { href: "/import", label: "Import", hint: "Bulk import with review", icon: "↑" },
+  {
+    href: "/import",
+    label: "Import",
+    hint: "Bulk import with review",
+    icon: "↑",
+    // §55.3. Checkouts waiting for a phone number. Unlike the other two this
+    // one does not blink: it is a pile of work that can wait, not a person on
+    // hold, and a rail that flashes at everything flashes at nothing.
+    badge: "heldCheckouts",
+  },
   { href: "/tickets", label: "Tickets", hint: "After-sale queue", icon: "✱" },
   { href: "/enquiries", label: "Enquiries", hint: "Every enquiry, filterable", icon: "≡" },
   {
@@ -164,7 +173,7 @@ export function Sidebar({
    * arrive after the rest of the rail, so nothing here can wait on them —
    * which is the point: see the Suspense boundaries in the layout.
    */
-  badges: Partial<Record<"newCalls" | "myDay", ReactNode>>;
+  badges: Partial<Record<"newCalls" | "myDay" | "heldCheckouts", ReactNode>>;
   signOut: () => Promise<void>;
 }) {
   const pathname = usePathname();

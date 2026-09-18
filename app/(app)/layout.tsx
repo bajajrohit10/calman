@@ -84,6 +84,23 @@ async function MyDayPendingCount() {
   return n > 0 ? <>{n}</> : null;
 }
 
+/**
+ * §55.3. Shopify checkouts waiting for a phone number.
+ *
+ * Streamed like the other two, and for the same reason: it is one RPC and the
+ * page must not wait on it. No blink — a pile of work that can wait is not the
+ * same thing as somebody on hold.
+ */
+async function HeldCheckoutsCount() {
+  const supabase = await createClient();
+  const { data } = await timed("badge-held", () =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    supabase.rpc("held_checkouts_count", {} as any),
+  );
+  const n = Number(data ?? 0);
+  return n > 0 ? <>{n}</> : null;
+}
+
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const { email, profile } = await requireUser();
 
@@ -137,6 +154,11 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               myDay: (
                 <Suspense fallback={null}>
                   <MyDayPendingCount />
+                </Suspense>
+              ),
+              heldCheckouts: (
+                <Suspense fallback={null}>
+                  <HeldCheckoutsCount />
                 </Suspense>
               ),
             }}

@@ -37,7 +37,15 @@ const EMPTY: AutoFillResult = { filled: 0, lines: 0, skippedHuman: 0, error: nul
  * save, the import commit — can hand over exactly what they just created, and
  * nothing else on the board can be touched by a bug in a filter here.
  */
-export async function applyAutoInterests(enquiryIds: number[]): Promise<AutoFillResult> {
+export async function applyAutoInterests(
+  enquiryIds: number[],
+  /**
+   * §55.2(d). A teacher named by the file rather than by the title, per
+   * enquiry. The Shopify export carries a Vendor; nothing else does, so this
+   * is empty for every other caller and the parser reads exactly as before.
+   */
+  teacherHints: Record<number, string> = {},
+): Promise<AutoFillResult> {
   const ids = [...new Set(enquiryIds)].filter((n) => Number.isFinite(n));
   if (!ids.length) return EMPTY;
 
@@ -57,6 +65,20 @@ export async function applyAutoInterests(enquiryIds: number[]): Promise<AutoFill
   if (!enquiries?.length) return EMPTY;
 
   const hasLines = new Set((existing ?? []).map((r) => r.enquiry_id));
+
+  // §55.1. The parser resolves a vendor that names a house rather than a
+  // person, but only when that house has exactly one teacher — so it needs to
+  // know who is behind each institute. Built once, here, from the masters it
+  // already has.
+  const parserMasters = {
+    ...masters,
+    institutes: masters.institutes.map((i) => ({
+      ...i,
+      teacherIds: masters.teachers
+        .filter((t) => t.institute_id === i.id)
+        .map((t) => t.id),
+    })),
+  };
 
   const rows: {
     enquiry_id: number;
@@ -82,7 +104,9 @@ export async function applyAutoInterests(enquiryIds: number[]): Promise<AutoFill
     const text = (e.product_text ?? "").trim();
     if (!text) continue;
 
-    const products = parseProductText(text, masters);
+    const products = parseProductText(text, parserMasters, {
+      teacherHint: teacherHints[e.id] ?? null,
+    });
     let added = 0;
     for (const p of products) {
       for (const line of p.lines) {

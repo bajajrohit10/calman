@@ -210,6 +210,17 @@ export type CommitRow = {
    * New Calls, or leave the queue alone because it was never called.
    */
   returnToNewCalls?: boolean;
+  /**
+   * §55.2(c). Every Shopify checkout this candidate was merged from. Written
+   * to import_rows (the first, which is what the row is) and to
+   * enquiry_sources (all of them, which is what makes tomorrow's file skip
+   * every one). Empty on every other import.
+   */
+  checkoutRefs?: string[];
+  /** §55.2(a): "alt number 98…", when Billing and Shipping disagreed. */
+  remarks?: string[];
+  /** §55.2(d): the file's Vendor, passed to the parser as a hint. */
+  vendorHint?: string | null;
 };
 
 export async function createBatch(
@@ -277,11 +288,31 @@ export async function commitChunk(
 
   type Pending = Record<string, unknown>;
   const importRows: Pending[] = [];
+  /**
+   * §55.2(c). Every (enquiry, checkout) pair this chunk established.
+   *
+   * Collected rather than written per branch, because the two branches write
+   * their source log in different places — the create path inline, the
+   * re-enquiry path inside its RPC — and a ref recorded in only one of them is
+   * a checkout that re-imports tomorrow. This is the single place that decides
+   * what is dedupable.
+   */
+  const refLog: {
+    enquiry_id: number;
+    source_id: string | null;
+    checkout_ref: string;
+    note: string;
+  }[] = [];
+
   const base = (row: CommitRow) => ({
     batch_id: batchId,
     row_number: row.rowNumber,
     raw: row.raw,
     normalised_mobile: row.mobile,
+    // §55.2(c). The first ref is this row's identity; the rest are recorded on
+    // enquiry_sources below, because a merged candidate has to make every one
+    // of its checkouts skippable next time.
+    checkout_ref: row.checkoutRefs?.[0] ?? null,
   });
 
   /**
@@ -358,6 +389,17 @@ export async function commitChunk(
       // RPC does both together so they cannot come apart.
       clear_follow_up: row.returnToNewCalls ?? false,
     }));
+
+    for (const row of updating) {
+      for (const ref of row.checkoutRefs ?? []) {
+        refLog.push({
+          enquiry_id: row.existingEnquiryId!,
+          source_id: row.sourceId,
+          checkout_ref: ref,
+          note: `Arrived in an import. Shopify checkout ${ref}.`,
+        });
+      }
+    }
 
     const { data, error } = await supabase.rpc("import_re_enquire_many", {
       p_rows: payload,
@@ -525,12 +567,31 @@ export async function commitChunk(
     // hold only re-uploads, and an enquiry's first arrival — the one that
     // explains where it came from — would be the one entry missing.
     const sourceRows = withStudent
-      .map(({ row, studentId }) => ({
-        enquiry_id: enquiryByStudent.get(studentId!),
-        source_id: row.sourceId,
-        import_batch_id: batchId,
-        note: row.decision === "supersede" ? "Re-uploaded; replaced the previous enquiry." : "Arrived in an import.",
-      }))
+      .map(({ row, studentId }) => {
+        const enquiryId = enquiryByStudent.get(studentId!);
+        const note =
+          row.decision === "supersede"
+            ? "Re-uploaded; replaced the previous enquiry."
+            : "Arrived in an import.";
+        if (enquiryId) {
+          for (const ref of row.checkoutRefs ?? []) {
+            refLog.push({
+              enquiry_id: enquiryId,
+              source_id: row.sourceId,
+              checkout_ref: ref,
+              note: `${note} Shopify checkout ${ref}.`,
+            });
+          }
+        }
+        // No checkout_ref here: the refLog above writes one row per cart, and
+        // putting the first one on this row as well logs it twice.
+        return {
+          enquiry_id: enquiryId,
+          source_id: row.sourceId,
+          import_batch_id: batchId,
+          note,
+        };
+      })
       .filter((r) => r.enquiry_id);
     if (sourceRows.length) {
       const { error } = await supabase.from("enquiry_sources").insert(sourceRows as never);
@@ -547,7 +608,13 @@ export async function commitChunk(
     // goes rather than in one pass at the end.
     const createdIds = [...enquiryByStudent.values()];
     if (createdIds.length) {
-      const auto = await applyAutoInterests(createdIds);
+      // §55.2(d). The Vendor the file gave, keyed by the enquiry it became.
+      const hints: Record<number, string> = {};
+      for (const { row, studentId } of withStudent) {
+        const enquiryId = enquiryByStudent.get(studentId!);
+        if (enquiryId && row.vendorHint) hints[enquiryId] = row.vendorHint;
+      }
+      const auto = await applyAutoInterests(createdIds, hints);
       // Not fatal, for the same reason the source log is not: the enquiries
       // are in, and a title the parser cannot read must not fail the import.
       if (auto.error) console.error("auto interests failed", auto.error);
@@ -576,6 +643,21 @@ export async function commitChunk(
       if (row.decision === "supersede") counts.duplicate_new_enquiry += 1;
       else counts.imported += 1;
     }
+  }
+
+  // ---- 4b. the checkout log (§55.2(c)) ------------------------------------
+  //
+  // One row per (enquiry, checkout), for every branch. A candidate merged from
+  // three carts writes three, because tomorrow's file carries all three Ids
+  // and every one of them has to be recognised — the first alone would let the
+  // other two back in as new leads.
+  if (refLog.length) {
+    const { error } = await supabase.from("enquiry_sources").insert(
+      refLog.map((r) => ({ ...r, import_batch_id: batchId })) as never,
+    );
+    // Not fatal, for the same reason the source log above is not — but it is
+    // the dedupe key, so it is logged loudly rather than swallowed.
+    if (error) console.error("checkout ref log failed", error.message);
   }
 
   // ---- 5. the audit rows, in one write ------------------------------------
@@ -660,4 +742,241 @@ export async function resolveImportRow(
   revalidatePath(`/import/${row.batch_id}`);
   revalidatePath("/enquiries");
   return { error: null, ok: "Imported." };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Shopify checkouts (§55.2, §55.3)                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * §55.2(c). Which of these checkout references Calman has already seen.
+ *
+ * Asked once with the whole file's keys rather than a query per row. The
+ * answer covers both places a checkout can have landed: an imported row, and
+ * a held one waiting for its number — a checkout sitting on the Missing
+ * number tab must not be re-held tomorrow.
+ */
+export async function seenCheckoutRefs(
+  refs: string[],
+): Promise<{ error: string | null; seen?: string[] }> {
+  await requireUser();
+  if (!refs.length) return { error: null, seen: [] };
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("seen_checkout_refs", {
+    p_refs: refs,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any);
+  if (error) return { error: error.message };
+  return {
+    error: null,
+    seen: ((data ?? []) as { checkout_ref: string }[]).map((r) => r.checkout_ref),
+  };
+}
+
+export type HeldInput = {
+  checkoutRef: string;
+  name: string;
+  email: string;
+  productText: string;
+  arrivedAt: string | null;
+  vendor: string | null;
+  rawPhones: string[];
+};
+
+/**
+ * §55.3. Park the checkouts with no usable number.
+ *
+ * Upserted on the reference, so re-uploading the same file does not stack
+ * duplicates, and a row somebody has already dealt with is left alone — the
+ * conflict target is the ref and the update deliberately touches only the
+ * facts from the file, never the resolution.
+ */
+export async function holdCheckouts(
+  batchId: string,
+  rows: HeldInput[],
+): Promise<{ error: string | null; held?: number }> {
+  const viewer = await requireUser();
+  if (!viewer.profile) return { error: "Your account is not active." };
+  if (!rows.length) return { error: null, held: 0 };
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("held_checkouts").upsert(
+    rows.map((r) => ({
+      checkout_ref: r.checkoutRef,
+      batch_id: batchId,
+      name: r.name || null,
+      email: r.email || null,
+      product_text: r.productText || null,
+      arrived_at: r.arrivedAt,
+      vendor: r.vendor,
+      raw_phones: r.rawPhones,
+    })),
+    { onConflict: "checkout_ref", ignoreDuplicates: true },
+  );
+  if (error) return { error: error.message };
+  revalidatePath("/import");
+  return { error: null, held: rows.length };
+}
+
+export type HeldRow = {
+  id: string;
+  checkout_ref: string;
+  name: string | null;
+  email: string | null;
+  product_text: string | null;
+  arrived_at: string | null;
+  vendor: string | null;
+  raw_phones: string[];
+};
+
+export async function loadHeldCheckouts(): Promise<{
+  error: string | null;
+  rows: HeldRow[];
+}> {
+  await requireUser();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("held_checkouts")
+    .select("id, checkout_ref, name, email, product_text, arrived_at, vendor, raw_phones")
+    .is("resolution", null)
+    .order("arrived_at", { ascending: true });
+  if (error) return { error: error.message, rows: [] };
+  return { error: null, rows: (data ?? []) as unknown as HeldRow[] };
+}
+
+/**
+ * §55.3. A held checkout, finished by hand.
+ *
+ * The number goes through exactly the path the import would have taken it
+ * through — the same duplicate rules, the same parser, the original arrival
+ * time — because a lead rescued from this tab is not a lesser lead and should
+ * not end up shaped differently from its neighbours in the same batch.
+ */
+export async function resolveHeldCheckout(input: {
+  id: string;
+  mobile?: string;
+  discard?: boolean;
+  reason?: string;
+}): Promise<{ error: string | null; outcome?: string }> {
+  const viewer = await requireUser();
+  if (!viewer.profile) return { error: "Your account is not active." };
+
+  const supabase = await createClient();
+  const { data: held, error: readError } = await supabase
+    .from("held_checkouts")
+    .select("*")
+    .eq("id", input.id)
+    .is("resolution", null)
+    .maybeSingle();
+  if (readError) return { error: readError.message };
+  if (!held) return { error: "That row has already been dealt with." };
+
+  if (input.discard) {
+    const { error } = await supabase
+      .from("held_checkouts")
+      .update({
+        resolution: "discarded",
+        resolution_note: input.reason?.trim() || "Discarded without a reason given.",
+        resolved_by: viewer.userId,
+        resolved_at: new Date().toISOString(),
+      })
+      .eq("id", input.id);
+    if (error) return { error: error.message };
+    revalidatePath("/import");
+    return { error: null, outcome: "discarded" };
+  }
+
+  const mobile = normaliseMobile(input.mobile ?? "");
+  if (!isValidMobile(mobile)) {
+    return { error: "That is not a valid ten-digit Indian mobile number." };
+  }
+
+  // The five-case rules, asked the same way the review table asks them.
+  const lookup = await lookupNumbers([mobile]);
+  if (lookup.error) return { error: lookup.error };
+  const status = lookup.statuses?.[0] ?? null;
+
+  // A number somebody has already called today is the one case no rule can
+  // decide (Brief 31), and a tab with one input is the wrong place to ask. It
+  // goes in as a fresh arrival on the existing lead, which is what "re-enquire"
+  // does everywhere else.
+  const decision: RowDecision =
+    status?.state === "open_uncalled" ||
+    status?.state === "open_called_earlier" ||
+    // Brief 31 case 5 — somebody rang this number today — is the one case no
+    // rule decides, and a tab with a single input is the wrong place to put
+    // that question. A fresh arrival on the lead they already have is the
+    // conservative answer: nothing is lost and nobody is sent to re-ring.
+    status?.state === "open_called_today"
+      ? "re_enquire"
+      : status?.state === "resolved" || status?.state === "wrong_number"
+        ? "supersede"
+        : "import";
+
+  const acSource = await supabase
+    .from("sources")
+    .select("id")
+    .ilike("name", "AC")
+    .maybeSingle();
+
+  const batch = await supabase
+    .from("import_batches")
+    .insert({
+      filename: `Missing number — checkout ${held.checkout_ref}`,
+      total_rows: 1,
+      uploaded_by: viewer.userId,
+    })
+    .select("id")
+    .single();
+  if (batch.error) return { error: batch.error.message };
+
+  const commit = await commitChunk(batch.data.id, [
+    {
+      rowNumber: 1,
+      raw: {
+        "Checkout Id": held.checkout_ref,
+        "Billing Name": held.name ?? "",
+        Email: held.email ?? "",
+        "Lineitem name": held.product_text ?? "",
+        Mobile: mobile,
+      },
+      mobile,
+      decision,
+      skipReason: null,
+      name: held.name,
+      sourceId: acSource.data?.id ?? null,
+      productText: held.product_text,
+      arrivedAt: held.arrived_at,
+      termId: null,
+      importance: null,
+      leadVerification: null,
+      existingStudentId: status?.studentId ?? null,
+      existingEnquiryId: status?.openEnquiryId ?? null,
+      returnToNewCalls: status?.state === "open_called_earlier",
+      checkoutRefs: [held.checkout_ref],
+      vendorHint: held.vendor,
+    },
+  ]);
+  if (commit.error) return { error: commit.error };
+
+  const { data: row } = await supabase
+    .from("import_rows")
+    .select("enquiry_id")
+    .eq("batch_id", batch.data.id)
+    .maybeSingle();
+
+  const { error } = await supabase
+    .from("held_checkouts")
+    .update({
+      resolution: "imported",
+      resolved_enquiry_id: row?.enquiry_id ?? null,
+      resolved_by: viewer.userId,
+      resolved_at: new Date().toISOString(),
+    })
+    .eq("id", input.id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/import");
+  revalidatePath("/new-calls");
+  return { error: null, outcome: decision };
 }

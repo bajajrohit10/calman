@@ -1,6 +1,12 @@
 "use client";
 
 import { parseArrivedAt } from "@/lib/arrived-at";
+import {
+  looksLikeShopify,
+  planShopifyImport,
+  type Candidate,
+  type ShopifyPlan,
+} from "@/lib/shopify-checkouts";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -19,9 +25,11 @@ import { isValidMobile, normaliseMobile } from "@/lib/mobile";
 import {
   commitChunk,
   createBatch,
+  holdCheckouts,
   loadMapping,
   lookupNumbers,
   saveMapping,
+  seenCheckoutRefs,
   type CommitCounts,
   type CommitRow,
   type NumberStatus,
@@ -67,6 +75,12 @@ type ReviewRow = {
   rowNumber: number;
   raw: Record<string, string>;
   mobile: string | null;
+  /** §55.2(c): the Shopify checkouts behind this row; empty on other files. */
+  checkoutRefs?: string[];
+  /** §55.2(a): "alt number 98…". */
+  remarks?: string[];
+  /** §55.2(d): the file's Vendor. */
+  vendorHint?: string | null;
   invalidReason: string | null;
   duplicateOf: number | null;
   status: NumberStatus | null;
@@ -163,6 +177,15 @@ export function Importer({ masters }: { masters: ImportMasters }) {
     lead_verification: null,
   });
   const [rememberedMapping, setRememberedMapping] = useState(false);
+  /**
+   * §55.2. The Shopify plan, when the file is one.
+   *
+   * Held rather than recomputed: the review table is built from its
+   * candidates, the preview counts come off it, and the held rows are written
+   * at commit time — three readers of one grouping, which has to be the same
+   * grouping in all three.
+   */
+  const [shopify, setShopify] = useState<ShopifyPlan | null>(null);
   const [review, setReview] = useState<ReviewRow[]>([]);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [counts, setCounts] = useState<CommitCounts | null>(null);
@@ -218,7 +241,36 @@ export function Importer({ masters }: { masters: ImportMasters }) {
       if (!cols.length) throw new Error("No header row found.");
 
       setHeaders(cols);
-      setParsed(rows.map((raw, i) => ({ rowNumber: i + 2, raw })));
+      const parsedRows = rows.map((raw, i) => ({ rowNumber: i + 2, raw }));
+      setParsed(parsedRows);
+
+      /**
+       * §55.2. A Shopify abandoned-checkout export is not a list of people.
+       *
+       * It is a list of line items, which group into checkouts, which group
+       * into people — and only the third of those is a lead. So it gets its
+       * own pre-step, and the mapping stage is skipped entirely: there is
+       * nothing to map, because the columns are known and the phone is three
+       * of them tried in order.
+       */
+      if (looksLikeShopify(cols)) {
+        setBusy("Grouping checkouts…");
+        const refs = [
+          ...new Set(
+            parsedRows.map((r) =>
+              (r.raw["Id"] ?? "").trim() ||
+              (r.raw["Name"] ?? "").trim().replace(/^#/, "") ||
+              `row-${r.rowNumber}`,
+            ),
+          ),
+        ];
+        const seen = await seenCheckoutRefs(refs);
+        if (seen.error) throw new Error(seen.error);
+        const plan = planShopifyImport(parsedRows, new Set(seen.seen ?? []));
+        setShopify(plan);
+        await buildShopifyReview(plan);
+        return;
+      }
 
       // Guess by name, then let a remembered mapping override the guess.
       //
@@ -268,6 +320,117 @@ export function Importer({ masters }: { masters: ImportMasters }) {
       }
       setMapping(guess);
       setStage("mapping");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /**
+   * The five-case lookup, in chunks. Shared by both paths (§55.2): the Shopify
+   * candidates go through exactly the rules a hand-kept spreadsheet does, and
+   * a second copy of this switch is how the two would come to disagree.
+   */
+  async function lookupInChunks(mobiles: string[]) {
+    const unique = [...new Set(mobiles.filter(Boolean))];
+    const statuses = new Map<string, NumberStatus>();
+    for (let i = 0; i < unique.length; i += LOOKUP_CHUNK) {
+      const slice = unique.slice(i, i + LOOKUP_CHUNK);
+      const res = await lookupNumbers(slice);
+      if (res.error) throw new Error(res.error);
+      for (const s of res.statuses ?? []) statuses.set(s.mobile, s);
+      setBusy(
+        `Checking numbers against Calman… ${Math.min(i + LOOKUP_CHUNK, unique.length)}/${unique.length}`,
+      );
+    }
+    return statuses;
+  }
+
+  /** §10.1's defaults. The review table still lets the user override any. */
+  function applyStatus(row: ReviewRow, statuses: Map<string, NumberStatus>) {
+    row.status = row.mobile ? (statuses.get(row.mobile) ?? null) : null;
+    switch (row.status?.state) {
+      // (b) open, never called: keep it, take the new source.
+      case "open_uncalled":
+      // (c) open, last called on an earlier day: same, and back to New Calls.
+      //     Which of the two happens is decided by returnToNewCalls at commit
+      //     time, from the state — not from the decision.
+      case "open_called_earlier":
+        row.decision = "re_enquire";
+        break;
+      // (d) already called today: no default at all (Brief 31). Dismiss loses
+      //     a lead; adding it back sends a colleague to ring somebody who was
+      //     rung an hour ago. A person decides.
+      case "open_called_today":
+        row.decision = "dismiss";
+        row.needsDecision = true;
+        break;
+      // (a) a previous wrong number still imports.
+      case "wrong_number":
+        row.decision = "import";
+        break;
+      // (a) nothing open, or nothing at all.
+      default:
+        row.decision = "import";
+    }
+  }
+
+  /* ------------------ 2a. Shopify: candidates -> review ------------------ */
+
+  /**
+   * §55.2. The candidates, looked up against Calman exactly like any other row.
+   *
+   * The in-file duplicate path is deliberately not reached here, and cannot
+   * be: grouping has already made the mobiles distinct, so there is no second
+   * row for a number to be "a duplicate of". Two carts by one person are one
+   * candidate with both titles, not one row kept and one thrown away — which
+   * is what the generic path still does, unchanged, for every other file.
+   */
+  async function buildShopifyReview(plan: ShopifyPlan) {
+    setBusy("Checking numbers against Calman…");
+    try {
+      const acSource =
+        masters.sources.find((s) => s.name.trim().toLowerCase() === "ac")?.id ?? null;
+
+      const draft: ReviewRow[] = plan.candidates.map((c: Candidate, i) => ({
+        rowNumber: i + 1,
+        // What is stored on import_rows: the candidate as it was assembled,
+        // which is the honest record of what was imported.
+        raw: {
+          Mobile: c.mobile,
+          "Billing Name": c.name,
+          Email: c.email,
+          "Lineitem name": c.productText,
+          "Created at": c.arrivedAtRaw,
+          Vendor: c.vendorHint ?? "",
+          "Checkout Id": c.refs.join(", "),
+          ...(c.remarks.length ? { Remarks: c.remarks.join("; ") } : {}),
+        },
+        mobile: c.mobile,
+        checkoutRefs: c.refs,
+        remarks: c.remarks,
+        vendorHint: c.vendorHint,
+        invalidReason: null,
+        duplicateOf: null,
+        status: null,
+        decision: "skip",
+        needsDecision: false,
+        name: c.name || null,
+        sourceId: acSource,
+        productText: c.productText || null,
+        termId: null,
+        importance: null,
+        leadVerification: null,
+        arrivedAt: parseArrivedAt(c.arrivedAtRaw),
+        unmatched: [],
+      }));
+
+      const statuses = await lookupInChunks(draft.map((d) => d.mobile!));
+      for (const row of draft) applyStatus(row, statuses);
+
+      setReview(draft);
+      setStage("review");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -339,15 +502,7 @@ export function Importer({ masters }: { masters: ImportMasters }) {
         };
       });
 
-      const unique = [...seen.keys()];
-      const statuses = new Map<string, NumberStatus>();
-      for (let i = 0; i < unique.length; i += LOOKUP_CHUNK) {
-        const slice = unique.slice(i, i + LOOKUP_CHUNK);
-        const res = await lookupNumbers(slice);
-        if (res.error) throw new Error(res.error);
-        for (const s of res.statuses ?? []) statuses.set(s.mobile, s);
-        setBusy(`Checking numbers against Calman… ${Math.min(i + LOOKUP_CHUNK, unique.length)}/${unique.length}`);
-      }
+      const statuses = await lookupInChunks([...seen.keys()]);
 
       for (const row of draft) {
         if (!row.mobile) {
@@ -359,36 +514,7 @@ export function Importer({ masters }: { masters: ImportMasters }) {
           row.invalidReason = `Duplicate of row ${row.duplicateOf} in this file`;
           continue;
         }
-        row.status = statuses.get(row.mobile) ?? null;
-        // §10.1. The review table still lets the user override any of these.
-        switch (row.status?.state) {
-          // (b) open, never called: keep it, take the new source.
-          case "open_uncalled":
-          // (c) open, last called on an earlier day: same, and back to New
-          //     Calls. Which of the two happens is decided by returnToNewCalls
-          //     at commit time, from the state — not from the decision.
-          case "open_called_earlier":
-            row.decision = "re_enquire";
-            break;
-          // (d) already called today: no default at all (Brief 31). Dismiss
-          //     loses a lead; adding it back sends a colleague to ring
-          //     somebody who was rung an hour ago. A person decides.
-          case "open_called_today":
-            row.decision = "dismiss";
-            row.needsDecision = true;
-            break;
-          // (a) a previous wrong number still imports. It used to carry a
-          //     tag saying so, which Brief 31 makes redundant twice over: the
-          //     row's own sentence reads "Closed call · <date> · Wrong
-          //     number", and invalidReason is what the row prints when there
-          //     is something wrong with it, which there is not.
-          case "wrong_number":
-            row.decision = "import";
-            break;
-          // (a) nothing open, or nothing at all.
-          default:
-            row.decision = "import";
-        }
+        applyStatus(row, statuses);
       }
 
       setReview(draft);
@@ -413,6 +539,25 @@ export function Importer({ masters }: { masters: ImportMasters }) {
       const batch = await createBatch(filename, parsed.length);
       if (batch.error || !batch.batchId) throw new Error(batch.error ?? "Could not start the batch.");
       setBatchId(batch.batchId);
+
+      // §55.3. The checkouts with no usable number are parked before anything
+      // else is written, so a commit that fails halfway still leaves them
+      // somewhere a person can find them.
+      if (shopify?.held.length) {
+        const held = await holdCheckouts(
+          batch.batchId,
+          shopify.held.map((h) => ({
+            checkoutRef: h.ref,
+            name: h.name,
+            email: h.email,
+            productText: h.productText,
+            arrivedAt: parseArrivedAt(h.arrivedAtRaw),
+            vendor: h.vendor,
+            rawPhones: h.rawPhones,
+          })),
+        );
+        if (held.error) throw new Error(held.error);
+      }
 
       const totals: CommitCounts = {
         imported: 0,
@@ -446,6 +591,9 @@ export function Importer({ masters }: { masters: ImportMasters }) {
           leadVerification: r.leadVerification,
           existingStudentId: r.status?.studentId ?? null,
           existingEnquiryId: r.status?.openEnquiryId ?? null,
+          checkoutRefs: r.checkoutRefs,
+          remarks: r.remarks,
+          vendorHint: r.vendorHint,
         }));
 
         const res = await commitChunk(batch.batchId, slice);
@@ -668,6 +816,39 @@ export function Importer({ masters }: { masters: ImportMasters }) {
 
       {stage === "review" ? (
         <div className="flex flex-col gap-4">
+          {/* §55.2. What the grouping did, before the five cases.
+              A Shopify file arrives as line items and leaves as leads, and the
+              three numbers between those two are the ones somebody checking
+              the import actually wants: how many people, how many carts we had
+              already seen, and how many nobody can ring. */}
+          {shopify ? (
+            <div
+              data-testid="shopify-preview"
+              className="flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-lg border border-accent/40 bg-accent-soft/30 px-4 py-3"
+            >
+              <span className="text-[13px] font-semibold text-ink">
+                Shopify abandoned checkouts
+              </span>
+              <Figure label="line items" value={parsed.length} />
+              <Figure label="checkouts" value={shopify.checkoutCount} />
+              <Figure label="candidates" value={shopify.candidates.length} testId="candidates" />
+              <Figure
+                label="already imported"
+                value={shopify.skipped.length}
+                testId="skipped"
+              />
+              <Figure
+                label="no usable number"
+                value={shopify.held.length}
+                testId="held"
+              />
+              <span className="text-[11.5px] text-ink-2">
+                Carts by one number are merged into one lead; the ones with no
+                number go to the Missing number tab.
+              </span>
+            </div>
+          ) : null}
+
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface shadow-card px-4 py-3">
             <h2 className="text-[14px] font-semibold text-ink">Review</h2>
             <span className="text-[12.5px] text-ink-2">
@@ -974,3 +1155,23 @@ const ACTION_FOR: Partial<Record<RowDecision, string>> = {
   ignore: "Nothing; this row is left out",
   skip: "Skipped",
 };
+
+/** One number in the Shopify preview strip (§55.2). */
+function Figure({
+  label,
+  value,
+  testId,
+}: {
+  label: string;
+  value: number;
+  testId?: string;
+}) {
+  return (
+    <span className="flex items-baseline gap-1.5">
+      <strong className="text-[15px] tabular-nums text-ink" data-testid={testId}>
+        {value}
+      </strong>
+      <span className="text-[11.5px] text-ink-2">{label}</span>
+    </span>
+  );
+}
