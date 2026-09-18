@@ -116,7 +116,7 @@ create index concurrently enquiries_ticket_queue_idx
 
 ## The lag on save and tab switch is contention, not queries
 
-**Status: measured, not fixed. Brief 7 Item 4 was a measurement, by instruction.**
+**Status: the contention is fixed (Brief 51). The ~10 s instance stalls are not.**
 
 Counsellors reported a delay saving in Quick Add and switching tabs on My Day
 and New Calls. Measured on production as `counsellor.test`, three runs each, on
@@ -159,10 +159,12 @@ switch whose response ended at 10,556 ms, and a New Calls tab whose response
 ended at 10,488 ms — all with a fast first byte and a slow body, which is what
 waiting for an instance looks like from the browser.
 
-A click that lands before hydration is **lost, not delayed**: it fires no
-request at all and the tab does not move. With a load that streams for ten
-seconds, that window is ten seconds wide, and the counsellor's second and third
-clicks are the ones that count.
+A click that lands before hydration was **lost, not delayed**: it fired no
+request at all and the tab did not move. With a load that streams for ten
+seconds, that window was ten seconds wide, and the counsellor's second and
+third clicks were the ones that counted. Fixed in Brief 51 — every tab control
+on My Day, New Calls and Enquiries is now a real `<a href>` carrying the URL
+state, so a click before hydration is a navigation the browser handles.
 
 **Checked and cleared:**
 
@@ -181,24 +183,68 @@ figure still holds exactly — 62–120 ms TTFB across every measurement above.
 What has grown since is the number of requests each page load fires at that
 instance.
 
-**Proposed fixes, cheapest first — none applied:**
+### What was done (Brief 51), and what it moved
 
-1. `prefetch={false}` on the sidebar links (`app/(app)/sidebar.tsx`). Fourteen
-   full server renders per page view buy a warm router cache for pages the
-   counsellor may never open, and cost the one they are looking at. The
-   sidebar's links already `preventDefault` and `router.push` themselves for
-   the unsaved-work guard, so the prefetch is buying less than it looks.
-2. Find out why each route is prefetched **twice** rather than once, and stop
-   the second wave. The sidebar renders each link once, so the doubling is
-   coming from the router, not from the markup — worth an hour before
-   accepting it.
-3. Make the tab controls survive a pre-hydration click — render them as real
-   `<a href>` so the browser navigates even before React attaches, rather than
-   as buttons whose first click is discarded. This is the difference between
-   "slow" and "did nothing", and it is the one counsellors describe.
-4. Only if 1–3 leave a gap: raise the Vercel function concurrency, or widen the
-   keep-warm cron to hold more than one instance. Both cost money and neither
-   addresses a page asking for 14 renders of itself.
+**Why each route was fetched twice.** Nothing is duplicated — there is one
+sidebar, one `<Link>` per route. In Next 16 a single `<Link>` issues *two*
+prefetches: a segment-tree request carrying `next-router-segment-prefetch:
+/_tree`, and a full RSC request carrying `next-router-state-tree`. Both come
+back `x-vercel-cache: MISS` against `x-matched-path: /my-day.rsc`, so both run
+the page. `prefetch={false}` stops both, which is why the cause and the symptom
+happen to have the same fix.
+
+**Why turning it off costs nothing.** Every route here is dynamic, and since
+Next 15 `staleTimes.dynamic` defaults to **0 seconds** — a prefetched payload
+for a dynamic route is stale the moment it lands. Measured: with all fourteen
+prefetches complete, clicking a rail link still fired a full request, 241 ms to
+first byte. The prefetches bought nothing.
+
+**Requests per page load, before → after:**
+
+| Page | Server renders on load, before | After |
+|---|---|---|
+| My Day | 14 | 0 |
+| New Calls | 14 | 0 |
+| Enquiries | 15 (13 rail + 2 quick-range) | 0 |
+
+The last one on My Day was not a prefetch: the URL-sync effect's first run
+`router.replace`d a bare `/my-day` into `?tab=…&view=…&sub=…`, a full server
+render to write down what the server had just decided. It now skips its first
+run.
+
+**The flows, idle instance, three runs each:**
+
+| Flow | Before | After |
+|---|---|---|
+| Quick Add, save 5 rows | 565 / 651 / 787 ms | 625 / 416 / 462 ms |
+| My Day tabs | 250–366 ms | 235–908 ms (median 243) |
+| New Calls tabs | 274–864 ms | 243–715 ms (one 10.5 s stall) |
+| Enquiries Today → week | 258–328 ms | 210–261 ms |
+| A click 1.5 s after load | 1,381 / 40,031 / 1,785 ms | 511 / 273 / 267 ms |
+
+That last row is the whole of it. Before, a click landing in the window the
+burst occupied was 5× to 170× slower than the same click on a quiet instance.
+After, there are no requests in that window at all — measured as zero, three
+runs — and the click costs what any other click costs.
+
+### What is left: the ~10 s instance stall
+
+Unchanged by any of this, because it was never the prefetches. Four were seen
+across the post-fix runs (11.1 s, 11.0 s, 10.5 s, 7.7 s), against three in the
+same volume of pre-fix runs. Every one has a fast first byte (62–120 ms) and a
+slow body, and every one is the first request after an idle gap or against a
+fresh deployment — an instance being started, which is what Brief 46 measured
+at 534 ms to 8.1 s and which has evidently grown.
+
+Nothing in the app causes it and nothing in the app can fix it. The remaining
+levers are Vercel function concurrency and a keep-warm cron holding more than
+one instance, both of which cost money and both of which Brief 51 ruled out of
+scope. The honest statement is that a counsellor returning to Calman after a
+quiet half hour will wait about ten seconds, once, and everything after that is
+a quarter of a second.
+
+**Still not verified:** whether the Vercel cron actually fires. That needs the
+Vercel cron log or CLI, neither available from here.
 
 ## Deliberate audit gaps
 
