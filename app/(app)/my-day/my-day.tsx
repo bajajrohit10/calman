@@ -487,7 +487,28 @@ export function MyDay({
    * not a navigation — making it one would mean six presses of Back to leave
    * the screen.
    */
+  /**
+   * §51.1. Not on the way in.
+   *
+   * The first run of this effect always has something to write — arriving at a
+   * bare /my-day from the rail means the URL says nothing and the state says
+   * the server's defaults — and writing it costs a full server render of this
+   * screen to record what the server has just decided. It was the one request
+   * left on My Day after the prefetches went, and it lands in the same second
+   * as the first click.
+   *
+   * Nothing is lost by skipping it. The URL exists so that Back returns to the
+   * tab you were on and so a link can name one; on the first paint there is no
+   * previous tab, and a bare /my-day re-parses to exactly the screen it
+   * rendered. From the first tab change onwards this behaves as it always did.
+   */
+  const urlSynced = useRef(false);
+
   useEffect(() => {
+    if (!urlSynced.current) {
+      urlSynced.current = true;
+      return;
+    }
     const params = new URLSearchParams(window.location.search);
     params.set("tab", tab);
     params.set("view", view);
