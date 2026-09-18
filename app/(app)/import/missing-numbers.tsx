@@ -34,23 +34,48 @@ export function MissingNumbers({ rows }: { rows: HeldRow[] }) {
   const [note, setNote] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
+  /**
+   * §55.5. The number is already somebody's, and this asks before attaching.
+   *
+   * Held rather than confirmed inline because the answer is a fact about two
+   * people — the one in Calman and the one on the checkout — and both names
+   * have to be on screen for the question to mean anything.
+   */
+  const [confirm, setConfirm] = useState<{
+    id: string;
+    mobile: string;
+    existingName: string;
+    checkoutName: string;
+  } | null>(null);
 
-  function run(id: string, fn: () => Promise<{ error: string | null; outcome?: string }>) {
+  function run(
+    id: string,
+    fn: () => Promise<{
+      error: string | null;
+      outcome?: string;
+      confirmExisting?: { existingName: string; checkoutName: string };
+    }>,
+    mobile?: string,
+  ) {
     setError(null);
     setNote(null);
     setBusyId(id);
     start(async () => {
       const res = await fn();
       setBusyId(null);
-      if (res.error) setError(res.error);
-      else {
-        setNote(
-          res.outcome
-            ? `Done — ${OUTCOME_WORDS[res.outcome] ?? res.outcome}.`
-            : "Done.",
-        );
-        router.refresh();
+      if (res.error) {
+        setError(res.error);
+        return;
       }
+      if (res.confirmExisting) {
+        setConfirm({ id, mobile: mobile ?? "", ...res.confirmExisting });
+        return;
+      }
+      setConfirm(null);
+      setNote(
+        res.outcome ? `Done — ${OUTCOME_WORDS[res.outcome] ?? res.outcome}.` : "Done.",
+      );
+      router.refresh();
     });
   }
 
@@ -66,6 +91,55 @@ export function MissingNumbers({ rows }: { rows: HeldRow[] }) {
     <div className="flex flex-col gap-3">
       {error ? <ErrorNote>{error}</ErrorNote> : null}
       {note ? <p className="text-[12.5px] text-ok">{note}</p> : null}
+
+      {confirm ? (
+        <div
+          role="alertdialog"
+          aria-label="This number already belongs to somebody"
+          data-testid="attach-confirm"
+          className="rounded-lg border border-warn/50 bg-warn-soft/40 px-4 py-3 shadow-card"
+        >
+          <p className="text-[13px] text-ink">
+            This number is already{" "}
+            <strong className="font-semibold">{confirm.existingName}</strong>.
+            Attach this checkout to them?
+          </p>
+          <p className="mt-1 text-[11.5px] text-ink-2">
+            The checkout is in the name of {confirm.checkoutName}.{" "}
+            {confirm.existingName} keeps their name either way — only the
+            checkout is attached.
+          </p>
+          <div className="mt-2.5 flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={pending}
+              onClick={() =>
+                run(
+                  confirm.id,
+                  () =>
+                    resolveHeldCheckout({
+                      id: confirm.id,
+                      mobile: confirm.mobile,
+                      attachToExisting: true,
+                    }),
+                  confirm.mobile,
+                )
+              }
+            >
+              Attach
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={pending}
+              onClick={() => setConfirm(null)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
         <table className="w-full min-w-[980px] border-collapse text-[12.5px]">
@@ -127,8 +201,10 @@ export function MissingNumbers({ rows }: { rows: HeldRow[] }) {
                         variant="primary"
                         disabled={busy || draft.replace(/\D/g, "").length !== 10}
                         onClick={() =>
-                          run(r.id, () =>
-                            resolveHeldCheckout({ id: r.id, mobile: draft }),
+                          run(
+                            r.id,
+                            () => resolveHeldCheckout({ id: r.id, mobile: draft }),
+                            draft,
                           )
                         }
                       >

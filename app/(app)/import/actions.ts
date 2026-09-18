@@ -894,7 +894,21 @@ export async function resolveHeldCheckout(input: {
   mobile?: string;
   discard?: boolean;
   reason?: string;
-}): Promise<{ error: string | null; outcome?: string }> {
+  /**
+   * §55.5. The number is already somebody else's, and the person filling this
+   * in has been told whose and said to go ahead anyway.
+   */
+  attachToExisting?: boolean;
+}): Promise<{
+  error: string | null;
+  outcome?: string;
+  /**
+   * §55.5. Set instead of an outcome when the number belongs to a student
+   * under a different name. Nothing is written; the caller asks and comes
+   * back with attachToExisting.
+   */
+  confirmExisting?: { existingName: string; checkoutName: string };
+}> {
   const viewer = await requireUser();
   if (!viewer.profile) return { error: "Your account is not active." };
 
@@ -932,6 +946,29 @@ export async function resolveHeldCheckout(input: {
   const lookup = await lookupNumbers([mobile]);
   if (lookup.error) return { error: lookup.error };
   const status = lookup.statuses?.[0] ?? null;
+
+  /**
+   * §55.5. A number that already belongs to somebody else.
+   *
+   * On the first day's use, three different checkouts were filled in with one
+   * number and all three attached to the same lead — three people's carts on
+   * one student, and nothing said so. It is a typo more often than not, but it
+   * is sometimes right: a parent's phone, a shared number, a student who
+   * checked out twice under two spellings. So it asks rather than refuses, and
+   * the existing name is kept either way — the person in Calman is who
+   * somebody rang, and a checkout is not evidence they are called something
+   * else.
+   */
+  const checkoutName = (held.name ?? "").trim();
+  const existingName = (status?.studentName ?? "").trim();
+  if (
+    !input.attachToExisting &&
+    existingName &&
+    checkoutName &&
+    existingName.toLowerCase() !== checkoutName.toLowerCase()
+  ) {
+    return { error: null, confirmExisting: { existingName, checkoutName } };
+  }
 
   // A number somebody has already called today is the one case no rule can
   // decide (Brief 31), and a tab with one input is the wrong place to ask. It
@@ -980,7 +1017,11 @@ export async function resolveHeldCheckout(input: {
       mobile,
       decision,
       skipReason: null,
-      name: held.name,
+      // §55.5. Only when the number is new to Calman. An existing student keeps
+      // the name they are known by — the import rules would not overwrite it
+      // anyway, and sending it is how a future change to that rule would
+      // quietly start renaming people from a checkout.
+      name: existingName ? null : held.name,
       sourceId: acSource.data?.id ?? null,
       productText: held.product_text,
       arrivedAt: held.arrived_at,
@@ -1006,6 +1047,9 @@ export async function resolveHeldCheckout(input: {
     .from("held_checkouts")
     .update({
       resolution: "imported",
+      resolution_note: existingName
+        ? `Attached to ${existingName}, who already had this number.`
+        : null,
       resolved_enquiry_id: row?.enquiry_id ?? null,
       resolved_by: viewer.userId,
       resolved_at: new Date().toISOString(),
