@@ -52,3 +52,7 @@ yarn-error.log*
 
 # Playwright MCP session artefacts
 .playwright-mcp/
+
+# Scratch SQL and one-off working files. Never committed: §5.7 keeps delete
+# scripts out of the repo unless they carry an explicit flag.
+/scratch/
