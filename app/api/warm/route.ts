@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 
+import { instanceAgeMs, instanceId } from "@/lib/instance";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -58,11 +59,23 @@ export async function GET() {
   // working, or configuring it later would be the only thing standing between
   // the cron and silence. There is nothing here worth protecting — it reads
   // nothing and writes nothing — so this is tidiness, not a gate.
+  // §53.1. Which process answered, on every reply including the refusal.
+  //
+  // The question this route exists to answer — is the cron keeping the pages'
+  // connection pool warm — cannot be answered without knowing whether this
+  // runs in the same process as a page. The pages put the same id on a hidden
+  // element; comparing the two settles it. A random id and a duration are not
+  // worth protecting, so this is set before the secret is checked.
+  const identity = {
+    "X-Calman-Instance": instanceId(),
+    "X-Calman-Instance-Age-Ms": String(instanceAgeMs()),
+  };
+
   const secret = process.env.CRON_SECRET;
   if (secret) {
     const auth = (await headers()).get("authorization");
     if (auth !== `Bearer ${secret}`) {
-      return Response.json({ error: "unauthorized" }, { status: 401 });
+      return Response.json({ error: "unauthorized" }, { status: 401, headers: identity });
     }
   }
 
@@ -90,6 +103,6 @@ export async function GET() {
 
   return Response.json(
     { ok: true, reached, ms: Math.round(performance.now() - started) },
-    { headers: { "Cache-Control": "no-store" } },
+    { headers: { ...identity, "Cache-Control": "no-store" } },
   );
 }

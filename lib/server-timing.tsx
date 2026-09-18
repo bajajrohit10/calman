@@ -2,6 +2,8 @@ import "server-only";
 
 import { cache } from "react";
 
+import { instanceAgeMs, instanceId } from "@/lib/instance";
+
 /**
  * Server-side phase timings, so a future measurement reads them off the server
  * instead of inferring them from the outside.
@@ -55,8 +57,6 @@ export async function timed<T>(name: string, fn: () => PromiseLike<T>): Promise<
  * it has answered. A stall on `reqs=1` is a cold process; a stall on `reqs=40`
  * is not, and they are different bugs.
  */
-const INSTANCE = Math.random().toString(36).slice(2, 10);
-const BOOTED = Date.now();
 let served = 0;
 
 /** The phases recorded so far, as a Server-Timing field value. */
@@ -85,8 +85,8 @@ export function ServerTiming({ route }: { route: string }) {
       hidden
       data-server-timing={serverTiming()}
       data-server-timing-route={route}
-      data-server-instance={INSTANCE}
-      data-server-age-ms={String(Date.now() - BOOTED)}
+      data-server-instance={instanceId()}
+      data-server-age-ms={String(instanceAgeMs())}
       data-server-reqs={String(served)}
       data-server-timing-total={collector()
         .phases.reduce((n, p) => Math.max(n, p.at + p.ms), 0)
