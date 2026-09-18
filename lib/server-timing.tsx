@@ -104,11 +104,29 @@ export function ServerTiming({ route }: { route: string }) {
  * does lands here instead, where `vercel logs` can read it.
  */
 export function logServerTiming(route: string) {
-  const phases = collector().phases;
+  const c = collector();
+  const phases = c.phases;
   if (!phases.length) return;
-  const total = phases.reduce((n, p) => n + p.ms, 0);
+  // Wall time across the request, not the sum of the phases: most of them run
+  // concurrently, so the sum was larger than the render and said nothing about
+  // where a stall sat.
+  const wall = phases.reduce((n, p) => Math.max(n, p.at + p.ms), 0);
+  const sorted = [...phases].sort((a, b) => a.at - b.at);
   console.log(
-    `[timing] ${route} total=${total.toFixed(0)}ms ` +
-      phases.map((p) => `${p.name}=${p.ms.toFixed(0)}`).join(" "),
+    `[timing] ${route} wall=${wall.toFixed(0)}ms ` +
+      `instance=${instanceId()} age=${instanceAgeMs()}ms reqs=${served} ` +
+      sorted.map((p) => `${p.name}=${p.ms.toFixed(0)}@${p.at.toFixed(0)}`).join(" "),
   );
 }
+
+/**
+ * §53.1. One line that is worth grepping for.
+ *
+ * The stall this is chasing has never fired while anybody was watching; it
+ * fires during working hours, on somebody else's click. So every render leaves
+ * a line behind carrying the whole picture — which process, how old, how many
+ * requests it had served, and every phase with its start offset — and finding
+ * the stall afterwards is `[timing]` plus a sort on wall. A phase whose own
+ * duration is the wall time is the await that hung; a wall with no phase to
+ * account for it is time spent somewhere this does not reach.
+ */
