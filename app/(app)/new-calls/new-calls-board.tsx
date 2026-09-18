@@ -240,6 +240,7 @@ export function NewCallsBoard({
           </Button>
           <Link
             href="/new-calls"
+            prefetch={false}
             className="text-[12.5px] text-ink-3 underline-offset-2 hover:underline"
           >
             Clear
@@ -438,7 +439,11 @@ export function NewCallsBoard({
       {pages > 1 ? (
         <div className="flex items-center gap-3 text-[12.5px] text-ink-2">
           {page > 1 ? (
-            <Link href={withParam({ page: String(page - 1) })} className="hover:underline">
+            <Link
+              href={withParam({ page: String(page - 1) })}
+              prefetch={false}
+              className="hover:underline"
+            >
               ← Previous
             </Link>
           ) : null}
@@ -446,7 +451,11 @@ export function NewCallsBoard({
             Page {page} of {pages}
           </span>
           {page < pages ? (
-            <Link href={withParam({ page: String(page + 1) })} className="hover:underline">
+            <Link
+              href={withParam({ page: String(page + 1) })}
+              prefetch={false}
+              className="hover:underline"
+            >
               Next →
             </Link>
           ) : null}

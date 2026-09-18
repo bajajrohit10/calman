@@ -217,6 +217,7 @@ function NewCallsPipelineTabs({
           <Link
             key={t.key}
             href={href(t.key)}
+            prefetch={false}
             aria-current={pipeline === t.key ? "page" : undefined}
             className={
               pipeline === t.key
@@ -285,7 +286,11 @@ function CallTypeTabs({
             <Link
               key={key}
               href={href(key)}
-              aria-pressed={on}
+              // §51.1. Same reason as the rail: a dynamic route's prefetch is
+              // stale on arrival, so this was two server renders per tab bought
+              // on every load and spent on nothing.
+              prefetch={false}
+              aria-current={on ? "true" : undefined}
               className={
                 on
                   ? "bg-accent px-3 py-1 text-[12.5px] font-medium text-accent-ink"

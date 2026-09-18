@@ -243,6 +243,7 @@ export function EnquiriesTable({
           </label>
           <Link
             href="/enquiries"
+            prefetch={false}
             className="text-[12.5px] text-ink-3 underline-offset-2 hover:underline"
           >
             Clear
@@ -307,6 +308,7 @@ export function EnquiriesTable({
                     <th key={col.key} className={cx(col.w, "px-1.5 py-[7px]")}>
                       <Link
                         href={withParam({ sort: col.key, dir: nextDir, page: "" })}
+                        prefetch={false}
                         className="inline-flex min-w-0 flex-wrap items-center gap-1 hover:text-ink"
                       >
                         {col.label}
@@ -425,6 +427,7 @@ export function EnquiriesTable({
           {page > 1 ? (
             <Link
               href={withParam({ page: String(page - 1) })}
+              prefetch={false}
               className="underline-offset-2 hover:underline"
             >
               ← Previous
@@ -436,6 +439,7 @@ export function EnquiriesTable({
           {page < pages ? (
             <Link
               href={withParam({ page: String(page + 1) })}
+              prefetch={false}
               className="underline-offset-2 hover:underline"
             >
               Next →
@@ -477,6 +481,10 @@ function QuickRange({ active, search }: { active: EnquiryRangeId; search: string
         <Link
           key={r.id}
           href={href(r.id)}
+          // §51.1. The five range links were two of the fifteen server renders
+          // this screen fired on load, and a dynamic route's prefetch is stale
+          // before anybody can use it.
+          prefetch={false}
           aria-current={active === r.id ? "page" : undefined}
           className={
             active === r.id

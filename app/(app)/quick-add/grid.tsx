@@ -2,7 +2,15 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 
-import { Button, ErrorNote, Input, Select, Textarea, cx } from "@/components/ui";
+import {
+  Button,
+  ErrorNote,
+  Input,
+  Select,
+  Spinner,
+  Textarea,
+  cx,
+} from "@/components/ui";
 import { useUnsavedClaim } from "@/components/unsaved-guard";
 import {
   BOTH_OPEN,
@@ -159,6 +167,23 @@ export function QuickAddGrid({
   const [showProduct, setShowProduct] = useState(false);
   const [result, setResult] = useState<BulkResult | null>(null);
   const [pending, start] = useTransition();
+  /**
+   * §51.2. Two guards against one click counting twice.
+   *
+   * `submitting` is state, set in the click handler before anything else, so
+   * the button is disabled and says "Saving…" on the same frame as the click
+   * rather than on whatever frame React gets round to. useTransition's own
+   * `pending` was doing that job and is a render behind — enough of a window
+   * for a double-click to land twice, which on this screen means ten leads
+   * where somebody typed five.
+   *
+   * `submitLock` is the guard that actually holds. It is a ref, so the second
+   * call sees it set synchronously even if no render has happened in between,
+   * and it is checked inside saveAll rather than in the handler so that every
+   * path into a save — the button, Enter, "Log call now" — passes through it.
+   */
+  const [submitting, setSubmitting] = useState(false);
+  const submitLock = useRef(false);
   const [opening, setOpening] = useState<string | null>(null);
   /** The row whose Dismiss is waiting on a confirmation. */
   const [confirming, setConfirming] = useState<Row | null>(null);
@@ -420,6 +445,23 @@ export function QuickAddGrid({
   }
 
   async function saveAll(): Promise<BulkResult | null> {
+    // The lock, before any validation: a second click during the round trip is
+    // the same click, and answering it with an error would be worse than
+    // ignoring it. Taken here rather than in the button's handler so that
+    // Enter and "Log call now" are held by it too.
+    if (submitLock.current) return null;
+    submitLock.current = true;
+    setSubmitting(true);
+    try {
+      return await guardedSave();
+    } finally {
+      submitLock.current = false;
+      setSubmitting(false);
+    }
+  }
+
+  /** Everything a save refuses to do, and then the save. */
+  async function guardedSave(): Promise<BulkResult | null> {
     if (!saveable.length) {
       setResult({ error: "Nothing to save — every row is empty or invalid." });
       return null;
@@ -650,6 +692,7 @@ export function QuickAddGrid({
                     <StatusCell
                       row={r}
                       bad={bad}
+                      saving={submitting && Boolean(r.mobile.trim())}
                       verdict={verdict}
                       onDecide={(d) => patch(r.key, { decision: d })}
                       onDismiss={() => setConfirming(r)}
@@ -661,9 +704,12 @@ export function QuickAddGrid({
                       <Button
                         size="sm"
                         variant="secondary"
-                        disabled={pending || blocked}
+                        disabled={submitting || pending || blocked}
                         title="Saves this row and opens the call — Enter does the same"
-                        onClick={() => logCallNow(r)}
+                        onClick={() => {
+                          setSubmitting(true);
+                          logCallNow(r);
+                        }}
                       >
                         {opening === r.key ? "Opening…" : "Log call now"}
                       </Button>
@@ -679,10 +725,22 @@ export function QuickAddGrid({
       <div className="flex flex-wrap items-center gap-2">
         <Button
           variant="primary"
-          disabled={pending || blocked}
-          onClick={() => start(() => void saveAll())}
+          disabled={submitting || pending || blocked}
+          onClick={() => {
+            // Outside the transition on purpose: an update made inside one is
+            // low priority and can be held back, and "the button went grey
+            // when I pressed it" is the whole of this guarantee.
+            setSubmitting(true);
+            start(() => void saveAll());
+          }}
         >
-          {pending && !opening ? "Saving…" : `Save all (${saveable.length})`}
+          {submitting || (pending && !opening) ? (
+            <>
+              <Spinner /> Saving…
+            </>
+          ) : (
+            `Save all (${saveable.length})`
+          )}
         </Button>
         <Button
           size="sm"
@@ -752,6 +810,7 @@ export function QuickAddGrid({
 function StatusCell({
   row,
   bad,
+  saving,
   verdict,
   onDecide,
   onDismiss,
@@ -759,11 +818,23 @@ function StatusCell({
 }: {
   row: Row;
   bad: boolean;
+  /** §51.2: this row is in the request that is in flight. */
+  saving: boolean;
   verdict: DuplicateVerdict | null;
   onDecide: (decision: Case5Decision) => void;
   onDismiss: () => void;
   onPipeline: (p: "ticket" | "purchase") => void;
 }) {
+  // Before every other reading: while the save is in flight the row's old
+  // verdict is about to stop being true, and leaving it on screen is what
+  // makes somebody click again.
+  if (saving) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-3">
+        <Spinner /> Saving…
+      </span>
+    );
+  }
   if (bad) {
     return <span className="text-[12px] font-medium text-danger">Not a valid number</span>;
   }

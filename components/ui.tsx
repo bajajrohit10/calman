@@ -65,6 +65,28 @@ export function Button({
   );
 }
 
+/**
+ * §51.2. Something is happening, said in the smallest space there is.
+ *
+ * A ring rather than the word alone, because the word sits still: a counsellor
+ * who clicked and sees "Saving…" not moving reads it as stuck and clicks
+ * again, which is the thing the pending state exists to prevent. Inherits the
+ * colour it is drawn in, so it works on a filled button and in a table cell
+ * without being told which.
+ */
+export function Spinner({ className }: { className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={cx(
+        "inline-block size-[11px] shrink-0 animate-spin rounded-full",
+        "border-[1.5px] border-current border-t-transparent align-[-1px]",
+        className,
+      )}
+    />
+  );
+}
+
 const CONTROL =
   "h-[30px] w-full rounded-md border border-line-2 bg-surface text-[12.5px] disabled:opacity-60";
 

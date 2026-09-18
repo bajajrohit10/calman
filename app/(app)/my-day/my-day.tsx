@@ -1,9 +1,11 @@
 "use client";
 
 
+import Link from "next/link";
+
 import { StudentLink } from "@/components/student-link";
 import { useConfirmLeave } from "@/components/unsaved-guard";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import { loadPanelEnquiry, type PanelPayload } from "@/components/call-log/actions";
@@ -129,6 +131,15 @@ export function MyDay({
   masters: PanelMasters;
 }) {
   const router = useRouter();
+  /**
+   * §51.2. The query string as both sides see it.
+   *
+   * window.location.search would be the obvious source and is wrong here: it
+   * is empty during the server render, so every tab's href came out shorter on
+   * the server than on the client and React reported a hydration mismatch on
+   * every load. useSearchParams is the same value in both places.
+   */
+  const searchParams = useSearchParams();
 
   // The day is client state after the first paint so a saved call can move the
   // counts without the route re-rendering and losing the open tab (see
@@ -427,6 +438,39 @@ export function MyDay({
 
 
   /**
+   * §51.2. The address this control would take you to, if React were not here.
+   *
+   * The same five parameters the effect below writes, built from the state as
+   * it would be after the click. Every tab renders as a real link carrying
+   * this, so a click that lands before hydration is a navigation the browser
+   * handles by itself — the server reads the parameters back into
+   * initialTab/initialView/initialSubTab and the screen opens on the tab that
+   * was clicked. It used to be a button, and a button before hydration eats
+   * the click and shows nothing, which is what a counsellor calls "lag".
+   */
+  function tabHref(patch: {
+    tab?: TabKey;
+    view?: "pending" | "done";
+    sub?: MyDaySubTab;
+    ticket?: TicketTabKey;
+    owner?: TicketOwner;
+  }) {
+    const nextTab = patch.tab ?? tab;
+    // Everything else the URL is carrying — the date, the counsellor an admin
+    // is looking at — survives a tab click, exactly as it does through the
+    // effect below.
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", nextTab);
+    params.set("view", patch.view ?? view);
+    params.set("sub", formatSubTab(patch.sub ?? subTab));
+    if (nextTab === "tickets") {
+      params.set("ticket", patch.ticket ?? ticketTab);
+      params.set("owner", patch.owner ?? ticketOwner);
+    }
+    return `/my-day?${params.toString()}`;
+  }
+
+  /**
    * §35.2. Keep the URL saying which tab is open.
    *
    * The tab is client state — it has to be, because logging a call must not
@@ -685,11 +729,17 @@ export function MyDay({
           const g = groups[t.key];
           const active = tab === t.key;
           return (
-            <button
+            <Link
               key={t.key}
-              type="button"
-              aria-pressed={active}
-              onClick={() => {
+              href={tabHref({
+                tab: t.key,
+                sub: ALL_SUB_TAB,
+                view: g.pending === 0 && g.total > 0 ? "done" : "pending",
+              })}
+              prefetch={false}
+              aria-current={active ? "page" : undefined}
+              onClick={(e) => {
+                e.preventDefault();
                 setTab(t.key);
                 setSubTab(ALL_SUB_TAB);
                 // Landing on a tab with nothing left to call and showing an
@@ -698,7 +748,7 @@ export function MyDay({
                 setOpen(null);
               }}
               className={cx(
-                "rounded-lg border px-3 py-2 text-left transition-colors",
+                "block rounded-lg border px-3 py-2 text-left transition-colors",
                 active
                   ? "border-accent bg-accent-soft shadow-card"
                   : "border-line bg-surface shadow-card hover:border-ink-3",
@@ -723,7 +773,7 @@ export function MyDay({
                     ? "unresolved / seen"
                     : "to call / assigned"}
               </span>
-            </button>
+            </Link>
           );
         })}
       </div>
@@ -734,11 +784,15 @@ export function MyDay({
           {subTabs.map((t) => {
             const on = t.key === formatSubTab(activeSub);
             return (
-              <button
+              <Link
                 key={t.key}
-                type="button"
-                aria-pressed={on}
-                onClick={() => setSubTab(t.sub)}
+                href={tabHref({ sub: t.sub })}
+                prefetch={false}
+                aria-current={on ? "page" : undefined}
+                onClick={(e) => {
+                  e.preventDefault();
+                  setSubTab(t.sub);
+                }}
                 // An empty sub-tab is greyed rather than hidden: the slot
                 // ladder is a fixed shape and a rung vanishing when it empties
                 // would move every tab under the cursor.
@@ -755,7 +809,7 @@ export function MyDay({
                 <span className="ml-1.5 tabular-nums opacity-80">
                   {t.pending}/{t.total}
                 </span>
-              </button>
+              </Link>
             );
           })}
           <span className="text-[11.5px] text-ink-3">
@@ -771,11 +825,13 @@ export function MyDay({
         <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex overflow-hidden rounded-md border border-line-2">
             {TICKET_TABS.map((t) => (
-              <button
+              <Link
                 key={t.key}
-                type="button"
-                aria-pressed={ticketTab === t.key}
-                onClick={() => {
+                href={tabHref({ ticket: t.key })}
+                prefetch={false}
+                aria-current={ticketTab === t.key ? "page" : undefined}
+                onClick={(e) => {
+                  e.preventDefault();
                   setTicketTab(t.key);
                   setOpen(null);
                 }}
@@ -790,7 +846,7 @@ export function MyDay({
                 <span className="ml-1.5 tabular-nums opacity-80">
                   {ticketCounts[t.key]}
                 </span>
-              </button>
+              </Link>
             ))}
           </div>
           {/* §45.2. Two answers, not a dropdown of people. The question a
@@ -805,11 +861,15 @@ export function MyDay({
                 { id: TICKET_OWNER_ALL, label: "Total list" },
               ] as const
             ).map((o) => (
-              <button
+              <Link
                 key={o.id}
-                type="button"
-                aria-pressed={ticketOwner === o.id}
-                onClick={() => setTicketOwner(o.id)}
+                href={tabHref({ owner: o.id })}
+                prefetch={false}
+                aria-current={ticketOwner === o.id ? "page" : undefined}
+                onClick={(e) => {
+                  e.preventDefault();
+                  setTicketOwner(o.id);
+                }}
                 className={cx(
                   "px-3 py-1 text-[12.5px] transition-colors",
                   ticketOwner === o.id
@@ -818,7 +878,7 @@ export function MyDay({
                 )}
               >
                 {o.label}
-              </button>
+              </Link>
             ))}
           </div>
           <span className="text-[11.5px] leading-relaxed text-ink-3">
@@ -834,11 +894,15 @@ export function MyDay({
       <div className="flex flex-wrap items-center gap-2">
         <div className="inline-flex overflow-hidden rounded-md border border-line-2">
           {(["pending", "done"] as const).map((v) => (
-            <button
+            <Link
               key={v}
-              type="button"
-              aria-pressed={view === v}
-              onClick={() => setView(v)}
+              href={tabHref({ view: v })}
+              prefetch={false}
+              aria-current={view === v ? "page" : undefined}
+              onClick={(e) => {
+                e.preventDefault();
+                setView(v);
+              }}
               className={cx(
                 "px-3 py-1 text-[12.5px] capitalize transition-colors",
                 view === v
@@ -850,7 +914,7 @@ export function MyDay({
               <span className="ml-1.5 tabular-nums opacity-80">
                 {v === "pending" ? subCounts.pending : subCounts.total - subCounts.pending}
               </span>
-            </button>
+            </Link>
           ))}
         </div>
         <span className="text-[11.5px] text-ink-3">

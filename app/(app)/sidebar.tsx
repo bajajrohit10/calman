@@ -240,6 +240,19 @@ export function Sidebar({
               <Link
                 href={item.href}
                 title={item.hint}
+                /**
+                 * §51.1. No prefetch, on measured evidence rather than taste.
+                 *
+                 * Every route in this app is dynamic, and since Next 15 the
+                 * client cache's stale time for a dynamic route is zero — so a
+                 * prefetched payload is stale the instant it lands. Measured on
+                 * production: with all fourteen prefetches complete, clicking a
+                 * rail link still fired a full request (241 ms to first byte).
+                 * The prefetch bought nothing and cost a server render of every
+                 * other screen, landing 1.3-1.9 s after load, which is exactly
+                 * when somebody clicks.
+                 */
+                prefetch={false}
                 // §27.4. A sidebar click is the commonest way to walk away
                 // from a half-written note, so it asks first and navigates
                 // itself once the answer is in.
@@ -308,6 +321,7 @@ export function Sidebar({
                       <Link
                         href={child.href}
                         title={child.hint}
+                        prefetch={false}
                         onClick={(e) => {
                           e.preventDefault();
                           void confirmLeave().then((ok: boolean) => {
