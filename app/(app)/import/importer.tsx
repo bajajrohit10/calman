@@ -298,7 +298,17 @@ export function Importer({ masters }: { masters: ImportMasters }) {
           if (claimed.has(c)) return false;
           const n = c.toLowerCase();
           if (f.key === "mobile") return /mobile|phone|number|contact/.test(n);
-          if (f.key === "product_text") return /product|item|course name|title/.test(n);
+          // §55.4. "Lineitem quantity" and "Lineitem name" both contain
+          // "item", and find() takes whichever the file lists first — which on
+          // a Shopify export is the quantity. The columns that are plainly
+          // *about* a product without *being* its name are ruled out first, so
+          // the loose pattern can stay loose without picking a number.
+          if (f.key === "product_text") {
+            if (/quantity|price|sku|discount|tax|status|shipping|taxable|fulfil|compare|weight|vendor/.test(n)) {
+              return false;
+            }
+            return /product|item|course name|title/.test(n);
+          }
           if (f.key === "lead_verification") return /verif|proof/.test(n);
           // Shopify calls it "Created at"; hand-kept sheets say "Date" or
           // "Arrived". "paid at"/"updated at" are deliberately not matched:

@@ -9,6 +9,7 @@ import type { Importance, LeadVerification } from "@/lib/enquiry-labels";
 import type { NumberState, NumberStatus } from "@/lib/duplicate-rules";
 import { applyAutoInterests } from "@/lib/auto-interests";
 import { isValidMobile, normaliseMobile } from "@/lib/mobile";
+import { looksLikeShopify } from "@/lib/shopify-checkouts";
 import { fillBlankStudentName } from "@/lib/student-name";
 import { createClient } from "@/lib/supabase/server";
 
@@ -50,6 +51,17 @@ export async function saveMapping(
   mapping: ColumnMapping,
 ): Promise<{ error: string | null }> {
   const viewer = await requireUser();
+  /**
+   * §55.4. A Shopify export has no mapping worth remembering.
+   *
+   * Its pre-step knows the column names and never reads this table, so a saved
+   * map for that header shape can only have come from a client that took the
+   * generic path — and saving it makes the next upload repeat whatever that
+   * client got wrong. One did: the guess matched "Lineitem quantity" before
+   * "Lineitem name" (both contain "item", and find() takes the first), it was
+   * saved, and a day's leads imported with the word "1" as their product text.
+   */
+  if (looksLikeShopify(headers)) return { error: null };
   const supabase = await createClient();
   const { error } = await supabase.from("import_column_maps").upsert(
     {
@@ -337,8 +349,33 @@ export async function commitChunk(
   const creating: CommitRow[] = [];
   const updating: CommitRow[] = [];
 
+  /**
+   * §55.4. A raw Shopify line item must never reach the generic commit path.
+   *
+   * The pre-step turns checkouts into candidates before anything is written; a
+   * row that still carries the export's own columns and has no checkout
+   * reference did not go through it. That can only happen from a client
+   * running the code from before §55.2 — a tab opened before the deploy, which
+   * is what happened on 18 September — and the result is ungrouped line items
+   * with the quantity column as their product text.
+   *
+   * Checked on the server, because the server is the only place a stale client
+   * cannot skip.
+   */
+  const strayShopify = (row: CommitRow) =>
+    !row.checkoutRefs?.length && looksLikeShopify(Object.keys(row.raw ?? {}));
+
   for (const row of todo) {
-    if (row.decision === "dismiss") {
+    if (strayShopify(row)) {
+      importRows.push({
+        ...base(row),
+        outcome: "skipped",
+        skip_reason:
+          "Shopify export rows must go through the checkout grouping. Reload " +
+          "the Import page and upload the file again.",
+      });
+      counts.skipped += 1;
+    } else if (row.decision === "dismiss") {
       // Rule (d): somebody has already spoken to this number today. The row is
       // recorded so the batch report reconciles, and nothing is written.
       importRows.push({
