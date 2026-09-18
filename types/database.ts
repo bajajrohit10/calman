@@ -787,6 +787,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      add_working_days: { Args: { d: string; n: number }; Returns: string }
       archive_enquiries: {
         Args: { p_filter: Json; p_ids: number[] }
         Returns: string
@@ -810,6 +811,10 @@ export type Database = {
           sees_it: boolean
           surface: string
         }[]
+      }
+      close_if_never_that_type: {
+        Args: { p_enquiry_id: number; p_opened_id: number }
+        Returns: boolean
       }
       confirm_batch_export: { Args: { p_batch_id: string }; Returns: undefined }
       derive_call_type: { Args: { p_text: string }; Returns: string }
@@ -1095,6 +1100,35 @@ export type Database = {
           table_name?: string
         }
         Relationships: []
+      }
+      calendar_nudges: {
+        Row: {
+          answered_at: string
+          answered_by: string
+          date: string
+          working: boolean
+        }
+        Insert: {
+          answered_at?: string
+          answered_by: string
+          date: string
+          working: boolean
+        }
+        Update: {
+          answered_at?: string
+          answered_by?: string
+          date?: string
+          working?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_nudges_answered_by_fkey"
+            columns: ["answered_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       calls: {
         Row: {
@@ -1580,19 +1614,22 @@ export type Database = {
           created_at: string
           date: string
           is_active: boolean
-          name: string
+          is_working_override: boolean
+          name: string | null
         }
         Insert: {
           created_at?: string
           date: string
           is_active?: boolean
-          name: string
+          is_working_override?: boolean
+          name?: string | null
         }
         Update: {
           created_at?: string
           date?: string
           is_active?: boolean
-          name?: string
+          is_working_override?: boolean
+          name?: string | null
         }
         Relationships: []
       }
@@ -3064,6 +3101,7 @@ export type Database = {
           target_label: string
         }[]
       }
+      pending_calendar_nudge: { Args: never; Returns: Json }
       purge_archived: {
         Args: { p_expected_count: number; p_ids: number[] }
         Returns: {
@@ -3317,6 +3355,10 @@ export type Database = {
       }
       unarchive_batch: { Args: { p_batch_id: string }; Returns: number }
       unarchive_enquiry: { Args: { p_id: number }; Returns: undefined }
+      working_day_info: {
+        Args: { p_dates?: string[]; p_from?: string; p_offsets?: number[] }
+        Returns: Json
+      }
     }
     Enums: {
       assignment_bucket:

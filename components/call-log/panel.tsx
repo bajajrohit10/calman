@@ -39,6 +39,7 @@ import {
   istNextMonday,
   istToday,
 } from "@/lib/format";
+import { closedLabel, type WorkingDayInfo } from "@/lib/working-days-shape";
 import { interestShape } from "@/lib/interest-shape";
 import { parseProductText } from "@/lib/product-parser";
 import { formatMobile } from "@/lib/mobile";
@@ -108,6 +109,13 @@ export type PanelEnquiry = {
   leadVerification: LeadVerification | null;
   /** What the follow-up field opens on; decided by the database (§20.2). */
   defaultFollowUpDate: string | null;
+  /**
+   * §54.2. The working-day arithmetic behind the chips, and which nearby
+   * dates are closed. Optional because the compact window is also rendered
+   * from fixtures in a couple of places; absent it, the chips fall back to
+   * calendar days, which is what they always were.
+   */
+  calendar?: WorkingDayInfo | null;
   /** The at-a-glance block and the timeline (§21.2). */
   status: EnquiryStatus;
   sourceNames: string[];
@@ -931,12 +939,42 @@ export function CallLogPanel({
     save();
   }
 
-  const chips: { label: string; value: string }[] = [
+  /**
+   * §54.2. The chips count working days, not calendar ones.
+   *
+   * "+3 days" was Date + 3, so on a Thursday it offered a Sunday — and the
+   * trigger on calls then stored the Monday without saying so, which meant the
+   * date the counsellor read out to the student was not the date in the
+   * record. The arithmetic now comes from the database, where the trigger's
+   * own rule lives, so the chip and the row agree.
+   *
+   * The labels stay the words counsellors use. The title carries what the
+   * chip resolves to, because "+3 days" landing on Monday is worth being able
+   * to check without clicking it.
+   */
+  const workingDay = (n: number) =>
+    enquiry.calendar?.offsets?.[String(n)] ?? istDatePlus(n);
+  const nextWorking = workingDay(1);
+  const chips: { label: string; value: string; title?: string }[] = [
     // A ticket can want to be looked at again today; a lead never does.
     ...(asAfterSale ? [{ label: "Today", value: istToday() }] : []),
-    { label: "Tomorrow", value: istDatePlus(1) },
-    { label: "+3 days", value: istDatePlus(3) },
-    { label: "+7 days", value: istDatePlus(7) },
+    {
+      // Honest when the next working day is not tomorrow — a Saturday
+      // afternoon's "Tomorrow" is Monday, and saying so costs nothing.
+      label: nextWorking === istDatePlus(1) ? "Tomorrow" : formatDate(nextWorking),
+      value: nextWorking,
+      title: `Next working day — ${formatDate(nextWorking)}`,
+    },
+    {
+      label: "+3 days",
+      value: workingDay(3),
+      title: `Three working days — ${formatDate(workingDay(3))}`,
+    },
+    {
+      label: "+7 days",
+      value: workingDay(7),
+      title: `Seven working days — ${formatDate(workingDay(7))}`,
+    },
     { label: "Next Monday", value: istNextMonday() },
   ];
 
@@ -1078,6 +1116,7 @@ export function CallLogPanel({
           sourceId={sourceId}
           setSourceId={setSourceId}
           dateChips={chips}
+          calendar={enquiry.calendar}
           importance={importance}
           setImportance={setImportance}
           leadVerification={leadVerification}
@@ -1271,6 +1310,12 @@ export function CallLogPanel({
               <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
                 {enquiry.type === "after_sale" ? "Reminder" : "Next follow-up"}
                 {outcome === "follow_up" ? " *" : ""}
+                {/* §54.2: the same warning the first-call form gives. */}
+                {closedLabel(followUpDate, enquiry.calendar) ? (
+                  <span className="ml-1.5 font-normal normal-case text-warn">
+                    {closedLabel(followUpDate, enquiry.calendar)}
+                  </span>
+                ) : null}
               </span>
               <div className="flex flex-wrap items-center gap-1.5">
                 <Input
@@ -1536,6 +1581,7 @@ function FirstCallFields({
   sourceId,
   setSourceId,
   dateChips,
+  calendar,
   importance,
   setImportance,
   leadVerification,
@@ -1587,7 +1633,9 @@ function FirstCallFields({
   setTermId: (v: string) => void;
   sourceId: string;
   setSourceId: (v: string) => void;
-  dateChips: { label: string; value: string }[];
+  dateChips: { label: string; value: string; title?: string }[];
+  /** §54.2: which nearby dates are closed, so the box can say why. */
+  calendar: WorkingDayInfo | null | undefined;
   importance: Importance | "";
   setImportance: (v: Importance | "") => void;
   leadVerification: LeadVerification | "";
@@ -1980,7 +2028,14 @@ function FirstCallFields({
         </Select>
       </FirstCallField>
 
-      <FirstCallField label="Follow-up date">
+      {/* §54.2. A date the team is not working says so, rather than being
+          silently moved on save. Manual picking still allows any date — a
+          counsellor who means Sunday may have a reason — but they find out
+          before the student does. */}
+      <FirstCallField
+        label="Follow-up date"
+        hint={closedLabel(followUpDate, calendar) ?? undefined}
+      >
         <Input
           type="date"
           value={followUpDate}
@@ -1995,6 +2050,7 @@ function FirstCallFields({
             <button
               key={c.label}
               type="button"
+              title={c.title}
               disabled={!outcomeTakesDate(outcome)}
               onClick={() => setFollowUpDate(c.value)}
               className={cx(

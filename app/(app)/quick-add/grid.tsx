@@ -27,7 +27,11 @@ import {
 import { isValidMobile, normaliseMobile } from "@/lib/mobile";
 import { lookupNumbers } from "@/app/(app)/import/actions";
 
-import { createManyEnquiries, type BulkResult } from "./actions";
+import {
+  createManyEnquiries,
+  type BulkResult,
+  type BulkRowResult,
+} from "./actions";
 
 type Row = {
   key: string;
@@ -59,6 +63,75 @@ type Row = {
 };
 
 /** How many rows the grid opens with, and how many more it grows by (§30.1). */
+/**
+ * §54.1. Three ways of arriving at the same enquiry, and the columns each one
+ * wants.
+ *
+ * One engine, three column sets. The duplicate rules, the debounced lookup,
+ * the five-case decision and the save path are the whole substance of this
+ * component and they are identical on all three, so a second copy would be
+ * another place for every future rule to be forgotten.
+ *
+ * The order is the tab order. "One by one" leads with Source and ends with the
+ * discussion because that is the shape of a call: you know where it came from
+ * before you pick up, and you write down what was said while you are still
+ * talking — the number arrives last, which is why it sits in the middle and
+ * not at the front.
+ *
+ * Status is on every tab although the brief lists it on none: it is where the
+ * five-case verdict and its buttons live, and a duplicate that needs a
+ * decision cannot be decided without it. It is read, never typed, so it is not
+ * in the tab order.
+ */
+/** §54.1. One saved row, kept on screen so the last ten are still readable. */
+export type RecentSave = {
+  key: string;
+  mobile: string;
+  at: string;
+  action: BulkRowResult["action"];
+  detail: string;
+};
+
+const ACTION_WORDS: Record<BulkRowResult["action"], string> = {
+  created: "New lead",
+  updated: "Already waiting — updated",
+  returned: "Returned to New Calls",
+  dismissed: "Dismissed",
+  untouched: "Left as it was",
+  failed: "Failed",
+};
+
+export type QuickAddMode = "one" | "multi" | "ac";
+
+type ColKey =
+  | "n"
+  | "source"
+  | "mobile"
+  | "product"
+  | "discussion"
+  | "name"
+  | "acTime"
+  | "status"
+  | "action";
+
+const COLUMNS: Record<QuickAddMode, ColKey[]> = {
+  one: ["source", "mobile", "product", "discussion", "status", "action"],
+  multi: ["n", "mobile", "source", "status", "action"],
+  ac: ["n", "mobile", "name", "product", "acTime", "status", "action"],
+};
+
+const COLUMN_HEADS: Record<ColKey, { label: string; width?: string; align?: string }> = {
+  n: { label: "#", width: "w-[40px]", align: "text-right" },
+  source: { label: "Source", width: "w-[165px]" },
+  mobile: { label: "Mobile", width: "w-[150px]" },
+  product: { label: "Product text", width: "w-[210px]" },
+  discussion: { label: "Discussion", width: "w-[260px]" },
+  name: { label: "Name", width: "w-[200px]" },
+  acTime: { label: "AC created time", width: "w-[190px]" },
+  status: { label: "Status" },
+  action: { label: "Action", width: "w-[120px]" },
+};
+
 const OPENING_ROWS = 10;
 const GROW_BY = 5;
 /**
@@ -135,7 +208,7 @@ function nowInIst(): string {
 export function QuickAddGrid({
   sources,
   onLogCall,
-  mode = "normal",
+  mode = "multi",
   acSourceId = null,
 }: {
   sources: { id: string; name: string }[];
@@ -147,24 +220,20 @@ export function QuickAddGrid({
    * whole substance of this component and they are identical on both, so a
    * second copy would be two places for every future rule to be forgotten.
    */
-  mode?: "normal" | "ac";
+  mode?: QuickAddMode;
   /** §48.3: the AC grid's fixed source, resolved from the master list. */
   acSourceId?: string | null;
 }) {
   const ac = mode === "ac";
+  const one = mode === "one";
+  /** §54.1. The columns this tab shows, in the order they are tabbed through. */
+  const columns = COLUMNS[mode];
+  const OPENING = one ? 1 : OPENING_ROWS;
   const [rows, setRows] = useState<Row[]>(() =>
-    blanks(OPENING_ROWS, ac ? nowInIst() : ""),
+    blanks(one ? 1 : OPENING_ROWS, ac ? nowInIst() : ""),
   );
   /** A fresh set of empty rows for this grid, after a save or a discard. */
-  const freshRows = () => blanks(OPENING_ROWS, ac ? nowInIst() : "");
-  /**
-   * §48.3. Product text on the Normal grid is optional, and off by default.
-   * The Normal grid's job is speed — a number, maybe a name, next row — and a
-   * column nobody fills on most rows is a Tab stop everybody pays for. On the
-   * AC grid it is always there, because recording what was asked about is
-   * most of why that grid exists.
-   */
-  const [showProduct, setShowProduct] = useState(false);
+  const freshRows = () => blanks(OPENING, ac ? nowInIst() : "");
   const [result, setResult] = useState<BulkResult | null>(null);
   const [pending, start] = useTransition();
   /**
@@ -185,6 +254,18 @@ export function QuickAddGrid({
   const [submitting, setSubmitting] = useState(false);
   const submitLock = useRef(false);
   const [opening, setOpening] = useState<string | null>(null);
+  /**
+   * §54.1. Where the cursor goes after a save on "One by one".
+   *
+   * The form clears and focus returns to Source, because the next call starts
+   * where the last one did. Source rather than Mobile: the counsellor knows
+   * where the call came from before they know the number.
+   */
+  const firstSourceRef = useRef<HTMLSelectElement | null>(null);
+  const firstMobileRef = useRef<HTMLInputElement | null>(null);
+  const refocus = useRef(false);
+  /** §54.1: what "One by one" has saved this session, newest first. */
+  const [recent, setRecent] = useState<RecentSave[]>([]);
   /** The row whose Dismiss is waiting on a confirmation. */
   const [confirming, setConfirming] = useState<Row | null>(null);
   const grownFor = useRef<string | null>(null);
@@ -250,6 +331,13 @@ export function QuickAddGrid({
     },
     discard: () => setRows(freshRows()),
   });
+
+  // §54.1. After the save has swapped in a fresh row, not before.
+  useEffect(() => {
+    if (!refocus.current) return;
+    refocus.current = false;
+    firstSourceRef.current?.focus();
+  }, [rows]);
 
   const patch = (key: string, next: Partial<Row>) =>
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...next } : r)));
@@ -507,8 +595,30 @@ export function QuickAddGrid({
     );
     setResult(res);
     if (!res.error) {
+      // §54.1. "One by one" keeps what it saved on screen, because the form
+      // it was typed into is about to be emptied and a counsellor who wants to
+      // check the last number should not have to go to Enquiries for it.
+      if (one && res.rows?.length) {
+        const stamp = new Date().toTimeString().slice(0, 5);
+        setRecent((prev) =>
+          [
+            ...res.rows!.map((r, n) => ({
+              key: `${Date.now()}-${n}`,
+              mobile: r.mobile,
+              at: stamp,
+              action: r.action,
+              detail: r.detail ?? r.reason ?? ACTION_WORDS[r.action],
+            })),
+            ...prev,
+          ].slice(0, 10),
+        );
+      }
       setRows(freshRows());
       grownFor.current = null;
+      // Back to the top of an empty form, ready for the next call. Flagged
+      // rather than focused here: the row this focuses is about to be replaced
+      // by setRows above, and focusing the outgoing one moves nothing.
+      if (one) refocus.current = true;
     }
     return res;
   }
@@ -549,29 +659,27 @@ export function QuickAddGrid({
       {result && !result.error ? <Summary result={result} /> : null}
 
       <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
-        <table className="w-full min-w-[1040px] border-collapse text-[12.5px]">
+        {/* §54.1. Only as wide as the columns this tab actually has. */}
+        <table
+          className={cx(
+            "w-full border-collapse text-[12.5px]",
+            ac ? "min-w-[900px]" : one ? "min-w-[820px]" : "min-w-[560px]",
+          )}
+        >
           <thead>
             <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-              <th className="w-[40px] px-1.5 py-[7px] text-right">#</th>
-              {/* §7.1. Before the number, because that is the order the
-                  conversation happens in: the counsellor talks, writes it
-                  down, and reads the number off the screen at the end. */}
-              <th className="w-[230px] px-1.5 py-[7px]">Discussion</th>
-              <th className="w-[150px] px-1.5 py-[7px]">Mobile</th>
-              <th className="w-[200px] px-1.5 py-[7px]">Name</th>
-              {/* §48.3. Always on the AC grid, where it is most of the point;
-                  optional on the Normal one, so a counsellor taking a call can
-                  record what was asked about without leaving the row. */}
-              {ac || showProduct ? (
-                <th className="w-[210px] px-1.5 py-[7px]">Product text</th>
-              ) : null}
-              {ac ? (
-                <th className="w-[190px] px-1.5 py-[7px]">AC created time</th>
-              ) : (
-                <th className="w-[165px] px-1.5 py-[7px]">Source</th>
-              )}
-              <th className="px-1.5 py-[7px]">Status</th>
-              <th className="w-[120px] px-1.5 py-[7px]">Action</th>
+              {columns.map((c) => (
+                <th
+                  key={c}
+                  className={cx(
+                    "px-1.5 py-[7px]",
+                    COLUMN_HEADS[c].width,
+                    COLUMN_HEADS[c].align,
+                  )}
+                >
+                  {COLUMN_HEADS[c].label}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -600,127 +708,184 @@ export function QuickAddGrid({
                   )}
                   onFocus={() => reached(r.key)}
                 >
-                  <td className="px-1.5 py-[5px] text-right text-[11px] tabular-nums text-ink-3">
-                    {i + 1}
-                  </td>
-                  <td className="px-1.5 py-[5px] align-top">
-                    <Textarea
-                      value={r.discussion}
-                      rows={2}
-                      aria-label={`Discussion, row ${i + 1}`}
-                      placeholder="What was said. Optional."
+                  {columns.map((c) => (
+                    <td
+                      key={c}
                       className={cx(
-                        "min-h-[34px] resize-y",
-                        needsNumber && "border-warn",
+                        "px-1.5 py-[5px] align-top",
+                        c === "n" && "text-right text-[11px] tabular-nums text-ink-3",
                       )}
-                      onChange={(e) => patch(r.key, { discussion: e.target.value })}
-                    />
-                    {needsNumber ? (
-                      <span className="mt-0.5 block text-[10.5px] text-warn"
-                            data-testid={`needs-number-${i + 1}`}>
-                        add the number to save this row
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className="px-1.5 py-[5px] align-top">
-                    <Input
-                      value={r.mobile}
-                      inputMode="numeric"
-                      aria-label={`Mobile, row ${i + 1}`}
-                      className={bad ? "border-danger" : undefined}
-                      // §32.2. Normalised on the way in, not on the way out,
-                      // so what is in the box is always what would be stored:
-                      // pasting "+91 98765-43210" from WhatsApp shows
-                      // 9876543210 at once rather than on blur.
-                      onChange={(e) => typeMobile(r.key, e.target.value)}
-                      onBlur={(e) => settleMobile(r.key, e.target.value)}
-                      onPaste={(e) => onPaste(e, i)}
-                      onKeyDown={(e) => onEnter(e, r)}
-                    />
-                  </td>
-                  <td className="px-1.5 py-[5px] align-top">
-                    <Input
-                      value={r.name}
-                      aria-label={`Name, row ${i + 1}`}
-                      placeholder="Optional"
-                      onChange={(e) => patch(r.key, { name: e.target.value })}
-                      onKeyDown={(e) => onEnter(e, r)}
-                    />
-                  </td>
-                  {ac || showProduct ? (
-                    <td className="px-1.5 py-[5px]">
-                      <Input
-                        value={r.productText}
-                        aria-label={`Product text, row ${i + 1}`}
-                        placeholder="Optional"
-                        onChange={(e) => patch(r.key, { productText: e.target.value })}
-                        onKeyDown={(e) => onEnter(e, r)}
-                      />
+                    >
+                      {c === "n" ? i + 1 : null}
+
+                      {c === "discussion" ? (
+                        <>
+                          <Textarea
+                            value={r.discussion}
+                            rows={2}
+                            aria-label={`Discussion, row ${i + 1}`}
+                            placeholder="What was said. Optional."
+                            className={cx(
+                              "min-h-[34px] resize-y",
+                              needsNumber && "border-warn",
+                            )}
+                            onChange={(e) => patch(r.key, { discussion: e.target.value })}
+                          />
+                          {needsNumber ? (
+                            <span
+                              className="mt-0.5 block text-[10.5px] text-warn"
+                              data-testid={`needs-number-${i + 1}`}
+                            >
+                              add the number to save this row
+                            </span>
+                          ) : null}
+                        </>
+                      ) : null}
+
+                      {c === "mobile" ? (
+                        <Input
+                          ref={i === 0 ? firstMobileRef : undefined}
+                          value={r.mobile}
+                          inputMode="numeric"
+                          aria-label={`Mobile, row ${i + 1}`}
+                          className={bad ? "border-danger" : undefined}
+                          // §32.2. Normalised on the way in, not on the way
+                          // out, so what is in the box is always what would be
+                          // stored: pasting "+91 98765-43210" from WhatsApp
+                          // shows 9876543210 at once rather than on blur.
+                          onChange={(e) => typeMobile(r.key, e.target.value)}
+                          onBlur={(e) => settleMobile(r.key, e.target.value)}
+                          onPaste={(e) => onPaste(e, i)}
+                          onKeyDown={(e) => onEnter(e, r)}
+                        />
+                      ) : null}
+
+                      {c === "name" ? (
+                        <Input
+                          value={r.name}
+                          aria-label={`Name, row ${i + 1}`}
+                          placeholder="Optional"
+                          onChange={(e) => patch(r.key, { name: e.target.value })}
+                          onKeyDown={(e) => onEnter(e, r)}
+                        />
+                      ) : null}
+
+                      {c === "product" ? (
+                        <Input
+                          value={r.productText}
+                          aria-label={`Product text, row ${i + 1}`}
+                          placeholder="Optional"
+                          onChange={(e) => patch(r.key, { productText: e.target.value })}
+                          onKeyDown={(e) => onEnter(e, r)}
+                        />
+                      ) : null}
+
+                      {c === "acTime" ? (
+                        // Defaults to now and is left alone by Tab, so a row
+                        // keyed as the entry comes in needs no thought; the one
+                        // keyed at six for a five o'clock enquiry is two
+                        // keystrokes away from being right.
+                        <Input
+                          type="datetime-local"
+                          value={r.arrivedAt}
+                          aria-label={`AC created time, row ${i + 1}`}
+                          onChange={(e) => patch(r.key, { arrivedAt: e.target.value })}
+                          onKeyDown={(e) => onEnter(e, r)}
+                        />
+                      ) : null}
+
+                      {c === "source" ? (
+                        <Select
+                          ref={i === 0 ? firstSourceRef : undefined}
+                          value={r.sourceId}
+                          aria-label={`Source, row ${i + 1}`}
+                          onChange={(e) => patch(r.key, { sourceId: e.target.value })}
+                        >
+                          <option value="">—</option>
+                          {sources.map((sc) => (
+                            <option key={sc.id} value={sc.id}>
+                              {sc.name}
+                            </option>
+                          ))}
+                        </Select>
+                      ) : null}
+
+                      {c === "status" ? (
+                        <StatusCell
+                          row={r}
+                          bad={bad}
+                          saving={submitting && Boolean(r.mobile.trim())}
+                          verdict={verdict}
+                          onDecide={(d) => patch(r.key, { decision: d })}
+                          onDismiss={() => setConfirming(r)}
+                          onPipeline={(p) => patch(r.key, { pipeline: p })}
+                        />
+                      ) : null}
+
+                      {c === "action" && ready && lone?.key === r.key ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={submitting || pending || blocked}
+                          title="Saves this row and opens the call — Enter does the same"
+                          onClick={() => {
+                            setSubmitting(true);
+                            logCallNow(r);
+                          }}
+                        >
+                          {opening === r.key ? "Opening…" : "Log call now"}
+                        </Button>
+                      ) : null}
                     </td>
-                  ) : null}
-                  {ac ? (
-                    <td className="px-1.5 py-[5px]">
-                      {/* Defaults to now and is left alone by Tab, so a row
-                          keyed as the entry comes in needs no thought; the
-                          one keyed at six for a five o'clock enquiry is two
-                          keystrokes away from being right. */}
-                      <Input
-                        type="datetime-local"
-                        value={r.arrivedAt}
-                        aria-label={`AC created time, row ${i + 1}`}
-                        onChange={(e) => patch(r.key, { arrivedAt: e.target.value })}
-                        onKeyDown={(e) => onEnter(e, r)}
-                      />
-                    </td>
-                  ) : (
-                    <td className="px-1.5 py-[5px]">
-                      <Select
-                        value={r.sourceId}
-                        aria-label={`Source, row ${i + 1}`}
-                        onChange={(e) => patch(r.key, { sourceId: e.target.value })}
-                      >
-                        <option value="">—</option>
-                        {sources.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name}
-                          </option>
-                        ))}
-                      </Select>
-                    </td>
-                  )}
-                  <td className="px-1.5 py-[5px]">
-                    <StatusCell
-                      row={r}
-                      bad={bad}
-                      saving={submitting && Boolean(r.mobile.trim())}
-                      verdict={verdict}
-                      onDecide={(d) => patch(r.key, { decision: d })}
-                      onDismiss={() => setConfirming(r)}
-                      onPipeline={(p) => patch(r.key, { pipeline: p })}
-                    />
-                  </td>
-                  <td className="px-1.5 py-[5px]">
-                    {ready && lone?.key === r.key ? (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        disabled={submitting || pending || blocked}
-                        title="Saves this row and opens the call — Enter does the same"
-                        onClick={() => {
-                          setSubmitting(true);
-                          logCallNow(r);
-                        }}
-                      >
-                        {opening === r.key ? "Opening…" : "Log call now"}
-                      </Button>
-                    ) : null}
-                  </td>
+                  ))}
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+
+      {/* §54.1. What this tab has just saved, newest first.
+          The form is emptied on save — that is what makes the next call one
+          keystroke away — so the ten most recent land here instead, in the
+          words the rule used rather than a tick. */}
+      {one && recent.length ? (
+        <section>
+          <h3 className="mb-1.5 text-[12.5px] font-semibold text-ink">
+            Saved this session
+          </h3>
+          <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
+            <table className="w-full border-collapse text-[12.5px]">
+              <thead>
+                <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+                  <th className="w-[70px] px-1.5 py-[7px]">At</th>
+                  <th className="w-[150px] px-1.5 py-[7px]">Mobile</th>
+                  <th className="px-1.5 py-[7px]">Status</th>
+                </tr>
+              </thead>
+              <tbody data-testid="recent-saves">
+                {recent.map((r) => (
+                  <tr key={r.key} className="border-b border-line last:border-b-0">
+                    <td className="px-1.5 py-[5px] tabular-nums text-ink-3">{r.at}</td>
+                    <td className="px-1.5 py-[5px] tabular-nums text-ink">{r.mobile}</td>
+                    <td
+                      className={cx(
+                        "px-1.5 py-[5px]",
+                        r.action === "failed" ? "text-danger" : "text-ink-2",
+                      )}
+                    >
+                      {ACTION_WORDS[r.action]}
+                      {r.detail && r.detail !== ACTION_WORDS[r.action] ? (
+                        <span className="ml-1.5 text-ink-3">— {r.detail}</span>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
         <Button
@@ -738,28 +903,25 @@ export function QuickAddGrid({
             <>
               <Spinner /> Saving…
             </>
+          ) : one ? (
+            // §54.1. One row, so "Save all (1)" would be counting to one.
+            "Save"
           ) : (
             `Save all (${saveable.length})`
           )}
         </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() =>
-            setRows((rs) => [...rs, ...blanks(GROW_BY, ac ? nowInIst() : "")])
-          }
-        >
-          Add {GROW_BY} rows
-        </Button>
-        {ac ? null : (
-          <label className="flex cursor-pointer items-center gap-1.5 text-[12.5px] text-ink-2">
-            <input
-              type="checkbox"
-              checked={showProduct}
-              onChange={(e) => setShowProduct(e.target.checked)}
-            />
-            Product text column
-          </label>
+        {/* §54.1. One row is the whole of "One by one"; growing it would make
+            it the other tab. */}
+        {one ? null : (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() =>
+              setRows((rs) => [...rs, ...blanks(GROW_BY, ac ? nowInIst() : "")])
+            }
+          >
+            Add {GROW_BY} rows
+          </Button>
         )}
         {undecided.length ? (
           <span className="rounded-md border border-warn/40 bg-warn-soft/50 px-2 py-1 text-[12px] font-medium text-warn">

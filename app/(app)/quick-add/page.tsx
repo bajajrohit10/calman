@@ -22,7 +22,15 @@ export default async function Page() {
         // §48.3. The tab this user last had open, and the AC source resolved
         // by name — the grid is handed an id, so it never has to know that the
         // source it fixes is called "AC".
-        initialTab={viewer.profile?.quick_add_tab === "ac" ? "ac" : "normal"}
+        // §54.1. Three values now; anything older or unknown opens on the
+        // tab a call happening right now wants.
+        initialTab={
+          viewer.profile?.quick_add_tab === "ac"
+            ? "ac"
+            : viewer.profile?.quick_add_tab === "multi"
+              ? "multi"
+              : "one"
+        }
         acSourceId={
           masters.sources.find((s) => s.name.trim().toLowerCase() === "ac")?.id ?? null
         }

@@ -25,10 +25,10 @@ type Phase = { name: string; ms: number; at: number };
  * `at` is milliseconds from the first call of this collector in the request,
  * so the two can be told apart by reading the row.
  */
-const collector = cache((): { phases: Phase[]; t0: number } => ({
-  phases: [],
-  t0: performance.now(),
-}));
+const collector = cache((): { phases: Phase[]; t0: number; seq: number } => {
+  served += 1;
+  return { phases: [], t0: performance.now(), seq: served };
+});
 
 /**
  * Time one awaited phase. Returns whatever the callback returns.
@@ -57,6 +57,11 @@ export async function timed<T>(name: string, fn: () => PromiseLike<T>): Promise<
  * it has answered. A stall on `reqs=1` is a cold process; a stall on `reqs=40`
  * is not, and they are different bugs.
  */
+/**
+ * Requests this process has served, counted where a request begins rather than
+ * where it renders: the collector is created once per request by cache(), and
+ * incrementing during render is a side effect React is right to object to.
+ */
 let served = 0;
 
 /** The phases recorded so far, as a Server-Timing field value. */
@@ -79,7 +84,6 @@ export function serverTiming(): string {
  * complete. The layout's streamed badges finish later and are not in it.
  */
 export function ServerTiming({ route }: { route: string }) {
-  served += 1;
   return (
     <span
       hidden
@@ -87,7 +91,7 @@ export function ServerTiming({ route }: { route: string }) {
       data-server-timing-route={route}
       data-server-instance={instanceId()}
       data-server-age-ms={String(instanceAgeMs())}
-      data-server-reqs={String(served)}
+      data-server-reqs={String(collector().seq)}
       data-server-timing-total={collector()
         .phases.reduce((n, p) => Math.max(n, p.at + p.ms), 0)
         .toFixed(1)}
@@ -114,7 +118,7 @@ export function logServerTiming(route: string) {
   const sorted = [...phases].sort((a, b) => a.at - b.at);
   console.log(
     `[timing] ${route} wall=${wall.toFixed(0)}ms ` +
-      `instance=${instanceId()} age=${instanceAgeMs()}ms reqs=${served} ` +
+      `instance=${instanceId()} age=${instanceAgeMs()}ms reqs=${c.seq} ` +
       sorted.map((p) => `${p.name}=${p.ms.toFixed(0)}@${p.at.toFixed(0)}`).join(" "),
   );
 }

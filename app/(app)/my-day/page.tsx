@@ -18,6 +18,7 @@ import {
 import { loadRecommended } from "@/lib/recommended";
 import { createClient } from "@/lib/supabase/server";
 
+import { CalendarNudge, type PendingNudge } from "./calendar-nudge";
 import { MyDay } from "./my-day";
 import { TeamDayGrid } from "./team";
 
@@ -90,6 +91,15 @@ export default async function Page({
 
   const masters = await loadMasters();
 
+  // §54.2(c). Managers and super admins only: the question is about everybody's
+  // calendar, and a counsellor answering it would move other people's dates.
+  const nudge = admin
+    ? await timed("nudge", () =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        supabase.rpc("pending_calendar_nudge", {} as any),
+      )
+    : { data: null };
+
   const [day, roster, dismissal, nextWorkingDay] = await Promise.all([
     timed("myday", () => loadMyDay({ date, counsellorId })),
     admin
@@ -156,6 +166,9 @@ export default async function Page({
       />
       {/* §53.1. The phase breakdown, where a browser can read it. */}
       <ServerTiming route="/my-day" />
+      {nudge.data ? (
+        <CalendarNudge nudge={nudge.data as unknown as PendingNudge} />
+      ) : null}
       <MyDay
         initial={day}
         date={date}

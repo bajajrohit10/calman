@@ -19,6 +19,7 @@ import {
 import { applyAutoInterests } from "@/lib/auto-interests";
 import { isValidMobile, normaliseMobile } from "@/lib/mobile";
 import { loadStudentByMobile, type StudentHistory } from "@/lib/students";
+import type { QuickAddMode } from "./grid";
 import { createClient } from "@/lib/supabase/server";
 
 export type LookupResult = {
@@ -781,7 +782,7 @@ async function createMany(
  * message in front of somebody mid-list. The next page load simply opens where
  * it last managed to record.
  */
-export async function setMyQuickAddTab(tab: "normal" | "ac"): Promise<void> {
+export async function setMyQuickAddTab(tab: QuickAddMode): Promise<void> {
   const supabase = await createClient();
   await supabase.rpc("set_my_quick_add_tab", {
     p_tab: tab,

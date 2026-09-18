@@ -17,6 +17,7 @@ import {
   type LeadVerification,
 } from "@/lib/enquiry-labels";
 import { createClient } from "@/lib/supabase/server";
+import { upcomingDates, type WorkingDayInfo } from "@/lib/working-days-shape";
 
 export type ItemDecision = {
   id: string;
@@ -141,6 +142,11 @@ export type PanelPayload = {
    * snap the saved value — Sundays and the holidays table, one implementation.
    */
   defaultFollowUpDate: string | null;
+  /**
+   * §54.2. The working-day arithmetic for the follow-up chips, and the closed
+   * dates near enough to matter, so the manual box can say why a date is shut.
+   */
+  calendar: WorkingDayInfo | null;
   /** The at-a-glance block (§21.2) needs the same facts the history shows. */
   status: EnquiryStatus;
   sourceNames: string[];
@@ -208,6 +214,20 @@ export async function loadPanelEnquiry(
    * same refusal it always did.
    */
   const nextDayPromise = supabase.rpc("next_working_day", {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any);
+  /**
+   * §54.2. The picker's chips, and which of the next few weeks' dates are
+   * closed — computed where the arithmetic lives.
+   *
+   * "+3 days" used to be Date + 3, so a Thursday offered a Sunday, and the
+   * trigger on calls then silently stored the Monday. The chip and the record
+   * disagreed about what the counsellor had just promised the student. Same
+   * round trip as the working-day default above, so it costs nothing.
+   */
+  const calendarPromise = supabase.rpc("working_day_info", {
+    p_offsets: [1, 3, 7],
+    p_dates: upcomingDates(istToday(), 45),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
   const viewerPromise = requireUser();
@@ -288,6 +308,7 @@ export async function loadPanelEnquiry(
   // Both in flight since before the enquiry came back; this is where the
   // answer is finally needed.
   const nextDay = await nextDayPromise;
+  const calendar = await calendarPromise;
 
   const sourceNames = [
     ...new Set(
@@ -315,6 +336,7 @@ export async function loadPanelEnquiry(
       importance: data.importance as Importance | null,
       leadVerification: data.lead_verification as LeadVerification | null,
       defaultFollowUpDate: (nextDay.data as string | null) ?? null,
+      calendar: (calendar.data as unknown as WorkingDayInfo | null) ?? null,
       status: data.status as EnquiryStatus,
       sourceNames,
       nextFollowUpDate: data.next_follow_up_date,

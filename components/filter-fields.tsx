@@ -326,7 +326,19 @@ export function CommonFilterFields({
         <Input name="q" defaultValue={selected.q ?? ""} placeholder="text in any call note" />
       </Labelled>
 
-      <Labelled label="Enquired between" wide>
+      {/* §54.4. The label says which date the window is about.
+          With people named in "Called by" the window is the call window and
+          arrival is not consulted; with nobody named it is the arrival window.
+          One control, two meanings, and the only honest way to run it is to
+          say out loud which one is in force. */}
+      <Labelled
+        label={
+          calledBy && calledBy.values.some((v) => v !== ALL_CALLERS)
+            ? "Called between"
+            : "Enquired between"
+        }
+        wide
+      >
         {/* §50.1. The quick ranges sit above the free dates rather than
             replacing them: one click covers the four windows anybody actually
             asks for, and the boxes are still there for the fifth. */}

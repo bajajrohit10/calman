@@ -10,9 +10,9 @@ import { Button, ErrorNote } from "@/components/ui";
 import type { StudentHistory } from "@/lib/students";
 
 import { lookupMobile, setMyQuickAddTab } from "./actions";
-import { QuickAddGrid } from "./grid";
+import { QuickAddGrid, type QuickAddMode } from "./grid";
 
-type Tab = "normal" | "ac";
+type Tab = QuickAddMode;
 
 export type QuickAddMasters = PanelMasters & {
   sources: { id: string; name: string }[];
@@ -132,15 +132,16 @@ export function QuickAdd({
     <div className="flex flex-col gap-4">
       {error ? <ErrorNote>{error}</ErrorNote> : null}
 
-      {/* §48.3. Two ways of arriving at the same thing: a call coming in, and
-          a stack of AC entries being keyed afterwards. They want different
-          columns and the second wants a time — but they are the same rules
-          underneath, so they are two tabs over one grid rather than two
-          screens. */}
+      {/* §54.1. Three ways of arriving at the same enquiry.
+          A call happening now, a stack of numbers being keyed, and a batch of
+          AC entries being caught up on. They want different columns and the
+          last wants a time — but they are the same rules underneath, so they
+          are three tabs over one grid rather than three screens. */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="inline-flex overflow-hidden rounded-md border border-line-2">
           {([
-            { key: "normal" as const, label: "Normal" },
+            { key: "one" as const, label: "One by one" },
+            { key: "multi" as const, label: "Multiple add" },
             { key: "ac" as const, label: "AC" },
           ]).map((t) => (
             <button
@@ -161,7 +162,9 @@ export function QuickAdd({
         <span className="text-[11.5px] text-ink-3">
           {tab === "ac"
             ? "Every row is an AC arrival. The time defaults to now — change it for an entry you are keying later."
-            : "One row per number, as the phone rings."}
+            : tab === "one"
+              ? "One call at a time. Type what was said while you are still on it; the number can come last."
+              : "A number per row, as fast as you can key them."}
         </span>
       </div>
 
