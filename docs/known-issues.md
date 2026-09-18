@@ -114,6 +114,92 @@ create index concurrently enquiries_ticket_queue_idx
 
 ---
 
+## The lag on save and tab switch is contention, not queries
+
+**Status: measured, not fixed. Brief 7 Item 4 was a measurement, by instruction.**
+
+Counsellors reported a delay saving in Quick Add and switching tabs on My Day
+and New Calls. Measured on production as `counsellor.test`, three runs each, on
+2026-09-18 between 11:20 and 11:40 IST.
+
+On an idle instance, nothing is slow:
+
+| Flow | Wall | Server | Client |
+|---|---|---|---|
+| Quick Add, save 5 rows | 565 / 651 / 787 ms | 478–603 ms | 5–19 ms |
+| My Day, New Calls → Assigned → Tickets | 250–366 ms | 106–244 ms | 6–20 ms |
+| New Calls, Video → Books → Unknown | 274–864 ms | 259–849 ms | 5–15 ms |
+| Enquiries, Today → This week | 258–328 ms | 239–296 ms | 12–32 ms |
+
+Thirty sequential RSC fetches of `/my-day?tab=assigned` gave p50 241 ms, p90
+280 ms, max 860 ms, with no outlier. Every RPC behind these screens runs in
+13–37 ms under `authenticated` with RLS on, all from shared buffers
+(`enquiries_table` 20.6 ms, `recommended_calls` 36.5 ms, `recommended_facets`
+37.4 ms, `tickets_list` 32.5 ms, `new_calls_pool` 13.3 ms,
+`enquiries_called_by_facets` 13.3 ms). No index was lost to the recent
+migrations: nothing in these paths reaches a sequential scan.
+
+**What is slow is the same request while the instance is busy.** Every page
+load fires **14 router prefetches**: the seven routes a counsellor's sidebar
+links to (`/my-day`, `/new-calls`, `/quick-add`, `/import`, `/tickets`,
+`/enquiries`, `/reports`), each fetched twice, in two waves. Each is a full
+server render of that route with its real queries. They land 1.3–1.9 s after
+load, which is exactly when somebody clicks. Reproducing that burst and timing
+one ordinary request inside it:
+
+| Run | Same request, idle | With 14 prefetches in flight |
+|---|---|---|
+| 1 | ~240 ms | **1,381 ms** |
+| 2 | ~240 ms | **40,031 ms** |
+| 3 | ~240 ms | **1,785 ms** |
+
+Three separate ≈10.5 s events were also caught in ordinary use — a
+`domContentLoaded` of 10,504 ms on a load whose TTFB was 120 ms, a My Day tab
+switch whose response ended at 10,556 ms, and a New Calls tab whose response
+ended at 10,488 ms — all with a fast first byte and a slow body, which is what
+waiting for an instance looks like from the browser.
+
+A click that lands before hydration is **lost, not delayed**: it fires no
+request at all and the tab does not move. With a load that streams for ten
+seconds, that window is ten seconds wide, and the counsellor's second and third
+clicks are the ones that count.
+
+**Checked and cleared:**
+
+- Supabase has not paused or restarted. `pg_postmaster_start_time()` is
+  2026-09-10 11:31 UTC — the project's own creation — and `supabase projects
+  list` reports `ACTIVE_HEALTHY`.
+- The keep-warm route is deployed and answering (401 in 240–347 ms, which is
+  itself a warm instance; `CRON_SECRET` is set, so it cannot be called by hand).
+
+**Not verified:** whether the Vercel cron actually fired this week. That needs
+the Vercel cron log or CLI, neither of which is available from here.
+
+**The Brief 46 baseline is not in this file.** It is in the commit message of
+095d849: warm ≈120 ms TTFB, a cold start 534 ms, one stall at 8.1 s. The warm
+figure still holds exactly — 62–120 ms TTFB across every measurement above.
+What has grown since is the number of requests each page load fires at that
+instance.
+
+**Proposed fixes, cheapest first — none applied:**
+
+1. `prefetch={false}` on the sidebar links (`app/(app)/sidebar.tsx`). Fourteen
+   full server renders per page view buy a warm router cache for pages the
+   counsellor may never open, and cost the one they are looking at. The
+   sidebar's links already `preventDefault` and `router.push` themselves for
+   the unsaved-work guard, so the prefetch is buying less than it looks.
+2. Find out why each route is prefetched **twice** rather than once, and stop
+   the second wave. The sidebar renders each link once, so the doubling is
+   coming from the router, not from the markup — worth an hour before
+   accepting it.
+3. Make the tab controls survive a pre-hydration click — render them as real
+   `<a href>` so the browser navigates even before React attaches, rather than
+   as buttons whose first click is discarded. This is the difference between
+   "slow" and "did nothing", and it is the one counsellors describe.
+4. Only if 1–3 leave a gap: raise the Vercel function concurrency, or widen the
+   keep-warm cron to hold more than one instance. Both cost money and neither
+   addresses a page asking for 14 renders of itself.
+
 ## Deliberate audit gaps
 
 The audit log is meant to be complete. There is exactly one place it is not,

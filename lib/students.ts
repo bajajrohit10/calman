@@ -92,6 +92,13 @@ export type HistoryEnquiry = {
     source: { name: string } | null;
   }[];
   product_text: string | null;
+  /**
+   * §7.1: what was said before anybody logged a call.
+   *
+   * Written once in Quick Add and never overwritten by a call note, so it
+   * stays readable as the thing that started the conversation.
+   */
+  pre_call_note: string | null;
   /** §47.2: a ticket's own fields, so the details editor opens holding them. */
   order_id: string | null;
   teacher_id: string | null;
@@ -133,7 +140,7 @@ export type StudentHistory = {
 const SELECT = `
   id, mobile, name, created_at,
   enquiries (
-    id, type, status, product_text, order_id, teacher_id, importance, lead_verification,
+    id, type, status, product_text, pre_call_note, order_id, teacher_id, importance, lead_verification,
     lost_reason, close_reason, next_follow_up_date, term_id, source_id, fresh_call_date,
     follow_up_slots_used, created_at, closed_at, archived_at, re_enquired_at,
     source:sources ( name ),

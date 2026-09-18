@@ -65,6 +65,11 @@ export type EnquiryFilters = {
   stages?: string[] | null;
   lastCalledFrom?: string | null;
   lastCalledTo?: string | null;
+  /**
+   * §7.2: enquiries with at least one call by one of these people, inside the
+   * created-date window. Empty means anyone, which is also what "All" means.
+   */
+  calledBy?: string[] | null;
   includeArchived?: boolean;
   sort?: string;
   dir?: "asc" | "desc";
@@ -100,6 +105,7 @@ export async function loadEnquiries(
     p_stages: f.stages?.length ? f.stages : undefined,
     p_last_called_from: clean(f.lastCalledFrom),
     p_last_called_to: clean(f.lastCalledTo),
+    p_called_by: f.calledBy?.length ? f.calledBy : undefined,
     p_include_archived: f.includeArchived ?? false,
     p_sort: f.sort ?? "created_at",
     p_dir: f.dir ?? "desc",

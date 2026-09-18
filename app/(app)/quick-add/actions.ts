@@ -61,6 +61,8 @@ export type NewEnquiryInput = {
   type: EnquiryType;
   sourceId: string | null;
   productText: string | null;
+  /** §7.1. What was said before there was a number to attach it to. */
+  discussion: string | null;
   termId: string | null;
   importance: Importance | "" | null;
   leadVerification: LeadVerification | "" | null;
@@ -158,6 +160,7 @@ export async function createEnquiry(
       type: input.type,
       source_id: input.sourceId || null,
       product_text: input.productText?.trim() || null,
+      pre_call_note: input.discussion?.trim() || null,
       term_id: input.termId || null,
       importance: input.importance || null,
       lead_verification: input.leadVerification || null,
@@ -227,6 +230,8 @@ export type BulkRowInput = {
   sourceId: string | null;
   /** §48.3: what the student asked about, optional on both grids. */
   productText?: string | null;
+  /** §7.1. The pre-call note, typed before the number in tab order. */
+  discussion?: string | null;
   /**
    * §48.3. When the arrival really happened — the AC grid's own column. Null
    * on a Normal row, where the row is being typed as the call comes in and
@@ -471,6 +476,7 @@ export async function createManyEnquiries(
       type: "after_sale",
       sourceId: job.row.sourceId,
       productText: null,
+      discussion: null,
       termId: null,
       importance: null,
       leadVerification: null,
@@ -696,6 +702,7 @@ async function createMany(
         type: "purchase",
         source_id: j.row.sourceId,
         product_text: j.row.productText?.trim() || null,
+        pre_call_note: j.row.discussion?.trim() || null,
         // §48.3. Only ever what the grid was told. A Normal row sends null and
         // the enquiry falls back to created_at, which for a number typed as
         // the phone rings is the same instant anyway.

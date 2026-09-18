@@ -243,6 +243,17 @@ export const LAST_OUTCOME_FILTER = [
  */
 export const NO_DETAIL = "__none__";
 
+/**
+ * §7.2. "Called by: everyone", said out loud.
+ *
+ * An empty multi-select normally means "any", but this one has a default that
+ * is not "any" — a counsellor opens the screen on their own name — so "any"
+ * has to be a thing you can pick rather than a thing you get by picking
+ * nothing. Clearing the box falls back to the default, which is what a
+ * counsellor who cleared it by accident would want.
+ */
+export const ALL_CALLERS = "__all__";
+
 export type StageFilter = keyof typeof STAGE_FILTER_LABELS;
 
 /**

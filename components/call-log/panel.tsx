@@ -99,6 +99,8 @@ export type PanelEnquiry = {
   mobile: string;
   term: string | null;
   productText: string | null;
+  /** §7.1. The pre-call note, if Quick Add captured one. */
+  preCallNote?: string | null;
   slotsUsed: number;
   termId: string | null;
   sourceId: string | null;
@@ -333,7 +335,14 @@ export function CallLogPanel({
   const [itemError, setItemError] = useState<string | null>(null);
   const openItems = items.filter((i) => i.status === "open");
 
-  const [discussion, setDiscussion] = useState("");
+  /**
+   * §7.1. The Note starts as whatever was written before the call.
+   *
+   * A counsellor who typed the discussion into Quick Add and then opened the
+   * call should not have to retype it, and should not find an empty box that
+   * makes them wonder whether it saved.
+   */
+  const [discussion, setDiscussion] = useState(enquiry.preCallNote ?? "");
   // Graded on the call, not remembered and edited later (Brief 16). Seeded
   // from the enquiry so an unchanged call re-saves what was already there.
   const [importance, setImportance] = useState<Importance | "">(

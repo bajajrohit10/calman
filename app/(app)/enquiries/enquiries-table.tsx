@@ -35,6 +35,7 @@ import {
   statusTone,
 } from "@/lib/enquiry-labels";
 import type { EnquiryRow } from "@/lib/enquiries";
+import type { FacetMap } from "@/lib/facet-shape";
 import {
   ENQUIRY_RANGES,
   rangeCountLabel,
@@ -44,16 +45,24 @@ import { formatArrived, formatDate } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
 
 /** Sortable columns, and the label each header shows. */
+/**
+ * Sortable columns, the label each header shows, and how wide it is.
+ *
+ * §7.3 made the widths explicit because the table is now `table-fixed`: the
+ * note is a third of it by instruction, and under automatic layout a third was
+ * a suggestion the other eleven columns outvoted — a 667-character note got
+ * 77 pixels and a row 1,436 pixels tall.
+ */
 const SORTABLE = [
-  { key: "created_at", label: "Created" },
-  { key: "student_name", label: "Student" },
-  { key: "mobile", label: "Mobile" },
-  { key: "type", label: "Type" },
-  { key: "status", label: "Status" },
-  { key: "importance", label: "Imp" },
-  { key: "next_follow_up_date", label: "Follow-up" },
-  { key: "last_call_at", label: "Last call" },
-  { key: "slots", label: NEXT_FOLLOW_UP_HEADER },
+  { key: "created_at", label: "Created", w: "w-[6.5%]" },
+  { key: "student_name", label: "Student", w: "w-[8.5%]" },
+  { key: "mobile", label: "Mobile", w: "w-[8%]" },
+  { key: "type", label: "Type", w: "w-[5.5%]" },
+  { key: "status", label: "Status", w: "w-[6.5%]" },
+  { key: "importance", label: "Imp", w: "w-[3.5%]" },
+  { key: "next_follow_up_date", label: "Follow-up", w: "w-[6%]" },
+  { key: "last_call_at", label: "Last call", w: "w-[6.5%]" },
+  { key: "slots", label: NEXT_FOLLOW_UP_HEADER, w: "w-[6.5%]" },
 ] as const;
 
 /**
@@ -80,6 +89,9 @@ export function EnquiriesTable({
   multi,
   panelMasters,
   selected,
+  calledBy,
+  facets,
+  facetError,
 }: {
   rows: EnquiryRow[];
   total: number;
@@ -101,6 +113,11 @@ export function EnquiriesTable({
   multi?: Record<string, string[]>;
   panelMasters: PanelMasters;
   selected: Record<string, string>;
+  /** §7.2: who can be picked, and who is picked. */
+  calledBy: { roster: { id: string; name: string }[]; values: string[] };
+  /** §7.2: counts for that one filter, when they agree with the list. */
+  facets?: FacetMap;
+  facetError?: string | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState<PanelPayload | null>(null);
@@ -160,6 +177,7 @@ export function EnquiriesTable({
             selected={selected}
             multi={multi}
             roster={roster}
+            calledBy={{ ...calledBy, facets }}
             quickRange={<QuickRange active={range} search={search} />}
           />
 
@@ -240,6 +258,11 @@ export function EnquiriesTable({
       </form>
 
       {error ? <ErrorNote>{error}</ErrorNote> : null}
+      {facetError ? (
+        <p className="text-[12px] text-warn" role="status">
+          {facetError}
+        </p>
+      ) : null}
       {loadError ? <ErrorNote>{loadError}</ErrorNote> : null}
 
       {open ? (
@@ -267,17 +290,24 @@ export function EnquiriesTable({
 
       <div className={cx("gap-3 xl:flex-row", open ? "hidden" : "flex flex-col")}>
         <div className="min-w-0 flex-1 overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
-          <table className="w-full min-w-[1000px] border-collapse text-[12.5px]">
+          {/* table-fixed, and a minimum the widths are computed against: the
+              columns are percentages now, so the table is exactly as wide as
+              the space it is given and never pushes a scrollbar under itself
+              at 1024px. Below that it scrolls, as it always did. */}
+          <table className="w-full min-w-[880px] table-fixed border-collapse text-[12.5px]">
             <thead>
-              <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+              {/* §7.3. Headers break too. At 1024px "Follow-up" is wider
+                  than the column it names, and one word sticking out is the
+                  whole table needing a scrollbar. */}
+              <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3 [&>th]:break-words">
                 {SORTABLE.map((col) => {
                   const active = sort === col.key;
                   const nextDir = active && dir === "asc" ? "desc" : "asc";
                   return (
-                    <th key={col.key} className="px-1.5 py-[7px]">
+                    <th key={col.key} className={cx(col.w, "px-1.5 py-[7px]")}>
                       <Link
                         href={withParam({ sort: col.key, dir: nextDir, page: "" })}
-                        className="inline-flex items-center gap-1 hover:text-ink"
+                        className="inline-flex min-w-0 flex-wrap items-center gap-1 hover:text-ink"
                       >
                         {col.label}
                         {active ? <span>{dir === "asc" ? "▲" : "▼"}</span> : null}
@@ -285,9 +315,13 @@ export function EnquiriesTable({
                     </th>
                   );
                 })}
-                <th className="px-1.5 py-[7px]">Teachers</th>
-                <th className="px-1.5 py-[7px]">Last note</th>
-                <th className="px-1.5 py-[7px]">Assigned</th>
+                <th className="w-[5.5%] px-1.5 py-[7px]">Teachers</th>
+                {/* §7.3. A third of the table, because the note is what
+                    the screen is read for; the rest of the columns are
+                    reference and were the ones being protected by the
+                    truncation. A long note grows the row, not the table. */}
+                <th className="w-[31%] px-1.5 py-[7px]">Last note</th>
+                <th className="w-[6%] px-1.5 py-[7px]">Assigned</th>
               </tr>
             </thead>
             <tbody>
@@ -296,12 +330,15 @@ export function EnquiriesTable({
                   key={r.enquiry_id}
                   onClick={() => openRow(r)}
                   className={cx(
-                    "border-b border-line last:border-b-0",
+                    // §7.3. Cells sit at the top now that a row can be four
+                    // lines tall — vertically centred dates beside a long
+                    // note read as belonging to a different row.
+                    "border-b border-line last:border-b-0 [&>td]:align-top [&>td]:break-words",
                     r.status === "open" && "cursor-pointer hover:bg-sunk/40",
                     open?.id === r.enquiry_id && "bg-accent-soft/40",
                   )}
                 >
-                  <td className="px-1.5 py-[5px] whitespace-nowrap text-ink-3">
+                  <td className="px-1.5 py-[5px] text-ink-3">
                     {formatArrived(r.arrived_at ?? r.created_at)}
                   </td>
                   <td className="px-1.5 py-[5px] text-ink">{r.student_name || "No name"}</td>
@@ -339,10 +376,10 @@ export function EnquiriesTable({
                       <span className="text-ink-3">—</span>
                     )}
                   </td>
-                  <td className="px-1.5 py-[5px] whitespace-nowrap tabular-nums text-ink-2">
+                  <td className="px-1.5 py-[5px] tabular-nums text-ink-2">
                     {r.next_follow_up_date ? formatDate(r.next_follow_up_date) : "—"}
                   </td>
-                  <td className="px-1.5 py-[5px] whitespace-nowrap text-ink-3">
+                  <td className="px-1.5 py-[5px] text-ink-3">
                     {r.last_outcome ? (
                       <>
                         {OUTCOME_SHORT[r.last_outcome]}
@@ -355,7 +392,7 @@ export function EnquiriesTable({
                   {/* §45.1. A ticket has no follow-up ladder, and naming one
                       is worse than the "0/3" this replaced: that read as
                       meaningless, this reads as an instruction. */}
-                  <td className="px-1.5 py-[5px] whitespace-nowrap text-ink-3">
+                  <td className="px-1.5 py-[5px] text-ink-3">
                     {r.type === "after_sale"
                       ? "—"
                       : nextFollowUpLabel(
@@ -364,7 +401,7 @@ export function EnquiriesTable({
                         )}
                   </td>
                   <td className="px-1.5 py-[5px] text-ink-2">{r.teacher_names ?? "—"}</td>
-                  <td className="max-w-[260px] truncate px-1.5 py-[5px] text-ink-3">
+                  <td className="px-1.5 py-[5px] align-top text-ink-3 whitespace-pre-wrap break-words">
                     {r.last_discussion ?? "—"}
                   </td>
                   <td className="px-1.5 py-[5px] text-ink-3">{r.assigned_to_name ?? "—"}</td>

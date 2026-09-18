@@ -7,6 +7,7 @@ import { useMemo } from "react";
 import { MultiSelect } from "@/components/multi-select";
 import { FIELD_LABEL, FILLED, Input, Select, cx } from "@/components/ui";
 import {
+  ALL_CALLERS,
   IMPORTANCE_LABELS,
   LAST_OUTCOME_FILTER,
   NO_DETAIL,
@@ -159,6 +160,7 @@ export function CommonFilterFields({
   multi,
   noDetail = false,
   quickRange,
+  calledBy,
 }: {
   masters: FilterMasters;
   selected: Record<string, string>;
@@ -175,6 +177,11 @@ export function CommonFilterFields({
   noDetail?: boolean;
   /** §50.1: the Enquiries screen's range buttons. Absent on the desk. */
   quickRange?: React.ReactNode;
+  /**
+   * §7.2: the Enquiries screen's "Called by". Absent on the desk, which has
+   * "Last called by" instead and no parser branch for this one.
+   */
+  calledBy?: { roster: FilterMaster[]; values: string[]; facets?: FacetMap };
 }) {
   const contentChoices = contentOptions(masters.contents, facets?.byFacet.content);
   const subjectsForCourse = useMemo(
@@ -330,6 +337,27 @@ export function CommonFilterFields({
           <Input className="min-w-0 flex-1" type="date" name="createdTo" defaultValue={selected.createdTo ?? ""} />
         </div>
       </Labelled>
+
+      {/* §7.2. Beside "Enquired between", because the two are read as one
+          sentence: "called by me, of the ones that came in today". The window
+          the calls are counted in is that one — a second date pair here would
+          be a second thing to keep in step and a question nobody asked. */}
+      {calledBy ? (
+        <Labelled label="Called by" wide>
+          <MultiSelect
+            name="calledBy"
+            facet="called_by"
+            options={[{ id: ALL_CALLERS, name: "All" }, ...calledBy.roster]}
+            values={calledBy.values}
+            // Its own map, not the bar's: Enquiries has counts for this one
+            // filter and none for the rest, and a shared map would have shown
+            // every other option as "(0)" and greyed it out.
+            facets={calledBy.facets}
+            exclusive={ALL_CALLERS}
+            anyLabel="All"
+          />
+        </Labelled>
+      ) : null}
 
       <Labelled label="Follow-up between" wide>
         <div className="flex min-w-0 items-center gap-1.5">

@@ -33,6 +33,7 @@ export function MultiSelect({
   values,
   facets,
   anyLabel = "Any",
+  exclusive,
   onChange,
 }: {
   name: string;
@@ -42,6 +43,13 @@ export function MultiSelect({
   values: string[];
   facets?: FacetMap;
   anyLabel?: string;
+  /**
+   * §7.2. An option that cannot share the box — "All" on the Called by
+   * filter. Picking it drops everything else; picking anybody else drops it.
+   * The parser behind the form would let "All" win either way, but a button
+   * reading "All, +1" is a control disagreeing with itself.
+   */
+  exclusive?: string;
   /**
    * For the screens that are not a GET form. The hidden inputs below are how
    * every filter bar uses this; the offer editor saves through a server action
@@ -103,7 +111,15 @@ export function MultiSelect({
   }
 
   function toggle(id: string) {
-    update(selected.includes(id) ? selected.filter((v) => v !== id) : [...selected, id]);
+    if (selected.includes(id)) {
+      update(selected.filter((v) => v !== id));
+      return;
+    }
+    if (exclusive !== undefined && id === exclusive) {
+      update([id]);
+      return;
+    }
+    update([...selected.filter((v) => v !== exclusive), id]);
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
@@ -204,7 +220,13 @@ export function MultiSelect({
               type="button"
               className="text-ink-2 underline-offset-2 hover:underline"
               onClick={() =>
-                update([...new Set([...selected, ...visible.map((o) => o.id)])])
+                update([
+                  ...new Set(
+                    [...selected, ...visible.map((o) => o.id)].filter(
+                      (v) => v !== exclusive,
+                    ),
+                  ),
+                ])
               }
             >
               Select all in view

@@ -635,6 +635,23 @@ function NowCard({
           <Fact label="Term">{enquiry.term?.name ?? "—"}</Fact>
         </dl>
 
+        {/* §7.1. What was said before the first call was logged.
+            Kept beside the interests rather than folded into the last note:
+            it is the only thing on the card written before anybody dialled,
+            and a counsellor picking the number up cold reads it first. */}
+        {enquiry.pre_call_note ? (
+          <div className="border-t border-line px-4 py-2.5">
+            <span className="inline-flex max-w-full items-start gap-2 rounded-lg border border-accent/40 bg-accent-soft/30 px-2 py-1 text-[11.5px] text-ink-2">
+              <span className="shrink-0 pt-[1px] text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+                Pre-call note
+              </span>
+              <span className="min-w-0 whitespace-pre-wrap text-ink">
+                {enquiry.pre_call_note}
+              </span>
+            </span>
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap items-center gap-1.5 border-t border-line px-4 py-2.5">
           {openItems.length ? (
             openItems.map((i) => (
@@ -743,11 +760,14 @@ function CallsTable({
             {/* §35.3. Remarks moved up beside the counsellor and takes the
                 width, because it is the column anybody actually reads; the
                 enquiry number and the stage are reference, so they sit at
-                the end where reference belongs. */}
+                the end where reference belongs.
+                §7.3: and it is now a third of the table rather than whatever
+                the other seven leave over — a long note makes the row taller,
+                never the table wider. */}
             <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
               <th className="w-[130px] px-1.5 py-[7px]">Date/time</th>
               <th className="w-[110px] px-1.5 py-[7px]">Counsellor</th>
-              <th className="px-1.5 py-[7px]">Remarks</th>
+              <th className="w-[33%] px-1.5 py-[7px]">Remarks</th>
               <th className="w-[110px] px-1.5 py-[7px]">Outcome</th>
               <th className="w-[95px] px-1.5 py-[7px]">Follow-up</th>
               <th className="w-[70px] px-1.5 py-[7px]">Enquiry #</th>
@@ -762,7 +782,7 @@ function CallsTable({
                   {formatDateTime(r.at)}
                 </td>
                 <td className="px-1.5 py-[5px] text-ink-2">{r.counsellor}</td>
-                <td className="px-1.5 py-[5px] text-ink-2">
+                <td className="w-[33%] px-1.5 py-[5px] align-top text-ink-2 whitespace-pre-wrap break-words">
                   {r.remarks || "—"}
                   {r.call ? (
                     <EditCallRow

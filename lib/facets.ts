@@ -2,6 +2,7 @@ import { splitContentIds } from "@/lib/call-type";
 import "server-only";
 
 import { buildFacetMap, type FacetMap, type FacetRow } from "@/lib/facet-shape";
+import type { EnquiryFilters } from "@/lib/enquiries";
 import type { NewCallsArgs } from "@/app/(app)/new-calls/filters";
 import type { RecommendedFilters } from "@/lib/recommended";
 import { createClient } from "@/lib/supabase/server";
@@ -95,6 +96,50 @@ export async function loadNewCallsFacets(args: NewCallsArgs): Promise<Loaded> {
       p_created_from: args.p_created_from,
       p_created_to: args.p_created_to,
       p_product_text: args.p_product_text,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+    .limit(FACET_CEILING);
+
+  return finish(data as unknown as FacetRow[] | null, error?.message ?? null);
+}
+
+/**
+ * §7.2. The one facet the Enquiries bar has.
+ *
+ * Every other filter on that screen is countless — it was built before §5.5
+ * and never caught up — so this asks for "Called by" alone rather than
+ * pretending to be a full facet set. The `_total` row comes back with it, so
+ * `facetsAgreeWithList` can do its job here exactly as it does on the desk.
+ */
+export async function loadEnquiriesCalledByFacets(f: EnquiryFilters): Promise<Loaded> {
+  const supabase = await createClient();
+  const clean = <T>(v: T | null | undefined) => (v === null || v === "" ? undefined : v);
+
+  const { data, error } = await supabase
+    .rpc("enquiries_called_by_facets", {
+      p_type: clean(f.type),
+      p_status: clean(f.status),
+      p_lost_reason: clean(f.lostReason),
+      p_close_reason: clean(f.closeReason),
+      p_counsellor_id: clean(f.counsellorId),
+      p_teacher_ids: f.teacherIds?.length ? f.teacherIds : undefined,
+      p_course_id: clean(f.courseId),
+      p_subject_id: clean(f.subjectId),
+      p_content_ids: f.contentIds?.length ? f.contentIds : undefined,
+      p_term_id: clean(f.termId),
+      p_source_id: clean(f.sourceId),
+      p_importance: f.importance?.length ? f.importance : undefined,
+      p_created_from: clean(f.createdFrom),
+      p_created_to: clean(f.createdTo),
+      p_follow_up_from: clean(f.followUpFrom),
+      p_follow_up_to: clean(f.followUpTo),
+      p_discussion: clean(f.discussion),
+      p_mobile: clean(f.mobile),
+      p_include_archived: f.includeArchived ?? false,
+      p_stages: f.stages?.length ? f.stages : undefined,
+      p_last_called_from: clean(f.lastCalledFrom),
+      p_last_called_to: clean(f.lastCalledTo),
+      p_called_by: f.calledBy?.length ? f.calledBy : undefined,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any)
     .limit(FACET_CEILING);

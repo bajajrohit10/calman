@@ -779,6 +779,139 @@ export type Database = {
       [_ in never]: never
     }
   }
+  app: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      archive_enquiries: {
+        Args: { p_filter: Json; p_ids: number[] }
+        Returns: string
+      }
+      archive_match: {
+        Args: {
+          p_archived?: boolean
+          p_created_from?: string
+          p_created_to?: string
+          p_lost_reason?: Database["public"]["Enums"]["lost_reason"]
+          p_statuses?: Database["public"]["Enums"]["enquiry_status"][]
+          p_type?: Database["public"]["Enums"]["enquiry_type"]
+        }
+        Returns: {
+          enquiry_id: number
+        }[]
+      }
+      archive_surface_check: {
+        Args: { p_enquiry_id: number }
+        Returns: {
+          sees_it: boolean
+          surface: string
+        }[]
+      }
+      confirm_batch_export: { Args: { p_batch_id: string }; Returns: undefined }
+      derive_call_type: { Args: { p_text: string }; Returns: string }
+      enquiry_stage: {
+        Args: {
+          p_fresh_call_date: string
+          p_last_outcome: Database["public"]["Enums"]["call_outcome"]
+          p_slots_used: number
+        }
+        Returns: string
+      }
+      import_add_warning: {
+        Args: { p_batch_id: string; p_warning: string }
+        Returns: undefined
+      }
+      import_lookup: {
+        Args: { p_mobiles: string[] }
+        Returns: {
+          assigned_to: string
+          closed_as: string
+          closed_on: string
+          enquiry_count: number
+          last_call_at: string
+          last_call_by: string
+          last_call_date: string
+          mobile: string
+          open_enquiry_id: number
+          state: string
+          student_id: string
+          student_name: string
+          ticket_enquiry_id: number
+          ticket_note_by: string
+          ticket_note_on: string
+          ticket_status: string
+        }[]
+      }
+      import_re_enquire: {
+        Args: {
+          p_clear_follow_up?: boolean
+          p_enquiry_id: number
+          p_import_batch_id?: string
+          p_importance?: Database["public"]["Enums"]["importance"]
+          p_lead_verification?: Database["public"]["Enums"]["lead_verification"]
+          p_product_text?: string
+          p_source_id?: string
+          p_term_id?: string
+        }
+        Returns: string
+      }
+      import_re_enquire_many: {
+        Args: { p_import_batch_id?: string; p_rows: Json }
+        Returns: {
+          enquiry_id: number
+          message: string
+          ok: boolean
+        }[]
+      }
+      is_accounts: { Args: never; Returns: boolean }
+      is_admin: { Args: never; Returns: boolean }
+      is_staff: { Args: never; Returns: boolean }
+      is_working_day: { Args: { d: string }; Returns: boolean }
+      ist_today: { Args: never; Returns: string }
+      move_assignments: {
+        Args: {
+          p_buckets: Database["public"]["Enums"]["assignment_bucket"][]
+          p_count: number
+          p_date: string
+          p_enquiry_ids: number[]
+          p_from: string
+          p_target_date: string
+          p_to: string
+        }
+        Returns: {
+          moved: number
+          skipped: number
+        }[]
+      }
+      next_working_day: { Args: { d: string }; Returns: string }
+      purge_archived: {
+        Args: { p_expected_count: number; p_ids: number[] }
+        Returns: {
+          purged_assignments: number
+          purged_calls: number
+          purged_enquiries: number
+          purged_import_rows: number
+          purged_items: number
+          purged_whatsapp_sends: number
+        }[]
+      }
+      recompute_enquiry: { Args: { p_enquiry_id: number }; Returns: undefined }
+      role: { Args: never; Returns: Database["public"]["Enums"]["user_role"] }
+      supersede_enquiry: { Args: { p_enquiry_id: number }; Returns: undefined }
+      unarchive_batch: { Args: { p_batch_id: string }; Returns: number }
+      unarchive_enquiry: { Args: { p_id: number }; Returns: undefined }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       archive_batches: {
@@ -1118,6 +1251,7 @@ export type Database = {
           lost_reason: Database["public"]["Enums"]["lost_reason"] | null
           next_follow_up_date: string | null
           order_id: string | null
+          pre_call_note: string | null
           product_text: string | null
           re_enquired_at: string | null
           reopened_from_enquiry_id: number | null
@@ -1152,6 +1286,7 @@ export type Database = {
           lost_reason?: Database["public"]["Enums"]["lost_reason"] | null
           next_follow_up_date?: string | null
           order_id?: string | null
+          pre_call_note?: string | null
           product_text?: string | null
           re_enquired_at?: string | null
           reopened_from_enquiry_id?: number | null
@@ -1186,6 +1321,7 @@ export type Database = {
           lost_reason?: Database["public"]["Enums"]["lost_reason"] | null
           next_follow_up_date?: string | null
           order_id?: string | null
+          pre_call_note?: string | null
           product_text?: string | null
           re_enquired_at?: string | null
           reopened_from_enquiry_id?: number | null
@@ -2543,8 +2679,42 @@ export type Database = {
       confirm_batch_export: { Args: { p_batch_id: string }; Returns: undefined }
       convert_to_after_sale: { Args: { p_enquiry_id: number }; Returns: number }
       convert_to_purchase: { Args: { p_enquiry_id: number }; Returns: number }
+      enquiries_called_by_facets: {
+        Args: {
+          p_called_by?: string[]
+          p_close_reason?: Database["public"]["Enums"]["close_reason"]
+          p_content_ids?: string[]
+          p_counsellor_id?: string
+          p_course_id?: string
+          p_created_from?: string
+          p_created_to?: string
+          p_discussion?: string
+          p_follow_up_from?: string
+          p_follow_up_to?: string
+          p_importance?: Database["public"]["Enums"]["importance"][]
+          p_include_archived?: boolean
+          p_last_called_from?: string
+          p_last_called_to?: string
+          p_lost_reason?: Database["public"]["Enums"]["lost_reason"]
+          p_mobile?: string
+          p_source_id?: string
+          p_stages?: string[]
+          p_status?: Database["public"]["Enums"]["enquiry_status"]
+          p_subject_id?: string
+          p_teacher_ids?: string[]
+          p_term_id?: string
+          p_type?: Database["public"]["Enums"]["enquiry_type"]
+        }
+        Returns: {
+          facet: string
+          items: number
+          numbers: number
+          value_id: string
+        }[]
+      }
       enquiries_table: {
         Args: {
+          p_called_by?: string[]
           p_close_reason?: Database["public"]["Enums"]["close_reason"]
           p_content_ids?: string[]
           p_counsellor_id?: string
@@ -3333,6 +3503,9 @@ export type CompositeTypes<
 
 export const Constants = {
   accounts: {
+    Enums: {},
+  },
+  app: {
     Enums: {},
   },
   public: {

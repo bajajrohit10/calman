@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/ui";
 import { loadEscalatees } from "@/lib/escalatees";
+import { facetsAgreeWithList, loadEnquiriesCalledByFacets } from "@/lib/facets";
 import { requireUser } from "@/lib/auth";
 import { loadEnquiries } from "@/lib/enquiries";
 import { loadMasters } from "@/lib/masters";
@@ -34,15 +35,25 @@ export default async function Page({
 }) {
   const viewer = await requireUser();
   const sp = await searchParams;
-  const { page, sort, dir, range, filters } = parseEnquiriesParams(read(sp));
+  const { page, sort, dir, range, calledBy, filters } = parseEnquiriesParams(
+    read(sp),
+    viewer.userId && viewer.profile
+      ? { id: viewer.userId, role: viewer.profile.role }
+      : null,
+  );
   const includeArchived = filters.includeArchived ?? false;
 
   // Passed down rather than read from window.location during render: on the
   // server that is empty, so the sort links hydrated with the filters missing
   // — and a click landing before hydration would have dropped them.
+  // Every value of a repeated key, not the first: a multi-select posts its
+  // name once per selection, and keeping only the first meant clicking a sort
+  // header or Next quietly dropped all but one teacher, content or caller.
   const search = new URLSearchParams(
     Object.entries(sp).flatMap(([k, v]) =>
-      v == null ? [] : [[k, Array.isArray(v) ? v[0] : v] as [string, string]],
+      v == null
+        ? []
+        : (Array.isArray(v) ? v : [v]).map((x) => [k, x] as [string, string]),
     ),
   ).toString();
 
@@ -51,7 +62,7 @@ export default async function Page({
   const masters = await loadMasters();
   // §45.3: every active user, for the escalate-to picker in the call window.
   const escalatees = await loadEscalatees();
-  const [list, staff] =
+  const [list, staff, callers, facetResult] =
     await Promise.all([
       loadEnquiries(filters),
       supabase
@@ -59,6 +70,16 @@ export default async function Page({
         .select("id, full_name")
         .eq("is_active", true)
         .order("full_name"),
+      // §7.2. The people who make calls, which is not the same list as the
+      // people who have logins: accounts never rings anybody, so offering the
+      // name would be offering a filter that is always empty.
+      supabase
+        .from("profiles")
+        .select("id, full_name")
+        .eq("is_active", true)
+        .in("role", ["counsellor", "manager", "ticket_team", "super_admin"])
+        .order("full_name"),
+      loadEnquiriesCalledByFacets(filters),
     ]);
 
 
@@ -83,6 +104,22 @@ export default async function Page({
         dir={dir}
         search={search}
         counsellorName={viewer.profile?.full_name ?? null}
+        calledBy={{
+          roster: (callers.data ?? []).map((p) => ({
+            id: p.id,
+            name: p.full_name ?? "(no name)",
+          })),
+          values: calledBy,
+        }}
+        // §5.5's guard, on the one facet this screen has: counts that no
+        // longer agree with the list are not shown at all.
+        facets={facetsAgreeWithList(facetResult.facets, list.total) ?? undefined}
+        facetError={
+          facetResult.error ??
+          (facetResult.facets && facetResult.facets.total !== list.total
+            ? "The filter counts disagreed with the list, so they are hidden."
+            : null)
+        }
         roster={(staff.data ?? []).map((p) => ({
           id: p.id,
           name: p.full_name ?? "(no name)",

@@ -10,7 +10,7 @@ import type {
   LostReason,
 } from "@/lib/enquiry-labels";
 import type { EnquiryFilters } from "@/lib/enquiries";
-import { NO_DETAIL } from "@/lib/enquiry-labels";
+import { ALL_CALLERS, NO_DETAIL } from "@/lib/enquiry-labels";
 import { istToday } from "@/lib/format";
 import type { RecommendedFilters } from "@/lib/recommended";
 
@@ -145,11 +145,27 @@ export function parseDeskParams(get: ParamReader): {
  * once every status is in scope: status itself, why it was lost or closed, a
  * mobile-number search, and the sort.
  */
-export function parseEnquiriesParams(get: ParamReader): {
+/**
+ * §7.2. Who the "Called by" filter means when the URL does not say.
+ *
+ * A counsellor's Enquiries screen opens on their own calls; everyone who
+ * supervises opens on everybody's. The viewer is passed in rather than read
+ * here because the export runs through this same parser on the server and has
+ * to reach the same answer the screen did — a default that lived in the page
+ * would have silently exported a wider set than the one on display.
+ */
+export type FilterViewer = { id: string; role: string };
+
+export function parseEnquiriesParams(
+  get: ParamReader,
+  viewer?: FilterViewer | null,
+): {
   page: number;
   sort: string;
   dir: "asc" | "desc";
   range: EnquiryRangeId;
+  /** What the control shows: real ids, or the single "All" sentinel. */
+  calledBy: string[];
   filters: EnquiryFilters;
 } {
   const page = Math.max(1, Number(str(get, "page") ?? 1) || 1);
@@ -185,12 +201,25 @@ export function parseEnquiriesParams(get: ParamReader): {
       : "today";
   const span = range === "custom" ? { from: rawFrom, to: rawTo } : rangeDates(range);
 
+  // Three states, not two: named people, everybody, and "the URL is silent so
+  // use the default". Only the first narrows anything.
+  const askedCallers = many(get, "calledBy");
+  const calledBy = askedCallers.includes(ALL_CALLERS)
+    ? [ALL_CALLERS]
+    : askedCallers.length
+      ? askedCallers
+      : viewer?.role === "counsellor"
+        ? [viewer.id]
+        : [ALL_CALLERS];
+
   return {
     page,
     sort,
     dir,
     range,
+    calledBy,
     filters: {
+      calledBy: calledBy.includes(ALL_CALLERS) ? [] : calledBy,
       type: str(get, "type") as EnquiryType | null,
       status: str(get, "status") as EnquiryStatus | null,
       lostReason: str(get, "lostReason") as LostReason | null,

@@ -262,7 +262,13 @@ export async function exportCurrentView(
 
   if (input.source === "enquiries") {
     const params = new URLSearchParams(input.search);
-    const { filters } = parseEnquiriesParams((k) => params.get(k));
+    // §7.2. The same viewer the page parsed with, so "Called by" defaults the
+    // same way here. Without it the export would silently widen a counsellor's
+    // default view from their own calls to everybody's.
+    const { filters } = parseEnquiriesParams((k) => params.get(k), {
+      id: viewer.userId!,
+      role: viewer.profile.role,
+    });
     // One probe for the real total before pulling anything wide.
     const probe = await loadEnquiries({ ...filters, limit: 1, offset: 0 });
     if (probe.error) return { error: probe.error };

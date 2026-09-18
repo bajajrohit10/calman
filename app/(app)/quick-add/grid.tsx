@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 
-import { Button, ErrorNote, Input, Select, cx } from "@/components/ui";
+import { Button, ErrorNote, Input, Select, Textarea, cx } from "@/components/ui";
 import { useUnsavedClaim } from "@/components/unsaved-guard";
 import {
   BOTH_OPEN,
@@ -28,6 +28,14 @@ type Row = {
   sourceId: string;
   /** §48.3: both grids carry it; only the AC grid shows it by default. */
   productText: string;
+  /**
+   * §7.1. What was said, typed before the number.
+   *
+   * First in tab order because that is the order the conversation happens in:
+   * the counsellor talks, writes it down, and reads the number off the screen
+   * when the call ends.
+   */
+  discussion: string;
   /** §48.3: AC only — the moment the entry actually came in, as datetime-local. */
   arrivedAt: string;
   status: NumberStatus | null;
@@ -60,6 +68,7 @@ const blank = (arrivedAt = ""): Row => ({
   name: "",
   sourceId: "",
   productText: "",
+  discussion: "",
   arrivedAt,
   status: null,
   decision: null,
@@ -158,6 +167,12 @@ export function QuickAddGrid({
   const filled = rows.filter((r) => r.mobile.trim());
   const invalid = filled.filter((r) => !isValidMobile(normaliseMobile(r.mobile)));
   /**
+   * §7.1. A row with a discussion and no number is somebody mid-call, not an
+   * empty row. Saving around it would throw away what they had just typed
+   * without a word, so it holds the save until the number arrives.
+   */
+  const noteWithoutNumber = rows.filter((r) => r.discussion.trim() && !r.mobile.trim());
+  /**
    * §35.1. The grid no longer asks what kind of enquiry this is, because the
    * answer is not known until somebody has spoken to them — that is what the
    * first-call form's Purchase/After Sale toggle and the call window's
@@ -190,7 +205,9 @@ export function QuickAddGrid({
    */
   const unchosen = filled.filter((r) => r.status && bothOpen(r.status) && !r.pipeline);
   const saveable = filled.filter((r) => isValidMobile(normaliseMobile(r.mobile)));
-  const blocked = invalid.length > 0 || undecided.length > 0 || unchosen.length > 0;
+  const blocked =
+    invalid.length > 0 || undecided.length > 0 || unchosen.length > 0 ||
+    noteWithoutNumber.length > 0;
   /**
    * §32.1. "Log call now" belongs to the single-number case — the phone is
    * ringing and this row is the call. With a list on screen it is the wrong
@@ -419,6 +436,12 @@ export function QuickAddGrid({
       });
       return null;
     }
+    if (noteWithoutNumber.length) {
+      setResult({
+        error: `${noteWithoutNumber.length} row${noteWithoutNumber.length === 1 ? " has" : "s have"} a discussion with no number — add the number to save ${noteWithoutNumber.length === 1 ? "that row" : "those rows"}.`,
+      });
+      return null;
+    }
     if (unchosen.length) {
       setResult({
         error: `${unchosen.length} row${unchosen.length === 1 ? " has" : "s have"} both an open lead and an open ticket. Choose "Log as purchase" or "Log as ticket" on ${unchosen.length === 1 ? "it" : "each"} first.`,
@@ -434,6 +457,7 @@ export function QuickAddGrid({
         // only ever wastes a keystroke.
         sourceId: (ac ? acSourceId : r.sourceId) || null,
         productText: r.productText.trim() || null,
+        discussion: r.discussion.trim() || null,
         arrivedAt: ac ? istLocalToIso(r.arrivedAt) : null,
         decision: r.decision,
         pipeline: r.pipeline,
@@ -487,6 +511,10 @@ export function QuickAddGrid({
           <thead>
             <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
               <th className="w-[40px] px-1.5 py-[7px] text-right">#</th>
+              {/* §7.1. Before the number, because that is the order the
+                  conversation happens in: the counsellor talks, writes it
+                  down, and reads the number off the screen at the end. */}
+              <th className="w-[230px] px-1.5 py-[7px]">Discussion</th>
               <th className="w-[150px] px-1.5 py-[7px]">Mobile</th>
               <th className="w-[200px] px-1.5 py-[7px]">Name</th>
               {/* §48.3. Always on the AC grid, where it is most of the point;
@@ -514,6 +542,9 @@ export function QuickAddGrid({
               // for either button, and a disabled button says so better than an
               // error message after the click.
               const unpicked = Boolean(r.status && bothOpen(r.status) && !r.pipeline);
+              // §7.1. Typed a note, no number yet: hold the row rather than
+              // save around it.
+              const needsNumber = Boolean(r.discussion.trim()) && !r.mobile.trim();
               const ready =
                 Boolean(mobile) && !bad && !r.checking && !waiting && !unpicked;
 
@@ -523,14 +554,33 @@ export function QuickAddGrid({
                   className={cx(
                     "border-b border-line last:border-b-0",
                     bad && "bg-danger-soft/30",
-                    (waiting || unpicked) && "bg-warn-soft/30",
+                    (waiting || unpicked || needsNumber) && "bg-warn-soft/30",
                   )}
                   onFocus={() => reached(r.key)}
                 >
                   <td className="px-1.5 py-[5px] text-right text-[11px] tabular-nums text-ink-3">
                     {i + 1}
                   </td>
-                  <td className="px-1.5 py-[5px]">
+                  <td className="px-1.5 py-[5px] align-top">
+                    <Textarea
+                      value={r.discussion}
+                      rows={2}
+                      aria-label={`Discussion, row ${i + 1}`}
+                      placeholder="What was said. Optional."
+                      className={cx(
+                        "min-h-[34px] resize-y",
+                        needsNumber && "border-warn",
+                      )}
+                      onChange={(e) => patch(r.key, { discussion: e.target.value })}
+                    />
+                    {needsNumber ? (
+                      <span className="mt-0.5 block text-[10.5px] text-warn"
+                            data-testid={`needs-number-${i + 1}`}>
+                        add the number to save this row
+                      </span>
+                    ) : null}
+                  </td>
+                  <td className="px-1.5 py-[5px] align-top">
                     <Input
                       value={r.mobile}
                       inputMode="numeric"
@@ -546,7 +596,7 @@ export function QuickAddGrid({
                       onKeyDown={(e) => onEnter(e, r)}
                     />
                   </td>
-                  <td className="px-1.5 py-[5px]">
+                  <td className="px-1.5 py-[5px] align-top">
                     <Input
                       value={r.name}
                       aria-label={`Name, row ${i + 1}`}

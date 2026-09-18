@@ -121,6 +121,8 @@ export type PanelCall = {
 };
 
 export type PanelPayload = {
+  /** §7.1. What was written before anyone rang; pre-fills the Note field. */
+  preCallNote: string | null;
   id: number;
   type: EnquiryType;
   studentName: string | null;
@@ -213,7 +215,7 @@ export async function loadPanelEnquiry(
   const { data, error } = await supabase
     .from("enquiries")
     .select(
-      `id, type, product_text, term_id, source_id, importance, lead_verification,
+      `id, type, product_text, pre_call_note, term_id, source_id, importance, lead_verification,
        follow_up_slots_used, status, next_follow_up_date, re_enquired_at, created_at,
        student_id, order_id, teacher_id, escalated_to,
        enquiry_sources ( occurred_at, source:sources ( name ) ),
@@ -305,6 +307,8 @@ export async function loadPanelEnquiry(
       mobile: student?.mobile ?? "",
       term: (data.term as { name: string } | null)?.name ?? null,
       productText: data.product_text,
+      /** §7.1. What was written before anyone rang; pre-fills the Note field. */
+      preCallNote: data.pre_call_note as string | null,
       slotsUsed: data.follow_up_slots_used ?? 0,
       termId: data.term_id,
       sourceId: data.source_id,
