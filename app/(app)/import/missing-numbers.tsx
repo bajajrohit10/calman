@@ -6,14 +6,12 @@ import { useRouter } from "next/navigation";
 import { Button, ErrorNote, Input, MobileInput, cx } from "@/components/ui";
 import { formatDateTime } from "@/lib/format";
 
-import { resolveHeldCheckout, type HeldRow } from "./actions";
-
-const OUTCOME_WORDS: Record<string, string> = {
-  import: "imported as a new lead",
-  re_enquire: "added to the lead they already had",
-  supersede: "imported; the closed enquiry was superseded",
-  discarded: "discarded",
-};
+import {
+  resolveHeldCheckout,
+  type HeldOutcome,
+  type HeldRow,
+  type ResolvedHeldRow,
+} from "./actions";
 
 /**
  * §55.3. The checkouts nobody can ring.
@@ -27,11 +25,25 @@ const OUTCOME_WORDS: Record<string, string> = {
  * Rows persist across batches. Tomorrow's file will carry the same checkout
  * again and the dedupe on checkout_ref keeps it from being held twice.
  */
-export function MissingNumbers({ rows }: { rows: HeldRow[] }) {
+export function MissingNumbers({
+  rows,
+  resolved,
+}: {
+  rows: HeldRow[];
+  resolved: ResolvedHeldRow[];
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
+  /**
+   * §55.6. The outcome stays until it is dismissed.
+   *
+   * It used to be a line of text that the next render replaced. The one moment
+   * somebody learns that filling in a number just took a lead off a
+   * colleague's day is this one, and a message that clears itself is a message
+   * for whoever happened to be looking.
+   */
+  const [toast, setToast] = useState<HeldOutcome | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
   /**
@@ -52,13 +64,12 @@ export function MissingNumbers({ rows }: { rows: HeldRow[] }) {
     id: string,
     fn: () => Promise<{
       error: string | null;
-      outcome?: string;
+      outcome?: HeldOutcome;
       confirmExisting?: { existingName: string; checkoutName: string };
     }>,
     mobile?: string,
   ) {
     setError(null);
-    setNote(null);
     setBusyId(id);
     start(async () => {
       const res = await fn();
@@ -72,25 +83,15 @@ export function MissingNumbers({ rows }: { rows: HeldRow[] }) {
         return;
       }
       setConfirm(null);
-      setNote(
-        res.outcome ? `Done — ${OUTCOME_WORDS[res.outcome] ?? res.outcome}.` : "Done.",
-      );
+      if (res.outcome) setToast(res.outcome);
       router.refresh();
     });
-  }
-
-  if (!rows.length) {
-    return (
-      <p className="rounded-lg border border-line bg-surface px-4 py-6 text-center text-[12.5px] text-ink-3">
-        Nothing waiting. Checkouts with no usable phone number land here.
-      </p>
-    );
   }
 
   return (
     <div className="flex flex-col gap-3">
       {error ? <ErrorNote>{error}</ErrorNote> : null}
-      {note ? <p className="text-[12.5px] text-ok">{note}</p> : null}
+      {toast ? <OutcomeToast outcome={toast} onDismiss={() => setToast(null)} /> : null}
 
       {confirm ? (
         <div
@@ -141,6 +142,15 @@ export function MissingNumbers({ rows }: { rows: HeldRow[] }) {
         </div>
       ) : null}
 
+      {/* §55.6. The empty state no longer takes the whole component over:
+          the outcome of the last fill and the Resolved list below it are the
+          two things somebody comes back to this tab for, and they outlive the
+          queue being empty. */}
+      {rows.length === 0 ? (
+        <p className="rounded-lg border border-line bg-surface px-4 py-6 text-center text-[12.5px] text-ink-3">
+          Nothing waiting. Checkouts with no usable phone number land here.
+        </p>
+      ) : (
       <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
         <table className="w-full min-w-[980px] border-collapse text-[12.5px]">
           <thead>
@@ -234,12 +244,110 @@ export function MissingNumbers({ rows }: { rows: HeldRow[] }) {
           </tbody>
         </table>
       </div>
-      <p className="text-[11.5px] text-ink-3">
-        Saving a number puts the checkout through the ordinary import rules —
-        the same duplicate handling, the same parser, and the arrival time the
-        file gave it.
-      </p>
+      )}
+
+      {rows.length ? (
+        <p className="text-[11.5px] text-ink-3">
+          Saving a number puts the checkout through the ordinary import rules —
+          the same duplicate handling, the same parser, and the arrival time the
+          file gave it.
+        </p>
+      ) : null}
+
+      <ResolvedList rows={resolved} />
     </div>
+  );
+}
+
+/**
+ * §55.6. The outcome of the last fill, until somebody dismisses it.
+ *
+ * Two lines, the same two the import review shows: what the number was, and
+ * what the fill did about it. The second is the one that matters — it is the
+ * only place a counsellor is told they have taken a lead off a colleague.
+ */
+function OutcomeToast({
+  outcome,
+  onDismiss,
+}: {
+  outcome: HeldOutcome;
+  onDismiss: () => void;
+}) {
+  const tone =
+    outcome.tone === "ok"
+      ? "border-ok/50 bg-ok-soft/40"
+      : outcome.tone === "warn"
+        ? "border-warn/50 bg-warn-soft/40"
+        : "border-accent/40 bg-accent-soft/30";
+
+  return (
+    <div
+      role="status"
+      data-testid="fill-outcome"
+      className={cx("flex flex-wrap items-start gap-x-3 gap-y-1 rounded-lg border px-4 py-3 shadow-card", tone)}
+    >
+      <div className="min-w-0 flex-1">
+        <p className="text-[13px] font-medium text-ink">
+          {outcome.mobile ? (
+            <span className="tabular-nums">{outcome.mobile} · </span>
+          ) : null}
+          {outcome.label}
+        </p>
+        <p className="mt-0.5 text-[12.5px] text-ink-2" data-testid="fill-outcome-action">
+          {outcome.action}
+        </p>
+      </div>
+      <Button size="sm" variant="ghost" onClick={onDismiss}>
+        Dismiss
+      </Button>
+    </div>
+  );
+}
+
+/** §55.6. The last twenty fills, so the tab has a memory. */
+function ResolvedList({ rows }: { rows: ResolvedHeldRow[] }) {
+  if (!rows.length) return null;
+  return (
+    <section>
+      <h3 className="mb-1.5 text-[12.5px] font-semibold text-ink">
+        Resolved ({rows.length})
+      </h3>
+      <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
+        <table className="w-full min-w-[860px] border-collapse text-[12.5px]">
+          <thead>
+            <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+              <th className="w-[130px] px-1.5 py-[7px]">Number</th>
+              <th className="w-[130px] px-1.5 py-[7px]">Checkout</th>
+              <th className="px-1.5 py-[7px]">Outcome</th>
+              <th className="w-[140px] px-1.5 py-[7px]">By</th>
+              <th className="w-[130px] px-1.5 py-[7px]">When</th>
+            </tr>
+          </thead>
+          <tbody data-testid="resolved-list">
+            {rows.map((r) => (
+              <tr key={r.id} className="border-b border-line last:border-b-0 [&>td]:align-top">
+                <td className="px-1.5 py-[6px] tabular-nums text-ink">
+                  {r.resolved_mobile ?? <span className="text-ink-3">—</span>}
+                </td>
+                <td className="px-1.5 py-[6px] tabular-nums text-ink-3">
+                  {r.checkout_ref}
+                </td>
+                <td className="px-1.5 py-[6px] break-words text-ink-2">
+                  <span className="block text-ink">{r.resolution_label ?? r.resolution}</span>
+                  {r.resolution_action ? (
+                    <span className="block text-ink-2">{r.resolution_action}</span>
+                  ) : null}
+                </td>
+                <td className="px-1.5 py-[6px] text-ink-2">{r.resolved_by_name ?? "—"}</td>
+                <td className="px-1.5 py-[6px] whitespace-nowrap text-ink-3">
+                  {r.resolved_at ? formatDateTime(r.resolved_at) : "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 

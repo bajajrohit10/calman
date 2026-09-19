@@ -5,7 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { formatDateTime, hoursAgoIso } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 
-import { loadHeldCheckouts } from "./actions";
+import { loadHeldCheckouts, loadResolvedHeldCheckouts } from "./actions";
 import { Importer } from "./importer";
 import { ImportTabs, MissingNumbers } from "./missing-numbers";
 
@@ -33,7 +33,7 @@ export default async function Page({
   // came from.
   const since = hoursAgoIso(24);
 
-  const [sources, terms, batches, recentCount, held] = await Promise.all([
+  const [sources, terms, batches, recentCount, held, resolved] = await Promise.all([
     supabase.from("sources").select("id, name").eq("is_active", true).order("name"),
     supabase.from("terms").select("id, name").eq("is_active", true).order("sort_order"),
     (() => {
@@ -51,6 +51,8 @@ export default async function Page({
     // §55.3. Loaded on both tabs: the badge on the Upload tab has to say how
     // many are waiting, which means knowing before anybody clicks.
     loadHeldCheckouts(),
+    // §55.6: the last twenty fills, shown under the tab.
+    loadResolvedHeldCheckouts(),
   ]);
 
   return (
@@ -63,7 +65,7 @@ export default async function Page({
       <ImportTabs active={tab} heldCount={held.rows.length} />
 
       {tab === "missing" ? (
-        <MissingNumbers rows={held.rows} />
+        <MissingNumbers rows={held.rows} resolved={resolved.rows} />
       ) : (
         <Importer masters={{ sources: sources.data ?? [], terms: terms.data ?? [] }} />
       )}

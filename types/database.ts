@@ -1624,10 +1624,14 @@ export type Database = {
           product_text: string | null
           raw_phones: Json
           resolution: string | null
+          resolution_action: string | null
+          resolution_case: number | null
+          resolution_label: string | null
           resolution_note: string | null
           resolved_at: string | null
           resolved_by: string | null
           resolved_enquiry_id: number | null
+          resolved_mobile: string | null
           vendor: string | null
         }
         Insert: {
@@ -1641,10 +1645,14 @@ export type Database = {
           product_text?: string | null
           raw_phones?: Json
           resolution?: string | null
+          resolution_action?: string | null
+          resolution_case?: number | null
+          resolution_label?: string | null
           resolution_note?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
           resolved_enquiry_id?: number | null
+          resolved_mobile?: string | null
           vendor?: string | null
         }
         Update: {
@@ -1658,10 +1666,14 @@ export type Database = {
           product_text?: string | null
           raw_phones?: Json
           resolution?: string | null
+          resolution_action?: string | null
+          resolution_case?: number | null
+          resolution_label?: string | null
           resolution_note?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
           resolved_enquiry_id?: number | null
+          resolved_mobile?: string | null
           vendor?: string | null
         }
         Relationships: [

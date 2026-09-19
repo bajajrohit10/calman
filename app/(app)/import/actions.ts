@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 
 import { requireUser } from "@/lib/auth";
 import type { Importance, LeadVerification } from "@/lib/enquiry-labels";
-import type { NumberState, NumberStatus } from "@/lib/duplicate-rules";
+import { describeNumber, type NumberState, type NumberStatus } from "@/lib/duplicate-rules";
 import { applyAutoInterests } from "@/lib/auto-interests";
 import { isValidMobile, normaliseMobile } from "@/lib/mobile";
 import { looksLikeShopify } from "@/lib/shopify-checkouts";
@@ -889,6 +889,116 @@ export async function loadHeldCheckouts(): Promise<{
  * time — because a lead rescued from this tab is not a lesser lead and should
  * not end up shaped differently from its neighbours in the same batch.
  */
+/**
+ * §55.6. What a fill did, in the import review's own sentences.
+ *
+ * `label` is what the number *was* and `action` is what the fill *did* — the
+ * same two halves every other screen shows, so somebody who has read a review
+ * table does not have to learn a second vocabulary here.
+ */
+export type HeldOutcome = {
+  kind: "imported" | "discarded";
+  case: number | null;
+  label: string;
+  action: string;
+  mobile: string | null;
+  /** §55.6: the counsellor whose follow-up list this lead just left. */
+  releasedFrom: string | null;
+  tone: "ok" | "info" | "neutral" | "warn";
+};
+
+/**
+ * §55.6. Case 4 says whose day changed.
+ *
+ * "Source updated, follow-up cleared, back into New Calls" is true and
+ * incomplete: the lead was on somebody's follow-up list, and filling in this
+ * number took it off. In the import review that is fine — a reviewer is
+ * looking at fifty rows and the counsellor is named in the line above. Here
+ * there is one row and the person reading it is usually not the person losing
+ * the lead, so the sentence has to carry the name itself.
+ */
+function heldOutcomeFor(
+  status: NumberStatus | null,
+  mobile: string,
+): HeldOutcome {
+  if (!status) {
+    return {
+      kind: "imported",
+      case: 1,
+      label: "New number",
+      action: "New enquiry into New Calls",
+      mobile,
+      releasedFrom: null,
+      tone: "ok",
+    };
+  }
+
+  const verdict = describeNumber(status, "purchase");
+  const releasedFrom =
+    verdict.case === 4 ? (status.lastCallBy ?? status.assignedTo ?? null) : null;
+
+  return {
+    kind: "imported",
+    case: verdict.case,
+    label: verdict.label,
+    action: releasedFrom
+      ? `Released from ${releasedFrom}'s follow-ups to New Calls`
+      : verdict.action,
+    mobile,
+    releasedFrom,
+    tone: verdict.tone,
+  };
+}
+
+export type ResolvedHeldRow = {
+  id: string;
+  checkout_ref: string;
+  name: string | null;
+  resolution: "imported" | "discarded";
+  resolved_mobile: string | null;
+  resolution_case: number | null;
+  resolution_label: string | null;
+  resolution_action: string | null;
+  resolved_at: string | null;
+  resolved_by_name: string | null;
+};
+
+/**
+ * §55.6. The last twenty fills, newest first.
+ *
+ * Twenty because the list answers "what did I just do, and what did the person
+ * before me do" — a day's worth of a tab nobody sits on. Older than that is
+ * the enquiry's own history, which is where it belongs.
+ */
+export async function loadResolvedHeldCheckouts(): Promise<{
+  error: string | null;
+  rows: ResolvedHeldRow[];
+}> {
+  await requireUser();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("held_checkouts")
+    .select(
+      `id, checkout_ref, name, resolution, resolved_mobile, resolution_case,
+       resolution_label, resolution_action, resolved_at,
+       resolver:profiles!held_checkouts_resolved_by_fkey ( full_name )`,
+    )
+    .not("resolution", "is", null)
+    .order("resolved_at", { ascending: false })
+    .limit(20);
+  if (error) return { error: error.message, rows: [] };
+
+  return {
+    error: null,
+    rows: ((data ?? []) as unknown as (Omit<ResolvedHeldRow, "resolved_by_name"> & {
+      resolver: { full_name: string | null } | null;
+    })[]).map(({ resolver, ...r }) => ({
+      ...r,
+      resolved_by_name: resolver?.full_name ?? null,
+    })),
+  };
+}
+
 export async function resolveHeldCheckout(input: {
   id: string;
   mobile?: string;
@@ -901,7 +1011,7 @@ export async function resolveHeldCheckout(input: {
   attachToExisting?: boolean;
 }): Promise<{
   error: string | null;
-  outcome?: string;
+  outcome?: HeldOutcome;
   /**
    * §55.5. Set instead of an outcome when the number belongs to a student
    * under a different name. Nothing is written; the caller asks and comes
@@ -923,18 +1033,32 @@ export async function resolveHeldCheckout(input: {
   if (!held) return { error: "That row has already been dealt with." };
 
   if (input.discard) {
+    // §55.6. A discard gets the same two-part sentence as a fill, because it
+    // is the same question answered the other way and the Resolved list below
+    // shows them side by side.
+    const discarded: HeldOutcome = {
+      kind: "discarded",
+      case: null,
+      label: `Discarded · ${held.name || held.checkout_ref}`,
+      action: input.reason?.trim() || "Discarded — no number could be found",
+      mobile: null,
+      releasedFrom: null,
+      tone: "neutral",
+    };
     const { error } = await supabase
       .from("held_checkouts")
       .update({
         resolution: "discarded",
-        resolution_note: input.reason?.trim() || "Discarded without a reason given.",
+        resolution_note: discarded.action,
+        resolution_label: discarded.label,
+        resolution_action: discarded.action,
         resolved_by: viewer.userId,
         resolved_at: new Date().toISOString(),
       })
       .eq("id", input.id);
     if (error) return { error: error.message };
     revalidatePath("/import");
-    return { error: null, outcome: "discarded" };
+    return { error: null, outcome: discarded };
   }
 
   const mobile = normaliseMobile(input.mobile ?? "");
@@ -986,6 +1110,18 @@ export async function resolveHeldCheckout(input: {
       : status?.state === "resolved" || status?.state === "wrong_number"
         ? "supersede"
         : "import";
+
+  // §55.6. Read before the commit, because committing is what makes it stop
+  // being true: a case-4 lead is in somebody's follow-up list until this
+  // writes, and afterwards it is in New Calls with nothing left to name.
+  const outcome = heldOutcomeFor(status, mobile);
+  // Only worth saying when the two names differ — which is the same condition
+  // that put the question up in the first place. "Attached to X" where X is
+  // the name on the checkout is a sentence about nothing.
+  const attachNote =
+    existingName && existingName.toLowerCase() !== checkoutName.toLowerCase()
+      ? `Attached to ${existingName}, who already had this number`
+      : null;
 
   const acSource = await supabase
     .from("sources")
@@ -1050,6 +1186,12 @@ export async function resolveHeldCheckout(input: {
       resolution_note: existingName
         ? `Attached to ${existingName}, who already had this number.`
         : null,
+      resolved_mobile: mobile,
+      resolution_case: outcome.case,
+      resolution_label: outcome.label,
+      resolution_action: attachNote
+        ? `${outcome.action}. ${attachNote}`
+        : outcome.action,
       resolved_enquiry_id: row?.enquiry_id ?? null,
       resolved_by: viewer.userId,
       resolved_at: new Date().toISOString(),
@@ -1059,5 +1201,11 @@ export async function resolveHeldCheckout(input: {
 
   revalidatePath("/import");
   revalidatePath("/new-calls");
-  return { error: null, outcome: decision };
+  revalidatePath("/my-day");
+  return {
+    error: null,
+    outcome: attachNote
+      ? { ...outcome, action: `${outcome.action}. ${attachNote}` }
+      : outcome,
+  };
 }
