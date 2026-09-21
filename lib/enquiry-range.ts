@@ -5,12 +5,18 @@ import { istMonthStart, istToday, istWeekStart, shiftDay } from "@/lib/format";
  *
  * That screen answers a different question from the other two lists. New Calls
  * and the desk are work queues — everything open, oldest first, worked top to
- * bottom. Enquiries is where somebody goes to look something up, and what they
- * are nearly always looking up is what came in today. So it opens on today,
- * newest first, and the older windows are one click away.
+ * bottom. Enquiries is where somebody goes to look something up.
  *
- * This is the one place Brief 48's oldest-first rule is overridden, and only
- * here: the two queues still read oldest first, because they are still queues.
+ * §56: it opens on All. It used to open on today, on the reasoning that what
+ * somebody looks up is what came in today — but this is the investigative
+ * list, the one place that sees archived rows and every status, and somebody
+ * arriving at it is usually hunting a lead they could not find elsewhere,
+ * which by definition did not come in today. The windows below are one click
+ * away, today included.
+ *
+ * Newest first, which is the one place Brief 48's oldest-first rule is
+ * overridden: the two queues still read oldest first, because they are still
+ * queues.
  */
 export const ENQUIRY_RANGES = [
   { id: "today", label: "Today" },

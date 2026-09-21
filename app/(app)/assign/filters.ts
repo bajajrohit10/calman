@@ -184,12 +184,23 @@ export function parseEnquiriesParams(
   const dir: "asc" | "desc" = asked === "asc" ? "asc" : "desc";
 
   /**
-   * §50.1. The window, and where it comes from.
+   * §50.1, revised by §56. The window, and where it comes from.
    *
    * Real dates in the URL are always obeyed — they are the free range, and
    * somebody who typed them meant them. Otherwise `range` decides, and with
-   * neither present the screen opens on today. "all" resolves to no dates at
-   * all, which is what removes the restriction rather than widening it.
+   * neither present the screen opens on everything.
+   *
+   * It opened on today until now, on the reasoning that what somebody looks up
+   * is what came in today. That was wrong about what this screen is for: it is
+   * the investigative list, the one place that can see archived rows and every
+   * status, and somebody arriving at it is usually looking for a lead they
+   * cannot find elsewhere — which by definition did not come in today. A
+   * default that hides all but one day answers a question nobody asked and
+   * makes the screen look empty when it is not.
+   *
+   * "all" resolves to no dates at all, which is what removes the restriction
+   * rather than widening it to some arbitrary span. The chips are unchanged
+   * and one click away, so the old default is still one click.
    */
   const rawFrom = str(get, "createdFrom");
   const rawTo = str(get, "createdTo");
@@ -198,7 +209,7 @@ export function parseEnquiriesParams(
     ? askedRange
     : rawFrom || rawTo
       ? "custom"
-      : "today";
+      : "all";
   const span = range === "custom" ? { from: rawFrom, to: rawTo } : rangeDates(range);
 
   // Three states, not two: named people, everybody, and "the URL is silent so
