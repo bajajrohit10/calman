@@ -41,6 +41,7 @@ export function QuickAdd({
   viewerIsAdmin,
   initialTab,
   acSourceId,
+  defaultSourceId,
 }: {
   masters: QuickAddMasters;
   counsellorName: string | null;
@@ -53,6 +54,8 @@ export function QuickAdd({
   initialTab: Tab;
   /** §48.3: the AC source, or null if the master list has no source named AC. */
   acSourceId: string | null;
+  /** §57.2: what the Source dropdown starts on, on One by one and Multiple. */
+  defaultSourceId: string | null;
 }) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [logging, setLogging] = useState<{
@@ -181,6 +184,7 @@ export function QuickAdd({
         key={tab}
         mode={tab}
         acSourceId={acSourceId}
+        defaultSourceId={defaultSourceId}
         sources={masters.sources}
         onLogCall={openCall}
       />

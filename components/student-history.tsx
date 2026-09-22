@@ -609,7 +609,7 @@ function NowCard({
           ) : null}
         </div>
 
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 px-4 py-3 sm:grid-cols-3 xl:grid-cols-6">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 px-4 py-3 sm:grid-cols-3 xl:grid-cols-7">
           <Fact label="Stage">
             {/* stageOf() returns the machine key the WhatsApp templates key
                 off; this is the human sentence. */}
@@ -633,6 +633,10 @@ function NowCard({
           </Fact>
           <Fact label="Assigned today">{todays?.counsellor?.full_name ?? "nobody"}</Fact>
           <Fact label="Term">{enquiry.term?.name ?? "—"}</Fact>
+          {/* §57.1. The same answer New Calls prints, from the same function:
+              who logged the most recent arrival, or "Shopify" where the store
+              found the lead rather than a person. */}
+          <Fact label="Added by">{student.addedBy?.[enquiry.id] ?? "—"}</Fact>
         </dl>
 
         {/* §7.1. What was said before the first call was logged.

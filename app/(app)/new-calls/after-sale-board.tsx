@@ -31,6 +31,9 @@ export type AfterSaleRow = {
   re_enquired_at: string | null;
   is_overdue: boolean;
   never_called: boolean;
+  /** §57.1: who logged the most recent arrival — a person, or "Shopify". */
+  added_by_name: string | null;
+  added_by_id: string | null;
   total_count: number;
 };
 
@@ -116,13 +119,16 @@ export function AfterSaleBoard({
       {loadError ? <ErrorNote>{loadError}</ErrorNote> : null}
 
       <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
-        <table className="w-full min-w-[980px] border-collapse text-[12.5px]">
+        <table className="w-full min-w-[1080px] border-collapse text-[12.5px]">
           <thead>
             <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
               <th className="px-1.5 py-[7px]">Student</th>
               <th className="px-1.5 py-[7px]">Status</th>
               <th className="px-1.5 py-[7px]">Issue</th>
               <th className="px-1.5 py-[7px]">Reminder</th>
+              {/* §57.1. No sort and no facet here: this half of the pool has
+                  neither, and the column is the same fact either way. */}
+              <th className="px-1.5 py-[7px]">Added by</th>
               <th className="px-1.5 py-[7px]">Last remark</th>
               <th className="px-1.5 py-[7px] text-right">Call</th>
             </tr>
@@ -171,6 +177,9 @@ export function AfterSaleBoard({
                     </span>
                   ) : null}
                 </td>
+                <td className="px-1.5 py-[5px] whitespace-nowrap text-ink-2">
+                  {r.added_by_name ?? "—"}
+                </td>
                 <td className="max-w-[340px] px-1.5 py-[5px] text-ink-3">
                   {r.last_discussion ? (
                     <span className="block truncate" title={r.last_discussion}>
@@ -200,7 +209,7 @@ export function AfterSaleBoard({
             ))}
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-ink-3">
+                <td colSpan={7} className="px-3 py-8 text-center text-ink-3">
                   No after-sale work waiting — every open ticket has been called
                   today.
                 </td>

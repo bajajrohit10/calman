@@ -135,6 +135,13 @@ export type StudentHistory = {
    * and the detail on none of them until somebody asks.
    */
   editedCalls: Record<number, number>;
+  /**
+   * §57.1: who added each enquiry most recently, keyed by enquiry id. The
+   * rule lives in app.added_by_of and is asked for the whole set at once —
+   * the Now card and New Calls must never print different names for the same
+   * lead.
+   */
+  addedBy: Record<number, string>;
 };
 
 const SELECT = `
@@ -219,7 +226,23 @@ async function withEdits(
       editedCalls[row.call_id] = row.edits;
     }
   }
-  return { ...student, editedCalls };
+
+  const addedBy: Record<number, string> = {};
+  const enquiryIds = student.enquiries.map((e) => e.id);
+  if (enquiryIds.length) {
+    const { data } = await supabase.rpc("added_by_for", {
+      p_enquiry_ids: enquiryIds,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    for (const row of (data ?? []) as unknown as {
+      enquiry_id: number;
+      label: string | null;
+    }[]) {
+      if (row.label) addedBy[row.enquiry_id] = row.label;
+    }
+  }
+
+  return { ...student, editedCalls, addedBy };
 }
 
 /** null when the number has never been seen. */

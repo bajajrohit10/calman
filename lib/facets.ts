@@ -96,6 +96,10 @@ export async function loadNewCallsFacets(args: NewCallsArgs): Promise<Loaded> {
       p_created_from: args.p_created_from,
       p_created_to: args.p_created_to,
       p_product_text: args.p_product_text,
+      // §57.1: the counts have to be narrowed by every filter the list is, or
+      // the guard in facetsAgreeWithList hides the bar the moment somebody
+      // picks a name.
+      p_added_by: args.p_added_by,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any)
     .limit(FACET_CEILING);

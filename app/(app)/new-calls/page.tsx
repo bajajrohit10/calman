@@ -14,7 +14,7 @@ import { loadMasters } from "@/lib/masters";
 import { ServerTiming, logServerTiming, timed } from "@/lib/server-timing";
 import { createClient } from "@/lib/supabase/server";
 
-import { PAGE_SIZE, parseNewCallsParams } from "./filters";
+import { PAGE_SIZE, SHOPIFY_ADDER, parseNewCallsParams } from "./filters";
 import { AfterSaleBoard, type AfterSaleRow } from "./after-sale-board";
 import { NewCallsBoard, type PoolRow } from "./new-calls-board";
 
@@ -43,7 +43,7 @@ export default async function Page({
 }) {
   const viewer = await requireUser();
   const sp = await searchParams;
-  const { page, sourceIds, teacherIds, contentIds, callTypes, filters } =
+  const { page, sort, dir, sourceIds, teacherIds, contentIds, addedBy, callTypes, filters } =
     parseNewCallsParams(read(sp));
   // §33.6. Two pipelines, one pool. They share nothing but the question — who
   // is waiting and nobody has picked them up — so they are sub-tabs rather
@@ -55,6 +55,15 @@ export default async function Page({
   const masters = await loadMasters();
   // §45.3: every active user, for the escalate-to picker in the call window.
   const escalatees = await loadEscalatees();
+  // §57.1. Who can appear under "Added by": everybody who works leads.
+  // Accounts never adds one, so offering the name would be offering a filter
+  // that is always empty.
+  const adders = await supabase
+    .from("profiles")
+    .select("id, full_name")
+    .eq("is_active", true)
+    .in("role", ["counsellor", "manager", "ticket_team", "super_admin"])
+    .order("full_name");
 
 
   // Both totals on every render: the sub-tabs carry counts, and a count that
@@ -71,7 +80,14 @@ export default async function Page({
   // §47.5. The tab counts describe the whole pool under the *other* filters,
   // so picking a tab narrows the list without zeroing the two counts beside
   // it. p_call_types is the one argument deliberately not passed on.
-  const { p_call_types: _chosen, ...countFilters } = filters;
+  // p_sort and p_dir go with it: ordering a count is meaningless, and the
+  // function does not take them.
+  const {
+    p_call_types: _chosen,
+    p_sort: _sort,
+    p_dir: _dir,
+    ...countFilters
+  } = filters;
   const [list, facetResult, typeCounts] =
     await Promise.all([
       timed("rpc:pool", () =>
@@ -99,9 +115,14 @@ export default async function Page({
   }
 
   const rows = (list.data ?? []) as unknown as PoolRow[];
+  // Every value of a repeated key, not the first. A multi-select posts its
+  // name once per selection, so keeping only the first meant a tab or a sort
+  // header quietly dropped all but one source, teacher, content or adder.
   const search = new URLSearchParams(
     Object.entries(sp).flatMap(([k, v]) =>
-      v == null ? [] : [[k, Array.isArray(v) ? v[0] : v] as [string, string]],
+      v == null
+        ? []
+        : (Array.isArray(v) ? v : [v]).map((x) => [k, x] as [string, string]),
     ),
   ).toString();
 
@@ -162,8 +183,21 @@ export default async function Page({
         }
         page={page}
         pageSize={PAGE_SIZE}
+        sort={sort}
+        dir={dir}
         search={search}
         sourceIds={sourceIds}
+        addedBy={addedBy}
+        adders={[
+          // §57.1. Not a profile, and deliberately first: the store is the
+          // busiest single "adder" there is and reads oddly sorted among the
+          // people.
+          { id: SHOPIFY_ADDER, name: "Shopify" },
+          ...(adders.data ?? []).map((p) => ({
+            id: p.id,
+            name: p.full_name ?? "(no name)",
+          })),
+        ]}
         teacherIds={teacherIds}
         importanceIds={filters.p_importance ?? []}
         contentIds={contentIds}

@@ -180,6 +180,11 @@ export async function createEnquiry(
     enquiry_id: enquiry.id,
     source_id: input.sourceId || null,
     note: "Added in Quick Add.",
+    // §57.1: who added it, recorded on the arrival rather than inferred later
+    // from the enquiry's creator — which stops being this person the first
+    // time somebody else re-enquires the number.
+    added_by: viewer.userId,
+    added_via: "quick_add",
   });
   // Not fatal: the enquiry exists, and the counsellor has a call to log.
   if (sourceLogError) console.error("enquiry_sources insert failed", sourceLogError.message);
@@ -738,6 +743,8 @@ async function createMany(
       enquiry_id: enquiryByStudent.get(studentByMobile.get(j.mobile)!),
       source_id: j.row.sourceId,
       note: "Added in Quick Add.",
+      added_by: userId,
+      added_via: "quick_add",
     }))
     .filter((r) => r.enquiry_id);
   if (sources.length) {

@@ -34,6 +34,15 @@ export default async function Page() {
         acSourceId={
           masters.sources.find((s) => s.name.trim().toLowerCase() === "ac")?.id ?? null
         }
+        // §57.2. Resolved by name, like the AC source above: the grid is
+        // handed an id and never learns which source it is. Null if the row
+        // is gone or inactive, and then the dropdown simply starts on
+        // "Select" as it always did.
+        defaultSourceId={
+          masters.sources.find(
+            (s) => s.name.trim().toLowerCase() === "knowlarity",
+          )?.id ?? null
+        }
         masters={masters}
         escalatees={escalatees}
         counsellorName={viewer.profile?.full_name ?? null}

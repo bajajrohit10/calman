@@ -626,6 +626,10 @@ export async function commitChunk(
           enquiry_id: enquiryId,
           source_id: row.sourceId,
           import_batch_id: batchId,
+          // §57.1. The uploader, except for a Shopify checkout — that lead was
+          // found by the store, not by whoever happened to run the file.
+          added_by: row.checkoutRefs?.length ? null : viewer.userId,
+          added_via: row.checkoutRefs?.length ? "shopify" : "import",
           note,
         };
       })
@@ -690,7 +694,13 @@ export async function commitChunk(
   // other two back in as new leads.
   if (refLog.length) {
     const { error } = await supabase.from("enquiry_sources").insert(
-      refLog.map((r) => ({ ...r, import_batch_id: batchId })) as never,
+      refLog.map((r) => ({
+        ...r,
+        import_batch_id: batchId,
+        // §57.1: every row here is a checkout, so every one is Shopify's.
+        added_by: null,
+        added_via: "shopify",
+      })) as never,
     );
     // Not fatal, for the same reason the source log above is not — but it is
     // the dedupe key, so it is logged loudly rather than swallowed.

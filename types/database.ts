@@ -788,6 +788,13 @@ export type Database = {
     }
     Functions: {
       add_working_days: { Args: { d: string; n: number }; Returns: string }
+      added_by_of: {
+        Args: { p_enquiry_id: number }
+        Returns: {
+          actor_id: string
+          label: string
+        }[]
+      }
       archive_enquiries: {
         Args: { p_filter: Json; p_ids: number[] }
         Returns: string
@@ -909,6 +916,31 @@ export type Database = {
       supersede_enquiry: { Args: { p_enquiry_id: number }; Returns: undefined }
       unarchive_batch: { Args: { p_batch_id: string }; Returns: number }
       unarchive_enquiry: { Args: { p_id: number }; Returns: undefined }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never
@@ -1555,6 +1587,8 @@ export type Database = {
       }
       enquiry_sources: {
         Row: {
+          added_by: string | null
+          added_via: string | null
           checkout_ref: string | null
           enquiry_id: number
           id: string
@@ -1564,6 +1598,8 @@ export type Database = {
           source_id: string | null
         }
         Insert: {
+          added_by?: string | null
+          added_via?: string | null
           checkout_ref?: string | null
           enquiry_id: number
           id?: string
@@ -1573,6 +1609,8 @@ export type Database = {
           source_id?: string | null
         }
         Update: {
+          added_by?: string | null
+          added_via?: string | null
           checkout_ref?: string | null
           enquiry_id?: number
           id?: string
@@ -1582,6 +1620,13 @@ export type Database = {
           source_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "enquiry_sources_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "enquiry_sources_enquiry_id_fkey"
             columns: ["enquiry_id"]
@@ -2707,6 +2752,14 @@ export type Database = {
       }
     }
     Functions: {
+      added_by_for: {
+        Args: { p_enquiry_ids: number[] }
+        Returns: {
+          actor_id: string
+          enquiry_id: number
+          label: string
+        }[]
+      }
       archive_enquiries: {
         Args: { p_filter: Json; p_ids: number[] }
         Returns: string
@@ -3067,6 +3120,8 @@ export type Database = {
       new_calls_after_sale: {
         Args: { p_limit?: number; p_offset?: number }
         Returns: {
+          added_by_id: string
+          added_by_name: string
           call_count: number
           enquiry_id: number
           is_overdue: boolean
@@ -3086,6 +3141,7 @@ export type Database = {
       }
       new_calls_facets: {
         Args: {
+          p_added_by?: string[]
           p_call_types?: string[]
           p_content_ids?: string[]
           p_course_id?: string
@@ -3107,21 +3163,26 @@ export type Database = {
       }
       new_calls_pool: {
         Args: {
+          p_added_by?: string[]
           p_call_types?: string[]
           p_content_ids?: string[]
           p_course_id?: string
           p_created_from?: string
           p_created_to?: string
+          p_dir?: string
           p_importance?: Database["public"]["Enums"]["importance"][]
           p_institute_id?: string
           p_limit?: number
           p_offset?: number
           p_product_text?: string
+          p_sort?: string
           p_source_ids?: string[]
           p_teacher_ids?: string[]
           p_term_id?: string
         }
         Returns: {
+          added_by_id: string
+          added_by_name: string
           arrived_at: string
           call_type: string
           created_at: string
@@ -3141,6 +3202,7 @@ export type Database = {
       }
       new_calls_type_counts: {
         Args: {
+          p_added_by?: string[]
           p_content_ids?: string[]
           p_course_id?: string
           p_created_from?: string
@@ -3656,6 +3718,9 @@ export const Constants = {
     Enums: {},
   },
   app: {
+    Enums: {},
+  },
+  graphql_public: {
     Enums: {},
   },
   public: {

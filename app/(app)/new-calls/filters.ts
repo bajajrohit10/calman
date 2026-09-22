@@ -32,13 +32,26 @@ export type NewCallsArgs = {
   p_created_from: string | undefined;
   p_created_to: string | undefined;
   p_product_text: string | undefined;
+  /** §57.1: profile ids, plus the literal 'shopify' for the store's own. */
+  p_added_by: string[] | undefined;
+  /** §57.1: 'default' is importance-then-arrival; 'added_by' is the header. */
+  p_sort: string | undefined;
+  p_dir: string | undefined;
 };
+
+/** The one column this screen can be sorted by, beside its natural order. */
+export const NEW_CALLS_SORTS = ["added_by"] as const;
+/** §57.1: the store's own leads, as an option id. */
+export const SHOPIFY_ADDER = "shopify";
 
 export function parseNewCallsParams(get: ParamReader): {
   page: number;
+  sort: string;
+  dir: "asc" | "desc";
   sourceIds: string[];
   teacherIds: string[];
   contentIds: string[];
+  addedBy: string[];
   callTypes: CallType[];
   filters: NewCallsArgs;
 } {
@@ -54,15 +67,26 @@ export function parseNewCallsParams(get: ParamReader): {
   const sourceIds = many("source");
   const teacherIds = many("teacher");
   const contentIds = many("content");
+  const addedBy = many("addedBy");
   const callTypes = parseCallTypes(str(get, "callType"));
+  // Anything else is the natural order, so a hand-edited or stale link cannot
+  // ask the function for a sort it does not have.
+  const asked = str(get, "sort");
+  const sort = NEW_CALLS_SORTS.includes(asked as (typeof NEW_CALLS_SORTS)[number])
+    ? (asked as string)
+    : "default";
+  const dir = str(get, "dir") === "desc" ? "desc" : "asc";
 
   const opt = (v: string | null) => v ?? undefined;
 
   return {
     page,
+    sort,
+    dir,
     sourceIds,
     teacherIds,
     contentIds,
+    addedBy,
     callTypes,
     filters: {
       p_source_ids: sourceIds.length ? sourceIds : undefined,
@@ -76,6 +100,9 @@ export function parseNewCallsParams(get: ParamReader): {
       p_created_from: opt(str(get, "createdFrom")),
       p_created_to: opt(str(get, "createdTo")),
       p_product_text: opt(str(get, "product")),
+      p_added_by: addedBy.length ? addedBy : undefined,
+      p_sort: sort,
+      p_dir: dir,
     },
   };
 }

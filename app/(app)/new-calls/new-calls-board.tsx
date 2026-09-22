@@ -36,6 +36,9 @@ export type PoolRow = {
   re_enquired_at: string | null;
   /** §48.1: the real arrival — arrived_at when recorded, else created_at. */
   arrived_at: string | null;
+  /** §57.1: who logged the most recent arrival — a person, or "Shopify". */
+  added_by_name: string | null;
+  added_by_id: string | null;
   total_count: number;
 };
 
@@ -51,11 +54,15 @@ export function NewCallsBoard({
   error,
   page,
   pageSize,
+  sort,
+  dir,
   search,
   sourceIds,
   teacherIds,
   contentIds,
   importanceIds,
+  addedBy,
+  adders,
   masters,
   selected,
   facets,
@@ -66,11 +73,16 @@ export function NewCallsBoard({
   error: string | null;
   page: number;
   pageSize: number;
+  sort: string;
+  dir: "asc" | "desc";
   search: string;
   sourceIds: string[];
   teacherIds: string[];
   contentIds: string[];
   importanceIds: string[];
+  addedBy: string[];
+  /** §57.1: the people who add leads, plus Shopify. */
+  adders: Master[];
   masters: {
     teachers: Master[];
     institutes: Master[];
@@ -95,6 +107,7 @@ export function NewCallsBoard({
   const [picked, setPicked] = useState<Set<number>>(new Set());
 
   const pages = Math.max(1, Math.ceil(total / pageSize));
+  const sortedByAdder = sort === "added_by";
   const visible = rows.filter((r) => !claimed.has(r.enquiry_id));
   const allOnPage = visible.length > 0 && visible.every((r) => picked.has(r.enquiry_id));
   const pickedIds = [...picked];
@@ -149,6 +162,13 @@ export function NewCallsBoard({
   return (
     <div className="flex flex-col gap-3">
       <form method="GET" className="rounded-lg border border-line bg-surface shadow-card">
+        {/* Applying a filter should not silently drop the chosen order. */}
+        {sortedByAdder ? (
+          <>
+            <input type="hidden" name="sort" value={sort} />
+            <input type="hidden" name="dir" value={dir} />
+          </>
+        ) : null}
         <div className="flex flex-wrap gap-2 p-2.5">
           <Labelled label="Source">
             <MultiSelect
@@ -197,6 +217,18 @@ export function NewCallsBoard({
               facet="importance"
               options={IMPORTANCE_OPTIONS}
               values={importanceIds}
+              facets={facets}
+            />
+          </Labelled>
+
+          {/* §57.1. Beside Source, because the two are read as one question:
+              where did this lead come from, and who put it here. */}
+          <Labelled label="Added by">
+            <MultiSelect
+              name="addedBy"
+              facet="added_by"
+              options={adders}
+              values={addedBy}
               facets={facets}
             />
           </Labelled>
@@ -329,7 +361,7 @@ export function NewCallsBoard({
       ) : null}
 
       <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
-        <table className="w-full min-w-[900px] border-collapse text-[12.5px]">
+        <table className="w-full min-w-[1000px] border-collapse text-[12.5px]">
           <thead>
             <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
               <th className="w-8 px-1.5 py-[7px]">
@@ -350,6 +382,31 @@ export function NewCallsBoard({
               <th className="px-1.5 py-[7px]">Term</th>
               <th className="px-1.5 py-[7px]">Teachers</th>
               <th className="px-1.5 py-[7px]">Product</th>
+              {/* §57.1. The only sortable header this screen has. Everything
+                  else is the queue's own order — importance, then oldest
+                  arrival — and a column that could reorder it would be a way
+                  to work the pool out of order by accident. "Who added these"
+                  is a different question, so it replaces that order rather
+                  than tie-breaking inside it. */}
+              <th
+                className="px-1.5 py-[7px]"
+                aria-sort={
+                  sortedByAdder ? (dir === "asc" ? "ascending" : "descending") : "none"
+                }
+              >
+                <Link
+                  href={withParam({
+                    sort: "added_by",
+                    dir: sortedByAdder && dir === "asc" ? "desc" : "asc",
+                    page: "",
+                  })}
+                  prefetch={false}
+                  className="inline-flex items-center gap-1 hover:text-ink"
+                >
+                  Added by
+                  {sortedByAdder ? <span>{dir === "asc" ? "▲" : "▼"}</span> : null}
+                </Link>
+              </th>
               <th className="px-1.5 py-[7px]">Arrived</th>
               <th className="px-1.5 py-[7px] text-right">Take</th>
             </tr>
@@ -394,6 +451,9 @@ export function NewCallsBoard({
                 <td className="max-w-[260px] truncate px-1.5 py-[5px] text-ink-3">
                   {r.product_text ?? "—"}
                 </td>
+                <td className="px-1.5 py-[5px] whitespace-nowrap text-ink-2">
+                  {r.added_by_name ?? "—"}
+                </td>
                 <td className="px-1.5 py-[5px] whitespace-nowrap text-ink-3">
                   {/* The list sorts by arrival, and for a re-enquired lead that
                       is the day it came back — so the column has to say so, or
@@ -427,7 +487,7 @@ export function NewCallsBoard({
             ))}
             {visible.length === 0 ? (
               <tr>
-                <td colSpan={9} className={cx("px-3 py-8 text-center text-ink-3")}>
+                <td colSpan={10} className={cx("px-3 py-8 text-center text-ink-3")}>
                   Nothing waiting with these filters.
                 </td>
               </tr>

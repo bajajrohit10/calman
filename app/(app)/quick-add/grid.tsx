@@ -143,11 +143,11 @@ const GROW_BY = 5;
 const LOOKUP_DELAY = 300;
 
 let seq = 0;
-const blank = (arrivedAt = ""): Row => ({
+const blank = (arrivedAt = "", sourceId = ""): Row => ({
   key: `r${++seq}`,
   mobile: "",
   name: "",
-  sourceId: "",
+  sourceId,
   productText: "",
   discussion: "",
   arrivedAt,
@@ -156,9 +156,6 @@ const blank = (arrivedAt = ""): Row => ({
   pipeline: null,
   checking: false,
 });
-
-const blanks = (n: number, arrivedAt = "") =>
-  Array.from({ length: n }, () => blank(arrivedAt));
 
 /**
  * Now, as a datetime-local value in IST (§48.3).
@@ -210,6 +207,7 @@ export function QuickAddGrid({
   onLogCall,
   mode = "multi",
   acSourceId = null,
+  defaultSourceId = null,
 }: {
   sources: { id: string; name: string }[];
   /** Open the first-call form for a row that has just been saved. */
@@ -223,17 +221,31 @@ export function QuickAddGrid({
   mode?: QuickAddMode;
   /** §48.3: the AC grid's fixed source, resolved from the master list. */
   acSourceId?: string | null;
+  /**
+   * §57.2. What the Source dropdown starts on, on the two tabs that have one.
+   *
+   * Almost every number typed into Quick Add came off a Knowlarity call, so
+   * the dropdown started on "Select" and was set to the same value twenty
+   * times a morning — and the rows where somebody forgot are indistinguishable
+   * afterwards from the rows that genuinely had no source. It is a
+   * preselection and nothing more: changing it on a row saves what was chosen.
+   */
+  defaultSourceId?: string | null;
 }) {
   const ac = mode === "ac";
   const one = mode === "one";
   /** §54.1. The columns this tab shows, in the order they are tabbed through. */
   const columns = COLUMNS[mode];
   const OPENING = one ? 1 : OPENING_ROWS;
-  const [rows, setRows] = useState<Row[]>(() =>
-    blanks(one ? 1 : OPENING_ROWS, ac ? nowInIst() : ""),
-  );
+  /**
+   * An empty row for this grid: the AC tab stamps the arrival time and fixes
+   * the source itself, the other two start on the default source (§57.2).
+   */
+  const newRow = () => blank(ac ? nowInIst() : "", ac ? "" : defaultSourceId ?? "");
+  const newRows = (n: number) => Array.from({ length: n }, newRow);
+  const [rows, setRows] = useState<Row[]>(() => newRows(one ? 1 : OPENING_ROWS));
   /** A fresh set of empty rows for this grid, after a save or a discard. */
-  const freshRows = () => blanks(OPENING, ac ? nowInIst() : "");
+  const freshRows = () => newRows(OPENING);
   const [result, setResult] = useState<BulkResult | null>(null);
   const [pending, start] = useTransition();
   /**
@@ -455,7 +467,7 @@ export function QuickAddGrid({
     if (rows[rows.length - 1]?.key !== key) return;
     if (grownFor.current === key) return;
     grownFor.current = key;
-    setRows((rs) => [...rs, ...blanks(GROW_BY, ac ? nowInIst() : "")]);
+    setRows((rs) => [...rs, ...newRows(GROW_BY)]);
   }
 
   /**
@@ -512,7 +524,7 @@ export function QuickAddGrid({
       const next = [...rs];
       parts.forEach((p, i) => {
         const at = index + i;
-        if (!next[at]) next[at] = blank(ac ? nowInIst() : "");
+        if (!next[at]) next[at] = newRow();
         next[at] = {
           ...next[at],
           mobile: normaliseMobile(p),
@@ -522,7 +534,7 @@ export function QuickAddGrid({
         keys.push(next[at].key);
       });
       if (next[next.length - 1].mobile.trim())
-        next.push(...blanks(GROW_BY, ac ? nowInIst() : ""));
+        next.push(...newRows(GROW_BY));
       return next;
     });
     parts.forEach((p, i) => {
@@ -917,7 +929,7 @@ export function QuickAddGrid({
             size="sm"
             variant="ghost"
             onClick={() =>
-              setRows((rs) => [...rs, ...blanks(GROW_BY, ac ? nowInIst() : "")])
+              setRows((rs) => [...rs, ...newRows(GROW_BY)])
             }
           >
             Add {GROW_BY} rows
