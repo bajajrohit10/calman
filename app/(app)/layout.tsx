@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/server";
 
 import { Sidebar } from "./sidebar";
 import { showsCounselling } from "@/lib/accounts/landing";
+import { showsSupport } from "@/lib/roles";
 
 /**
  * The number on the New Calls badge (§5.12).
@@ -164,7 +165,10 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
             }}
             showSettings={isAdmin(profile.role)}
             showCounselling={showsCounselling(profile.role)}
-            showAccounts={profile.role === "super_admin" || profile.role === "accounts"}
+            // §58.0. Accounts is on hold: no role sees it, super_admin
+            // included. Was `profile.role === "super_admin" || profile.role
+            // === "accounts"`; restoring it is this one expression.
+            showSupport={showsSupport(profile.role)}
             fullName={profile.full_name}
             roleLabel={ROLE_LABELS[profile.role]}
             theme={profile.theme === "light" ? "light" : "dark"}

@@ -882,6 +882,7 @@ export type Database = {
       is_accounts: { Args: never; Returns: boolean }
       is_admin: { Args: never; Returns: boolean }
       is_staff: { Args: never; Returns: boolean }
+      is_support: { Args: never; Returns: boolean }
       is_working_day: { Args: { d: string }; Returns: boolean }
       ist_today: { Args: never; Returns: string }
       move_assignments: {
@@ -3594,6 +3595,319 @@ export type Database = {
       [_ in never]: never
     }
   }
+  support: {
+    Tables: {
+      events: {
+        Row: {
+          actor_id: string | null
+          at: string
+          detail: Json
+          id: number
+          kind: Database["support"]["Enums"]["event_kind"]
+          ticket_id: number
+        }
+        Insert: {
+          actor_id?: string | null
+          at?: string
+          detail?: Json
+          id?: number
+          kind: Database["support"]["Enums"]["event_kind"]
+          ticket_id: number
+        }
+        Update: {
+          actor_id?: string | null
+          at?: string
+          detail?: Json
+          id?: number
+          kind?: Database["support"]["Enums"]["event_kind"]
+          ticket_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "events_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      faculty_aliases: {
+        Row: {
+          created_at: string
+          institute_id: string | null
+          note: string | null
+          raw_norm: string
+          teacher_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          institute_id?: string | null
+          note?: string | null
+          raw_norm: string
+          teacher_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          institute_id?: string | null
+          note?: string | null
+          raw_norm?: string
+          teacher_id?: string | null
+        }
+        Relationships: []
+      }
+      tickets: {
+        Row: {
+          assigned_to: string | null
+          attachment_urls: string[]
+          counselling_enquiry_id: number | null
+          created_at: string
+          description: string | null
+          escalated_to: string | null
+          faculty_raw: string | null
+          follow_up_date: string | null
+          form_row_ref: string | null
+          id: number
+          institute_id: string | null
+          issue_other: string | null
+          issue_other_work: string | null
+          issues: string[]
+          issues_raw: string | null
+          issues_work: string[]
+          last_touched_at: string
+          merged_at: string | null
+          mobile: string | null
+          mobile_raw: string | null
+          order_id: string | null
+          order_id_raw: string | null
+          order_id_work: string | null
+          parent_ticket_id: number | null
+          raised_at: string
+          resolved_at: string | null
+          resolved_by: string | null
+          source: Database["support"]["Enums"]["ticket_source"]
+          status: Database["support"]["Enums"]["ticket_status"]
+          student_name: string | null
+          teacher_id: string | null
+        }
+        Insert: {
+          assigned_to?: string | null
+          attachment_urls?: string[]
+          counselling_enquiry_id?: number | null
+          created_at?: string
+          description?: string | null
+          escalated_to?: string | null
+          faculty_raw?: string | null
+          follow_up_date?: string | null
+          form_row_ref?: string | null
+          id?: number
+          institute_id?: string | null
+          issue_other?: string | null
+          issue_other_work?: string | null
+          issues?: string[]
+          issues_raw?: string | null
+          issues_work?: string[]
+          last_touched_at?: string
+          merged_at?: string | null
+          mobile?: string | null
+          mobile_raw?: string | null
+          order_id?: string | null
+          order_id_raw?: string | null
+          order_id_work?: string | null
+          parent_ticket_id?: number | null
+          raised_at?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          source: Database["support"]["Enums"]["ticket_source"]
+          status?: Database["support"]["Enums"]["ticket_status"]
+          student_name?: string | null
+          teacher_id?: string | null
+        }
+        Update: {
+          assigned_to?: string | null
+          attachment_urls?: string[]
+          counselling_enquiry_id?: number | null
+          created_at?: string
+          description?: string | null
+          escalated_to?: string | null
+          faculty_raw?: string | null
+          follow_up_date?: string | null
+          form_row_ref?: string | null
+          id?: number
+          institute_id?: string | null
+          issue_other?: string | null
+          issue_other_work?: string | null
+          issues?: string[]
+          issues_raw?: string | null
+          issues_work?: string[]
+          last_touched_at?: string
+          merged_at?: string | null
+          mobile?: string | null
+          mobile_raw?: string | null
+          order_id?: string | null
+          order_id_raw?: string | null
+          order_id_work?: string | null
+          parent_ticket_id?: number | null
+          raised_at?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          source?: Database["support"]["Enums"]["ticket_source"]
+          status?: Database["support"]["Enums"]["ticket_status"]
+          student_name?: string | null
+          teacher_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tickets_parent_ticket_id_fkey"
+            columns: ["parent_ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      age_days: { Args: { p_raised: string }; Returns: number }
+      issue_options: { Args: never; Returns: string[] }
+      log_ticket_touch: {
+        Args: {
+          p_channel?: string
+          p_kind: Database["support"]["Enums"]["event_kind"]
+          p_note: string
+          p_picked?: boolean
+          p_ticket_id: number
+        }
+        Returns: number
+      }
+      merge_ticket: {
+        Args: { p_child_id: number; p_parent_id: number }
+        Returns: number
+      }
+      queue: {
+        Args: {
+          p_assigned_to?: string[]
+          p_follow_from?: string
+          p_follow_to?: string
+          p_institute_id?: string
+          p_issues?: string[]
+          p_limit?: number
+          p_offset?: number
+          p_search?: string
+          p_sources?: string[]
+          p_statuses?: string[]
+          p_tab?: string
+          p_teacher_id?: string
+        }
+        Returns: {
+          age_days: number
+          assigned_to: string
+          assigned_to_name: string
+          child_count: number
+          escalated_to_name: string
+          follow_up_date: string
+          id: number
+          institute_name: string
+          issue_other_work: string
+          issues_work: string[]
+          last_touched_at: string
+          mobile: string
+          mobile_raw: string
+          order_id: string
+          order_id_raw: string
+          order_id_work: string
+          overdue: boolean
+          raised_at: string
+          source: Database["support"]["Enums"]["ticket_source"]
+          status: Database["support"]["Enums"]["ticket_status"]
+          student_name: string
+          teacher_name: string
+          total_count: number
+        }[]
+      }
+      queue_facets: {
+        Args: {
+          p_assigned_to?: string[]
+          p_follow_from?: string
+          p_follow_to?: string
+          p_institute_id?: string
+          p_issues?: string[]
+          p_search?: string
+          p_sources?: string[]
+          p_tab?: string
+          p_teacher_id?: string
+        }
+        Returns: {
+          facet: string
+          items: number
+          numbers: number
+          value_id: string
+        }[]
+      }
+      save_ticket_action: {
+        Args: {
+          p_called?: boolean
+          p_details: string
+          p_escalated_to: string
+          p_follow_up_date: string
+          p_institute_id: string
+          p_issue_other: string
+          p_issues: string[]
+          p_message_channel?: string
+          p_messaged?: boolean
+          p_order_id_work: string
+          p_outcome: Database["support"]["Enums"]["ticket_status"]
+          p_teacher_id: string
+          p_ticket_id: number
+        }
+        Returns: number
+      }
+      tab_counts: {
+        Args: {
+          p_assigned_to?: string[]
+          p_follow_from?: string
+          p_follow_to?: string
+          p_institute_id?: string
+          p_issues?: string[]
+          p_search?: string
+          p_sources?: string[]
+          p_teacher_id?: string
+        }
+        Returns: {
+          n: number
+          tab: string
+        }[]
+      }
+    }
+    Enums: {
+      event_kind:
+        | "created"
+        | "field_change"
+        | "status_change"
+        | "note"
+        | "called"
+        | "messaged"
+        | "merged_into"
+        | "child_merged"
+        | "resolved"
+        | "reopened"
+        | "counselling_link"
+      ticket_source:
+        | "form"
+        | "mail"
+        | "whatsapp"
+        | "calling_team"
+        | "counselling"
+        | "manual"
+      ticket_status: "new" | "working" | "escalated" | "future" | "resolved"
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
 }
 
 type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
@@ -3790,6 +4104,32 @@ export const Constants = {
         "ticket_team",
         "accounts",
       ],
+    },
+  },
+  support: {
+    Enums: {
+      event_kind: [
+        "created",
+        "field_change",
+        "status_change",
+        "note",
+        "called",
+        "messaged",
+        "merged_into",
+        "child_merged",
+        "resolved",
+        "reopened",
+        "counselling_link",
+      ],
+      ticket_source: [
+        "form",
+        "mail",
+        "whatsapp",
+        "calling_team",
+        "counselling",
+        "manual",
+      ],
+      ticket_status: ["new", "working", "escalated", "future", "resolved"],
     },
   },
 } as const

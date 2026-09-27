@@ -82,6 +82,10 @@ const ITEMS: Item[] = [
  * done by different people, and burying it under Settings would say it is a
  * configuration screen for the counselling product, which it is not.
  */
+// §58.0. On hold, and kept rather than deleted: the routes, the schema and the
+// role all still work, so this is the definition to put back — not to rewrite —
+// when Accounts returns. Unreferenced on purpose until then.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const ACCOUNTS: Item = {
   // §50E.3. Sales is the month's work and the accounts role's landing page;
   // vendors and rates are the reference data behind it.
@@ -128,6 +132,22 @@ const ACCOUNTS: Item = {
   ],
 };
 
+/**
+ * §58.0. Support Tickets.
+ *
+ * Its own section rather than a child of the counselling rail, and deliberately
+ * not next to "Tickets": that one is the counselling after-sale queue over
+ * public.enquiries, this one is the students' Google Form over schema support.
+ * They are different queues worked by different people, and the two sitting
+ * under one heading is exactly the confusion to avoid.
+ */
+const SUPPORT: Item = {
+  href: "/support",
+  label: "Support",
+  hint: "Student support tickets",
+  icon: "☂",
+};
+
 const SETTINGS: Item = {
   href: "/settings/users",
   label: "Settings",
@@ -148,7 +168,7 @@ const SETTINGS: Item = {
 export function Sidebar({
   showSettings,
   showCounselling,
-  showAccounts,
+  showSupport,
   fullName,
   roleLabel,
   theme,
@@ -162,8 +182,8 @@ export function Sidebar({
    * showing it none.
    */
   showCounselling: boolean;
-  /** §50A: super admins and the accounts role; not managers. */
-  showAccounts: boolean;
+  /** §58.0: the ticket team, managers and super admins. Not counsellors. */
+  showSupport: boolean;
   fullName: string;
   roleLabel: string;
   /** §43.2: which palette this person is looking at. */
@@ -186,7 +206,11 @@ export function Sidebar({
   const counselling = showSettings ? ITEMS : ITEMS.filter((item) => !item.adminOnly);
   const items = [
     ...(showCounselling ? counselling : []),
-    ...(showAccounts ? [ACCOUNTS] : []),
+    ...(showSupport ? [SUPPORT] : []),
+    // §58.0. Accounts is on hold, so its links are gone from every role,
+    // super_admin included. Nothing else was removed: the /accounts routes, the
+    // accounts schema and the accounts role all still work, and putting the
+    // section back is one line here plus its gate in the layout.
     ...(showSettings ? [SETTINGS] : []),
   ];
 
