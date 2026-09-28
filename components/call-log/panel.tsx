@@ -686,6 +686,18 @@ export function CallLogPanel({
   const needsEscalatee = asAfterSale && outcome === "escalated" && !escalatedTo;
   const [escalateeAsked, setEscalateeAsked] = useState(false);
   const escalateeRef = useRef<HTMLSelectElement | null>(null);
+  /**
+   * §62 addendum, bug 3. The outcome had no guard and no ref.
+   *
+   * Saving with it blank went to the server, which refuses with "Choose an
+   * outcome." — but only after doing real work first, and any failure on that
+   * round trip leaves the transition pending and the button spinning with
+   * nothing said. A refusal the form can make itself should never be a round
+   * trip at all.
+   */
+  const outcomeRef = useRef<HTMLSelectElement | null>(null);
+  /** The reminder / next-follow-up field, for the same reason. */
+  const dateRef = useRef<HTMLInputElement | null>(null);
 
   function focusOrder() {
     setOrderAsked(true);
@@ -835,22 +847,58 @@ export function CallLogPanel({
   function save(forced?: CallOutcome) {
     const outcome = forced ?? outcomeState;
     if (pending) return;
+
+    /**
+     * §62 addendum, bug 3. Every refusal says what is wrong.
+     *
+     * These guards used to focus the offending field and return in silence,
+     * which on a long form reads as a dead button — the amber hint can easily
+     * be off screen. Each one now also writes the message into the same box a
+     * server error uses, so there is exactly one place to look.
+     */
+    const refuse = (message: string, focus: () => void) => {
+      setResult({ error: message });
+      focus();
+    };
+
     // Before anything else: Close ticket is a save too, and closing a ticket
     // nobody ever categorised is exactly how a queue loses its shape.
     if (needsIssue) {
-      focusIssue();
+      refuse("Pick an issue category.", focusIssue);
       return;
     }
     if (needsOrderId) {
-      focusOrder();
+      refuse("A ticket needs an order ID.", focusOrder);
+      return;
+    }
+    // The blank outcome, refused here rather than at the server: the round trip
+    // it used to make could convert a lead to a ticket before refusing.
+    if (!outcome) {
+      refuse("Choose an outcome.", () => {
+        outcomeRef.current?.focus();
+        outcomeRef.current?.scrollIntoView({ block: "center" });
+      });
       return;
     }
     if (asAfterSale && outcome === "escalated" && !escalatedTo) {
-      focusEscalatee();
+      refuse("Say who this ticket is escalated to.", focusEscalatee);
+      return;
+    }
+    // §44.3. Every after-sale state but Resolved has a day somebody looks at it
+    // again, and the field is on screen — so the form asks for it rather than
+    // storing a ticket with no next date.
+    if (outcomeTakesDate(outcome) && !followUpDate) {
+      refuse(
+        asAfterSale ? "Set a reminder date." : "Set the next follow-up date.",
+        () => {
+          dateRef.current?.focus();
+          dateRef.current?.scrollIntoView({ block: "center" });
+        },
+      );
       return;
     }
     if (blocksSave) {
-      focusInterests();
+      refuse("Add at least one interest line first.", focusInterests);
       return;
     }
     // The soft prompt. A second Enter, or the "Save anyway" button, gets past
@@ -1063,6 +1111,8 @@ export function CallLogPanel({
 
       {isFirstCall ? (
         <FirstCallFields
+          outcomeRef={outcomeRef}
+          dateRef={dateRef}
           productText={productText}
           setProductText={setProductText}
           onProductSettled={parseIntoLines}
@@ -1218,6 +1268,8 @@ export function CallLogPanel({
               Outcome
             </span>
             <Select
+              ref={outcomeRef}
+              aria-label="Outcome"
               value={outcome}
               onChange={(e) => chooseOutcome(e.target.value as CallOutcome | "")}
             >
@@ -1319,6 +1371,7 @@ export function CallLogPanel({
               </span>
               <div className="flex flex-wrap items-center gap-1.5">
                 <Input
+                  ref={dateRef}
                   type="date"
                   className="w-[150px]"
                   value={followUpDate}
@@ -1550,6 +1603,11 @@ export function CallLogPanel({
  * 1440×900 window without scrolling; one column below that.
  */
 function FirstCallFields({
+  // §62 addendum, bug 3. The first-call form has its own Outcome and date
+  // controls, so the panel's guards had nothing to focus here — the message
+  // appeared and the field it was about stayed off screen.
+  outcomeRef,
+  dateRef,
   masters,
   productText,
   setProductText,
@@ -1604,6 +1662,9 @@ function FirstCallFields({
   pending,
   onCancel,
 }: {
+  /** §62 addendum: the panel's guards focus these. */
+  outcomeRef: React.RefObject<HTMLSelectElement | null>;
+  dateRef: React.RefObject<HTMLInputElement | null>;
   masters: PanelMasters;
   studentName: string;
   setStudentName: (v: string) => void;
@@ -2018,6 +2079,8 @@ function FirstCallFields({
 
       <FirstCallField label="Outcome">
         <Select
+          ref={outcomeRef}
+          aria-label="Outcome"
           value={outcome}
           onChange={(e) => chooseOutcome(e.target.value as CallOutcome | "")}
         >
@@ -2037,7 +2100,9 @@ function FirstCallFields({
         hint={closedLabel(followUpDate, calendar) ?? undefined}
       >
         <Input
+          ref={dateRef}
           type="date"
+          aria-label="Follow-up date"
           value={followUpDate}
           disabled={!outcomeTakesDate(outcome)}
           onChange={(e) => setFollowUpDate(e.target.value)}

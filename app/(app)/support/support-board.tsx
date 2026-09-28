@@ -341,34 +341,20 @@ export function SupportBoard({
               return (
                 <tr
                   key={r.id}
-                  /* §61.1. `relative` is what lets the stretched anchor below
-                     cover the whole row. */
-                  className="group relative border-b border-line last:border-b-0 hover:bg-surface-2"
+                  className="group border-b border-line last:border-b-0 hover:bg-surface-2"
                 >
-                  <td className="px-1.5 py-[5px] tabular-nums">
-                    {/* §61.1. One real anchor, stretched over the row.
-                        Not an onClick with router.push: that swallows ⌘-click,
-                        middle-click and "Open in new tab", and a queue nobody
-                        can fan out into tabs is a queue that has to be worked
-                        one ticket at a time. The text stays in its cell; only
-                        the hit area is absolute. */}
-                    <Link
-                      href={`/support/${r.id}`}
-                      prefetch={false}
-                      aria-label={`Open ticket ${r.id}`}
-                      className="absolute inset-0 z-0 rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-                    />
+                  <Cell id={r.id} first className="tabular-nums">
                     <span className="text-accent group-hover:underline">{r.id}</span>
                     {r.child_count > 0 ? (
                       <span className="ml-1.5" title={`${r.child_count} merged duplicate(s)`}>
                         <Badge tone="neutral">+{r.child_count}</Badge>
                       </span>
                     ) : null}
-                  </td>
-                  <td className="whitespace-nowrap px-1.5 py-[5px] text-ink-3">
+                  </Cell>
+                  <Cell id={r.id} className="whitespace-nowrap text-ink-3">
                     {formatDate(r.raised_at)}
-                  </td>
-                  <td className="px-1.5 py-[5px] tabular-nums">
+                  </Cell>
+                  <Cell id={r.id} className="tabular-nums">
                     {/* §58.4. Red past three calendar days, and only while it is
                         still somebody's problem — a resolved ticket's age is
                         history, not a warning. */}
@@ -377,8 +363,8 @@ export function SupportBoard({
                     ) : (
                       <span className="text-ink-3">{r.age_days}d</span>
                     )}
-                  </td>
-                  <td className="px-1.5 py-[5px]">
+                  </Cell>
+                  <Cell id={r.id}>
                     <span className="text-ink">{r.student_name || "No name"}</span>
                     {r.mobile ? (
                       <span className="ml-1.5 tabular-nums text-ink-3">
@@ -389,8 +375,8 @@ export function SupportBoard({
                         {r.mobile_raw ? `${r.mobile_raw} (unusable)` : "no number"}
                       </span>
                     )}
-                  </td>
-                  <td className="px-1.5 py-[5px] tabular-nums text-ink-2">
+                  </Cell>
+                  <Cell id={r.id} className="tabular-nums text-ink-2">
                     {order ? (
                       <span title={rawDiffers ? `As submitted: ${r.order_id_raw}` : undefined}>
                         {order}
@@ -399,13 +385,13 @@ export function SupportBoard({
                     ) : (
                       "—"
                     )}
-                  </td>
-                  <td className="px-1.5 py-[5px] text-ink-2">
+                  </Cell>
+                  <Cell id={r.id} className="text-ink-2">
                     {r.institute_name ?? r.teacher_name ?? (
                       <span className="text-warn">not matched</span>
                     )}
-                  </td>
-                  <td className="max-w-[240px] px-1.5 py-[5px] text-ink-3">
+                  </Cell>
+                  <Cell id={r.id} className="max-w-[240px] text-ink-3">
                     <span className="block truncate" title={r.issues_work.join(", ")}>
                       {r.issues_work.length ? r.issues_work.join(", ") : "—"}
                     </span>
@@ -414,11 +400,11 @@ export function SupportBoard({
                         {r.issue_other_work}
                       </span>
                     ) : null}
-                  </td>
-                  <td className="whitespace-nowrap px-1.5 py-[5px] text-ink-2">
+                  </Cell>
+                  <Cell id={r.id} className="whitespace-nowrap text-ink-2">
                     {SOURCE_LABELS[r.source] ?? r.source}
-                  </td>
-                  <td className="px-1.5 py-[5px]">
+                  </Cell>
+                  <Cell id={r.id}>
                     <Badge dot tone={statusTone(r.status)}>
                       {STATUS_LABELS[r.status] ?? r.status}
                     </Badge>
@@ -428,8 +414,8 @@ export function SupportBoard({
                         {r.escalation_kind === "institute" ? " (institute)" : ""}
                       </span>
                     ) : null}
-                  </td>
-                  <td className="whitespace-nowrap px-1.5 py-[5px] tabular-nums">
+                  </Cell>
+                  <Cell id={r.id} className="whitespace-nowrap tabular-nums">
                     {r.follow_up_date ? (
                       <span className={r.overdue ? "text-danger" : "text-ink-2"}>
                         {formatDate(r.follow_up_date)}
@@ -437,13 +423,13 @@ export function SupportBoard({
                     ) : (
                       <span className="text-ink-3">—</span>
                     )}
-                  </td>
-                  <td className="px-1.5 py-[5px] text-ink-2">
+                  </Cell>
+                  <Cell id={r.id} className="text-ink-2">
                     {r.assigned_to_name ?? <span className="text-ink-3">nobody</span>}
-                  </td>
-                  <td className="whitespace-nowrap px-1.5 py-[5px] text-[11px] text-ink-3">
+                  </Cell>
+                  <Cell id={r.id} className="whitespace-nowrap text-[11px] text-ink-3">
                     {formatDateTime(r.last_touched_at)}
-                  </td>
+                  </Cell>
                 </tr>
               );
             })}
@@ -617,5 +603,56 @@ function NewTicketForm({
         </Button>
       </div>
     </form>
+  );
+}
+
+/**
+ * §62 addendum. One cell of a clickable row.
+ *
+ * The overlay lives in the cell, not the row. Brief 61 stretched a single anchor
+ * across `<tr className="relative">`, which worked in the browser it was tested
+ * in and covered the filter bar in production — because CSS leaves the effect of
+ * `position: relative` on a table-row *undefined*. Where the browser ignores it,
+ * `inset-0` resolves against whatever positioned ancestor it finds next and the
+ * hit area swallows everything above the table. Clicking Issue or Source opened
+ * a ticket.
+ *
+ * `position: relative` on a table-cell is well defined, so each overlay is
+ * confined to its own cell by construction and cannot escape the row however the
+ * engine feels about table layout. The cells together cover the row, so the whole
+ * row is still one click, and it is still a real anchor: ⌘-click, middle-click
+ * and the context menu all keep working.
+ *
+ * Only the first cell's anchor is reachable by keyboard or screen reader; the
+ * rest are hidden from both, so a row is one tab stop and one link, not twelve.
+ *
+ * The overlay takes the clicks, so text inside a row cannot be selected and a
+ * per-cell `title` tooltip does not fire. That was equally true of the Brief 61
+ * version and is the price of a row that is one click; the truncated cells keep
+ * their `title` on the cell itself, where the overlay does not sit.
+ */
+function Cell({
+  id,
+  first,
+  className,
+  children,
+}: {
+  id: number;
+  first?: boolean;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <td className={cx("relative px-1.5 py-[5px]", className)}>
+      <Link
+        href={`/support/${id}`}
+        prefetch={false}
+        tabIndex={first ? undefined : -1}
+        aria-hidden={first ? undefined : true}
+        aria-label={first ? `Open ticket ${id}` : undefined}
+        className="absolute inset-0 rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+      />
+      {children}
+    </td>
   );
 }

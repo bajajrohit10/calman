@@ -424,6 +424,22 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
     };
   }
 
+  /**
+   * §62 addendum. The outcome is checked before anything is written.
+   *
+   * It used to be validated after the conversion below, so saving an after-sale
+   * call with the outcome left blank converted the lead to a ticket — closing
+   * the purchase enquiry as superseded and creating a new one — and only then
+   * refused. The counsellor saw "Choose an outcome." and had no idea two
+   * enquiries had just changed underneath them. Found while reproducing bug 3;
+   * ZTEST enquiries 1719/1720 are what it did.
+   *
+   * Only this check moves up. The rest stay below because they depend on the
+   * post-conversion type: whether an issue category is required, and which
+   * outcomes are legal, are both answers about what the enquiry has become.
+   */
+  if (!input.outcome) return { error: "Choose an outcome." };
+
   // §25. Done first, because everything below asks questions of the enquiry's
   // type and the conversion is what changes the answer. It also decides which
   // enquiry the call lands on: the same one when there was nothing to
@@ -469,9 +485,9 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
     }
   }
 
+  // Non-null by the check above, before the conversion ran.
   const outcome = input.outcome;
 
-  if (!outcome) return { error: "Choose an outcome." };
   if (!outcomesFor(type).includes(outcome)) {
     return { error: "That outcome does not apply to this kind of enquiry." };
   }
