@@ -43,6 +43,8 @@ export type TicketDetail = {
   status: string;
   follow_up_date: string | null;
   escalated_to: string | null;
+  /** §61.2: 'team' | 'institute', null unless escalated. */
+  escalation_kind: string | null;
   resolved_at: string | null;
   resolved_by: string | null;
   parent_ticket_id: number | null;
@@ -63,12 +65,42 @@ export type TicketEvent = {
 
 type Master = { id: string; name: string };
 
+/**
+ * §61.2. The outcome control, where the two escalations are separate choices.
+ *
+ * The dropdown value carries both the status and the kind, because to the person
+ * working the ticket "escalated to the institute" is one decision, not a status
+ * plus a follow-up question. The status underneath stays `escalated` for both so
+ * the tabs, the queue and every existing query keep working.
+ */
 const OUTCOMES = [
-  { id: "working", label: "Working on it" },
-  { id: "escalated", label: "Escalated" },
-  { id: "future", label: "Future date" },
-  { id: "resolved", label: "Resolved" },
+  { id: "working", label: "Working on it", status: "working", kind: null },
+  {
+    id: "escalated_team",
+    label: "Escalated to team member",
+    status: "escalated",
+    kind: "team",
+  },
+  {
+    id: "escalated_institute",
+    label: "Escalated to Institute",
+    status: "escalated",
+    kind: "institute",
+  },
+  { id: "future", label: "Future date", status: "future", kind: null },
+  { id: "resolved", label: "Resolved", status: "resolved", kind: null },
 ] as const;
+
+type OutcomeId = (typeof OUTCOMES)[number]["id"];
+
+/** Which dropdown entry a stored status + kind corresponds to. */
+function outcomeIdFor(status: string, kind: string | null): OutcomeId {
+  if (status === "escalated") {
+    return kind === "institute" ? "escalated_institute" : "escalated_team";
+  }
+  const hit = OUTCOMES.find((o) => o.status === status && o.kind === null);
+  return hit?.id ?? "working";
+}
 
 export function TicketView({
   ticket,
@@ -95,6 +127,8 @@ export function TicketView({
 }) {
   const sourceLabel =
     SUPPORT_SOURCES.find((s) => s.id === ticket.source)?.name ?? ticket.source;
+  const instituteName =
+    masters.institutes.find((i) => i.id === ticket.institute_id)?.name ?? null;
 
   return (
     <div className="flex flex-col gap-3">
@@ -120,9 +154,15 @@ export function TicketView({
           </Badge>
           <Badge tone="neutral">#{ticket.id}</Badge>
           <Badge tone="neutral">{sourceLabel}</Badge>
-          {ticket.escalated_to ? (
+          {ticket.status === "escalated" ? (
             <span className="text-[11.5px] text-ink-3">
-              escalated to {people[ticket.escalated_to] ?? "someone"}
+              {ticket.escalation_kind === "institute"
+                ? `escalated to the institute${
+                    instituteName ? ` — ${instituteName}` : ""
+                  }`
+                : `escalated to ${
+                    ticket.escalated_to ? (people[ticket.escalated_to] ?? "someone") : "someone"
+                  }`}
             </span>
           ) : null}
           {ticket.counselling_enquiry_id ? (
@@ -202,14 +242,19 @@ export function TicketView({
           </h2>
           <ul className="flex flex-col gap-1 text-[12.5px]">
             {duplicates.map((c) => (
-              <li key={c.id}>
+              /* §61.1. Same treatment as the queue: one stretched anchor so the
+                 whole line is the link and ⌘-click still opens a tab. */
+              <li
+                key={c.id}
+                className="group relative rounded-sm px-1 py-0.5 hover:bg-surface-2"
+              >
                 <Link
                   href={`/support/${c.id}`}
                   prefetch={false}
-                  className="text-accent underline-offset-2 hover:underline"
-                >
-                  #{c.id}
-                </Link>{" "}
+                  aria-label={`Open ticket ${c.id}`}
+                  className="absolute inset-0 z-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                />
+                <span className="text-accent group-hover:underline">#{c.id}</span>{" "}
                 <span className="text-ink-2">
                   {c.studentName || "No name"}
                   {c.mobile ? ` · ${formatMobile(c.mobile)}` : ""}
@@ -269,13 +314,20 @@ function ActionPanel({
   const [pending, start] = useTransition();
   const [result, setResult] = useState<{ error: string | null; ok?: string } | null>(null);
   const [issues, setIssues] = useState<string[]>(ticket.issues_work ?? []);
-  const [outcome, setOutcome] = useState<string>(
-    ticket.status === "new" ? "working" : ticket.status,
+  const [outcome, setOutcome] = useState<OutcomeId>(
+    ticket.status === "new" ? "working" : outcomeIdFor(ticket.status, ticket.escalation_kind),
   );
   const lock = useRef(false);
 
-  const needsDate = outcome !== "resolved";
-  const needsPerson = outcome === "escalated";
+  const chosen = OUTCOMES.find((o) => o.id === outcome)!;
+  const needsDate = chosen.status !== "resolved";
+  const needsPerson = chosen.kind === "team";
+  // §61.2. An institute escalation is a claim about a specific institute, so the
+  // ticket has to name one. Said here as well as refused by the server, because
+  // an error arriving after the save is a worse way to learn it.
+  const needsInstitute = chosen.kind === "institute";
+  const [instituteId, setInstituteId] = useState<string>(ticket.institute_id ?? "");
+  const instituteMissing = needsInstitute && !instituteId;
 
   function submit(form: HTMLFormElement) {
     if (lock.current) return;
@@ -291,7 +343,8 @@ function ActionPanel({
         teacherId: String(data.get("teacherId") ?? "") || null,
         orderIdWork: String(data.get("orderIdWork") ?? "").trim() || null,
         details: String(data.get("details") ?? ""),
-        outcome: outcome as "working" | "escalated" | "future" | "resolved",
+        outcome: chosen.status,
+        escalationKind: chosen.kind,
         followUpDate: String(data.get("followUpDate") ?? "") || null,
         escalatedTo: String(data.get("escalatedTo") ?? "") || null,
         called: data.get("called") === "on",
@@ -367,7 +420,12 @@ function ActionPanel({
             <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
               Institute
             </span>
-            <Select name="instituteId" defaultValue={ticket.institute_id ?? ""} aria-label="Institute">
+            <Select
+              name="instituteId"
+              value={instituteId}
+              onChange={(e) => setInstituteId(e.target.value)}
+              aria-label="Institute"
+            >
               <option value="">—</option>
               {masters.institutes.map((i) => (
                 <option key={i.id} value={i.id}>
@@ -416,7 +474,7 @@ function ActionPanel({
               name="outcome"
               aria-label="Outcome"
               value={outcome}
-              onChange={(e) => setOutcome(e.target.value)}
+              onChange={(e) => setOutcome(e.target.value as OutcomeId)}
             >
               {OUTCOMES.map((o) => (
                 <option key={o.id} value={o.id}>
@@ -425,6 +483,16 @@ function ActionPanel({
               ))}
             </Select>
           </label>
+
+          {instituteMissing ? (
+            <p
+              data-testid="institute-required"
+              className="rounded-md border border-warn/50 bg-warn-soft/40 px-2 py-1 text-[12px] text-ink"
+              role="status"
+            >
+              Set Institute first — an institute escalation has to name one.
+            </p>
+          ) : null}
 
           {needsPerson ? (
             <label className="block">
@@ -493,7 +561,12 @@ function ActionPanel({
       ) : null}
 
       <div className="flex items-center gap-2 border-t border-line bg-sunk px-4 py-2.5">
-        <Button type="submit" variant="primary" size="sm" disabled={pending}>
+        <Button
+          type="submit"
+          variant="primary"
+          size="sm"
+          disabled={pending || instituteMissing}
+        >
           {pending ? "Saving…" : "Save"}
         </Button>
         <span className="text-[11.5px] text-ink-3">
@@ -788,10 +861,19 @@ function describe(e: TicketEvent, people: Record<string, string>): string {
       const to = d.new == null || d.new === "" ? "nothing" : JSON.stringify(d.new);
       return `${field}: ${from} → ${to}`;
     }
-    case "status_change":
+    case "status_change": {
+      // §61.2. "escalated" on its own no longer says enough: the team needs to
+      // read which wait this is without opening the ticket.
+      const to =
+        d.escalation_kind === "institute"
+          ? ", to the institute"
+          : d.escalated_to
+            ? `, to ${who("escalated_to")}`
+            : "";
       return `${s("old")} → ${s("new")}${
         s("follow_up_date") ? `, follow up ${s("follow_up_date")}` : ""
-      }${d.escalated_to ? `, to ${who("escalated_to")}` : ""}`;
+      }${to}`;
+    }
     case "resolved":
       return "Resolved.";
     case "reopened":

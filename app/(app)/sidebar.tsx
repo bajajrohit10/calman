@@ -146,6 +146,15 @@ const SUPPORT: Item = {
   label: "Support",
   hint: "Student support tickets",
   icon: "☂",
+  // §61.3. A child of Support, not of Reports: these numbers are about the
+  // ticket queue and share no data with the counselling reports next door.
+  sub: [
+    {
+      href: "/support/reports",
+      label: "Reports",
+      hint: "Open work, ageing and resolutions",
+    },
+  ],
 };
 
 const SETTINGS: Item = {

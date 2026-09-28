@@ -3664,6 +3664,7 @@ export type Database = {
           created_at: string
           description: string | null
           escalated_to: string | null
+          escalation_kind: string | null
           faculty_raw: string | null
           follow_up_date: string | null
           form_row_ref: string | null
@@ -3697,6 +3698,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           escalated_to?: string | null
+          escalation_kind?: string | null
           faculty_raw?: string | null
           follow_up_date?: string | null
           form_row_ref?: string | null
@@ -3730,6 +3732,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           escalated_to?: string | null
+          escalation_kind?: string | null
           faculty_raw?: string | null
           follow_up_date?: string | null
           form_row_ref?: string | null
@@ -3772,6 +3775,17 @@ export type Database = {
     }
     Functions: {
       age_days: { Args: { p_raised: string }; Returns: number }
+      in_report_scope: {
+        Args: {
+          p_assigned_to: string[]
+          p_from: string
+          p_institute_id: string
+          p_teacher_id: string
+          p_to: string
+          t: Database["support"]["Tables"]["tickets"]["Row"]
+        }
+        Returns: boolean
+      }
       issue_options: { Args: never; Returns: string[] }
       log_ticket_touch: {
         Args: {
@@ -3790,12 +3804,15 @@ export type Database = {
       queue: {
         Args: {
           p_assigned_to?: string[]
+          p_escalation_kinds?: string[]
           p_follow_from?: string
           p_follow_to?: string
           p_institute_id?: string
           p_issues?: string[]
           p_limit?: number
           p_offset?: number
+          p_raised_from?: string
+          p_raised_to?: string
           p_search?: string
           p_sources?: string[]
           p_statuses?: string[]
@@ -3807,7 +3824,9 @@ export type Database = {
           assigned_to: string
           assigned_to_name: string
           child_count: number
+          escalated_label: string
           escalated_to_name: string
+          escalation_kind: string
           follow_up_date: string
           id: number
           institute_name: string
@@ -3831,10 +3850,13 @@ export type Database = {
       queue_facets: {
         Args: {
           p_assigned_to?: string[]
+          p_escalation_kinds?: string[]
           p_follow_from?: string
           p_follow_to?: string
           p_institute_id?: string
           p_issues?: string[]
+          p_raised_from?: string
+          p_raised_to?: string
           p_search?: string
           p_sources?: string[]
           p_tab?: string
@@ -3847,11 +3869,119 @@ export type Database = {
           value_id: string
         }[]
       }
+      report_ageing: {
+        Args: {
+          p_assigned_to?: string[]
+          p_from?: string
+          p_institute_id?: string
+          p_teacher_id?: string
+          p_to?: string
+        }
+        Returns: {
+          bucket: string
+          n: number
+        }[]
+      }
+      report_institute_escalations: {
+        Args: {
+          p_assigned_to?: string[]
+          p_institute_id?: string
+          p_teacher_id?: string
+        }
+        Returns: {
+          age_days: number
+          assigned_to_name: string
+          follow_up_date: string
+          id: number
+          institute_id: string
+          institute_name: string
+          mobile: string
+          order_id: string
+          overdue: boolean
+          raised_at: string
+          student_name: string
+        }[]
+      }
+      report_open_by_institute: {
+        Args: {
+          p_assigned_to?: string[]
+          p_from?: string
+          p_institute_id?: string
+          p_teacher_id?: string
+          p_to?: string
+        }
+        Returns: {
+          institute_id: string
+          institute_name: string
+          n: number
+        }[]
+      }
+      report_open_by_issue: {
+        Args: {
+          p_assigned_to?: string[]
+          p_from?: string
+          p_institute_id?: string
+          p_teacher_id?: string
+          p_to?: string
+        }
+        Returns: {
+          issue: string
+          n: number
+        }[]
+      }
+      report_open_by_status: {
+        Args: {
+          p_assigned_to?: string[]
+          p_from?: string
+          p_institute_id?: string
+          p_teacher_id?: string
+          p_to?: string
+        }
+        Returns: {
+          bucket: string
+          n: number
+        }[]
+      }
+      report_resolved_per_person: {
+        Args: {
+          p_assigned_to?: string[]
+          p_from?: string
+          p_institute_id?: string
+          p_teacher_id?: string
+          p_to?: string
+        }
+        Returns: {
+          day: string
+          n: number
+          person_id: string
+          person_name: string
+        }[]
+      }
+      report_time_to_resolve: {
+        Args: {
+          p_assigned_to?: string[]
+          p_from?: string
+          p_institute_id?: string
+          p_teacher_id?: string
+          p_to?: string
+        }
+        Returns: {
+          avg_days: number
+          institute_id: string
+          institute_name: string
+          max_days: number
+          median_days: number
+          min_days: number
+          scope: string
+          tickets: number
+        }[]
+      }
       save_ticket_action: {
         Args: {
           p_called?: boolean
           p_details: string
           p_escalated_to: string
+          p_escalation_kind?: string
           p_follow_up_date: string
           p_institute_id: string
           p_issue_other: string
@@ -3872,6 +4002,8 @@ export type Database = {
           p_follow_to?: string
           p_institute_id?: string
           p_issues?: string[]
+          p_raised_from?: string
+          p_raised_to?: string
           p_search?: string
           p_sources?: string[]
           p_teacher_id?: string

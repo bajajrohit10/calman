@@ -14,6 +14,7 @@ import { ISSUE_OPTIONS } from "@/lib/support/normalise";
 
 import { newSupportTicket } from "./actions";
 import {
+  ESCALATION_KINDS,
   ISSUE_FILTER_OPTIONS,
   STATUS_LABELS,
   SUPPORT_SOURCES,
@@ -42,6 +43,10 @@ export type TicketRow = {
   assigned_to_name: string | null;
   assigned_to: string | null;
   escalated_to_name: string | null;
+  /** §61.2: 'team' | 'institute', null unless escalated. */
+  escalation_kind: string | null;
+  /** §61.2: the person for a team escalation, the institute for the other. */
+  escalated_label: string | null;
   last_touched_at: string;
   source: string;
   child_count: number;
@@ -71,6 +76,8 @@ export function SupportBoard({
   issues,
   assignedTo,
   sources,
+  escalationKinds,
+  statuses,
   selected,
   facets,
   facetError,
@@ -88,6 +95,9 @@ export function SupportBoard({
   issues: string[];
   assignedTo: string[];
   sources: string[];
+  escalationKinds: string[];
+  /** §61.3: an explicit status list, from a report click-through. */
+  statuses: string[];
   selected: Record<string, string>;
   facets?: FacetMap;
   facetError?: string | null;
@@ -133,12 +143,65 @@ export function SupportBoard({
             );
           })}
         </div>
-        <span className="ml-auto">
+        <span className="ml-auto flex items-center gap-2">
+          {/* §61.4. A plain link, not a fetch-and-blob: the browser's own
+              download handles a large file without holding it in memory, and
+              the href carries exactly the filters on screen. */}
+          <a
+            href={`/support/export?${search}`}
+            data-testid="export-csv"
+            className="inline-flex h-[26px] items-center rounded-md border border-line-2 bg-surface px-2.5 text-[12.5px] font-medium text-ink hover:bg-surface-2"
+          >
+            Export CSV
+          </a>
           <Button type="button" size="sm" variant="primary" onClick={() => setAdding(true)}>
             New ticket
           </Button>
         </span>
       </div>
+
+      {/* §61.2. Only on the Escalated tab: the two kinds are different waits,
+          and the chip is the fastest way to see just the ones sitting with an
+          institute. Links, like every other filter here, so it is shareable. */}
+      {tab === "escalated" ? (
+        <div className="flex flex-wrap items-center gap-2" data-testid="kind-chips">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+            Escalated to
+          </span>
+          <div className="inline-flex overflow-hidden rounded-md border border-line-2">
+            {ESCALATION_KINDS.map((k) => {
+              const on = escalationKinds.includes(k.id);
+              const params = new URLSearchParams(search);
+              // Clicking a chosen chip clears it, so the same control turns the
+              // filter off; with none chosen the parameter goes altogether.
+              const next = on
+                ? escalationKinds.filter((x) => x !== k.id)
+                : [...escalationKinds, k.id];
+              if (next.length) params.set("kind", next.join(","));
+              else params.delete("kind");
+              params.delete("page");
+              return (
+                <Link
+                  key={k.id}
+                  href={`/support?${params.toString()}`}
+                  prefetch={false}
+                  aria-current={on ? "true" : undefined}
+                  className={
+                    on
+                      ? "bg-accent px-3 py-1 text-[12.5px] font-medium text-accent-ink"
+                      : "bg-surface px-3 py-1 text-[12.5px] text-ink-2 hover:bg-surface-2"
+                  }
+                >
+                  {k.label}
+                  <span className="ml-1.5 tabular-nums opacity-80">
+                    {facets?.byFacet.escalation_kind?.[k.id]?.numbers ?? 0}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
 
       {adding ? (
         <NewTicketForm
@@ -150,6 +213,10 @@ export function SupportBoard({
       <form method="GET" className="rounded-lg border border-line bg-surface shadow-card">
         {/* The tab is part of the filter, so applying one must not drop it. */}
         <input type="hidden" name="tab" value={tab} />
+        {/* §61.3. Likewise a status list arriving from a report. */}
+        {statuses.length ? (
+          <input type="hidden" name="status" value={statuses.join(",")} />
+        ) : null}
         <div className="flex flex-wrap gap-2 p-2.5">
           <Labelled label="Search" wide>
             <Input
@@ -230,6 +297,11 @@ export function SupportBoard({
             Clear
           </Link>
           <span className="text-[12px] text-ink-3">{total} tickets</span>
+          {statuses.length ? (
+            <span className="text-[11.5px] text-ink-3" data-testid="status-scope">
+              Limited to: {statuses.map((s) => STATUS_LABELS[s] ?? s).join(", ")}
+            </span>
+          ) : null}
         </div>
       </form>
 
@@ -262,15 +334,26 @@ export function SupportBoard({
               const order = r.order_id_work ?? r.order_id;
               const rawDiffers = Boolean(r.order_id_raw && r.order_id_raw !== order);
               return (
-                <tr key={r.id} className="border-b border-line last:border-b-0">
+                <tr
+                  key={r.id}
+                  /* §61.1. `relative` is what lets the stretched anchor below
+                     cover the whole row. */
+                  className="group relative border-b border-line last:border-b-0 hover:bg-surface-2"
+                >
                   <td className="px-1.5 py-[5px] tabular-nums">
+                    {/* §61.1. One real anchor, stretched over the row.
+                        Not an onClick with router.push: that swallows ⌘-click,
+                        middle-click and "Open in new tab", and a queue nobody
+                        can fan out into tabs is a queue that has to be worked
+                        one ticket at a time. The text stays in its cell; only
+                        the hit area is absolute. */}
                     <Link
                       href={`/support/${r.id}`}
                       prefetch={false}
-                      className="text-accent underline-offset-2 hover:underline"
-                    >
-                      {r.id}
-                    </Link>
+                      aria-label={`Open ticket ${r.id}`}
+                      className="absolute inset-0 z-0 rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                    />
+                    <span className="text-accent group-hover:underline">{r.id}</span>
                     {r.child_count > 0 ? (
                       <span className="ml-1.5" title={`${r.child_count} merged duplicate(s)`}>
                         <Badge tone="neutral">+{r.child_count}</Badge>
@@ -331,9 +414,10 @@ export function SupportBoard({
                     <Badge dot tone={statusTone(r.status)}>
                       {STATUS_LABELS[r.status] ?? r.status}
                     </Badge>
-                    {r.status === "escalated" && r.escalated_to_name ? (
+                    {r.status === "escalated" && r.escalated_label ? (
                       <span className="block text-[11px] text-ink-3">
-                        → {r.escalated_to_name}
+                        → {r.escalated_label}
+                        {r.escalation_kind === "institute" ? " (institute)" : ""}
                       </span>
                     ) : null}
                   </td>

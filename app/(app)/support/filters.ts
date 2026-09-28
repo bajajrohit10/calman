@@ -43,6 +43,17 @@ export const STATUS_LABELS: Record<string, string> = {
 /** "Nobody" is a real answer to "assigned to whom", so it is an option id. */
 export const UNASSIGNED = "nobody";
 
+/** §61.2. The two kinds of escalation, as chips on the Escalated tab. */
+export const ESCALATION_KINDS = [
+  { id: "team", label: "Team" },
+  { id: "institute", label: "Institute" },
+] as const;
+
+export const ESCALATION_KIND_LABELS: Record<string, string> = {
+  team: "Team member",
+  institute: "Institute",
+};
+
 export const ISSUE_FILTER_OPTIONS = ISSUE_OPTIONS.map((o) => ({ id: o, name: o }));
 
 export type ParamReader = (key: string) => string | null;
@@ -52,8 +63,26 @@ const str = (get: ParamReader, key: string) => {
   return v === null || v === "" ? null : v;
 };
 
+/** The five real statuses, for the `status` query param. */
+export const TICKET_STATUSES = ["new", "working", "escalated", "future", "resolved"] as const;
+
+/** Everything that is not resolved — what "open" means everywhere in Support. */
+export const OPEN_STATUSES = ["new", "working", "escalated", "future"] as const;
+
 export type SupportQueueArgs = {
   p_tab: SupportTab;
+  /**
+   * §61.3. An explicit status list, which is how the reports link through to
+   * "all open tickets". There is deliberately no `open` tab: the six tabs are
+   * fixed, and an unrecognised tab value falls back to New — which is exactly
+   * the bug this replaced, a report card claiming 24 and its own link showing 21.
+   */
+  p_statuses: string[] | undefined;
+  /** §61.2: narrows the Escalated tab only. */
+  p_escalation_kinds: string[] | undefined;
+  /** §61.3: the reports link through with a raised-date window. */
+  p_raised_from: string | undefined;
+  p_raised_to: string | undefined;
   p_institute_id: string | undefined;
   p_teacher_id: string | undefined;
   p_issues: string[] | undefined;
@@ -74,6 +103,8 @@ export function parseSupportParams(get: ParamReader): {
   issues: string[];
   assignedTo: string[];
   sources: string[];
+  escalationKinds: string[];
+  statuses: string[];
   filters: SupportQueueArgs;
   selected: Record<string, string>;
 } {
@@ -92,6 +123,14 @@ export function parseSupportParams(get: ParamReader): {
   const issues = many("issue");
   const assignedTo = many("assignedTo");
   const sources = many("source");
+  // Anything not one of the two is dropped rather than passed on, so a stale
+  // link cannot ask the function for a kind that does not exist.
+  const escalationKinds = many("kind").filter((k) =>
+    ESCALATION_KINDS.some((e) => e.id === k),
+  );
+  const statuses = many("status").filter((v) =>
+    (TICKET_STATUSES as readonly string[]).includes(v),
+  );
   const opt = (v: string | null) => v ?? undefined;
 
   return {
@@ -100,8 +139,14 @@ export function parseSupportParams(get: ParamReader): {
     issues,
     assignedTo,
     sources,
+    escalationKinds,
+    statuses,
     filters: {
       p_tab: tab,
+      p_statuses: statuses.length ? statuses : undefined,
+      p_escalation_kinds: escalationKinds.length ? escalationKinds : undefined,
+      p_raised_from: opt(str(get, "raisedFrom")),
+      p_raised_to: opt(str(get, "raisedTo")),
       p_institute_id: opt(str(get, "institute")),
       p_teacher_id: opt(str(get, "teacher")),
       p_issues: issues.length ? issues : undefined,
@@ -116,6 +161,8 @@ export function parseSupportParams(get: ParamReader): {
       teacher: str(get, "teacher") ?? "",
       followFrom: str(get, "followFrom") ?? "",
       followTo: str(get, "followTo") ?? "",
+      raisedFrom: str(get, "raisedFrom") ?? "",
+      raisedTo: str(get, "raisedTo") ?? "",
       q: str(get, "q") ?? "",
     },
   };

@@ -101,6 +101,8 @@ export async function saveTicketAction(input: {
   orderIdWork: string | null;
   details: string;
   outcome: Status;
+  /** §61.2: 'team' | 'institute', required when the outcome is escalated. */
+  escalationKind: string | null;
   followUpDate: string | null;
   escalatedTo: string | null;
   called: boolean;
@@ -119,6 +121,7 @@ export async function saveTicketAction(input: {
     p_order_id_work: input.orderIdWork,
     p_details: input.details,
     p_outcome: input.outcome,
+    p_escalation_kind: input.escalationKind,
     p_follow_up_date: input.followUpDate,
     p_escalated_to: input.escalatedTo,
     p_called: input.called,

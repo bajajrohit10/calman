@@ -158,12 +158,15 @@ export async function createSupportTicket(
     status: Database["support"]["Enums"]["ticket_status"];
     follow_up_date: string | null;
     escalated_to: string | null;
+    /** §61.2: travels with the status, or the table's check refuses the row. */
+    escalation_kind: string | null;
+    institute_id: string | null;
   };
   let parent: Parent | null = null;
   if (mobile && orderId) {
     const { data } = await db
       .from("tickets")
-      .select("id, status, follow_up_date, escalated_to")
+      .select("id, status, follow_up_date, escalated_to, escalation_kind, institute_id")
       .eq("mobile", mobile)
       .eq("order_id", orderId)
       .is("parent_ticket_id", null)
@@ -197,7 +200,13 @@ export async function createSupportTicket(
       order_id_work: orderId,
       issues_work: issues,
       issue_other_work: other,
-      institute_id: instituteId,
+      // §61.2. When the parent is escalated to an institute the child must name
+      // that institute, whatever its own faculty text resolved to — the check
+      // constraint requires it and the two tickets are the same complaint.
+      institute_id:
+        parent?.escalation_kind === "institute"
+          ? (parent.institute_id ?? instituteId)
+          : instituteId,
       teacher_id: teacherId,
       // A child copies the parent's state: it is the same complaint, and a
       // duplicate showing "new" beside a parent being worked would read as two
@@ -206,6 +215,7 @@ export async function createSupportTicket(
       status: parent ? parent.status : "new",
       follow_up_date: parent?.follow_up_date ?? null,
       escalated_to: parent?.escalated_to ?? null,
+      escalation_kind: parent?.escalation_kind ?? null,
       parent_ticket_id: parent?.id ?? null,
       merged_at: parent ? now : null,
       last_touched_at: now,

@@ -35,7 +35,7 @@ export default async function Page({
   if (!viewer.profile || !showsSupport(viewer.profile.role)) notFound();
 
   const sp = await searchParams;
-  const { page, tab, issues, assignedTo, sources, filters, selected } =
+  const { page, tab, issues, assignedTo, sources, escalationKinds, statuses, filters, selected } =
     parseSupportParams(read(sp));
 
   const supabase = await createClient();
@@ -52,7 +52,10 @@ export default async function Page({
 
   // The tab counts describe the queue under every *other* filter, so choosing a
   // tab narrows the list without zeroing the numbers beside it.
-  const { p_tab: _tab, ...countFilters } = filters;
+  // p_escalation_kinds goes with p_tab: the chip exists only on the Escalated
+  // tab, and narrowing every count by it would zero the New tab the moment
+  // somebody picked Institute.
+  const { p_tab: _tab, p_escalation_kinds: _kinds, ...countFilters } = filters;
 
   const [list, facetResult, tabCounts] = await Promise.all([
     timed("rpc:support_queue", () =>
@@ -117,6 +120,8 @@ export default async function Page({
         issues={issues}
         assignedTo={assignedTo}
         sources={sources}
+        escalationKinds={escalationKinds}
+        statuses={statuses}
         selected={selected}
         facets={facetsAgreeWithList(facets, total) ?? undefined}
         facetError={

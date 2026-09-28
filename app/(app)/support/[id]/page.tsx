@@ -29,7 +29,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
        order_id_raw, order_id, issues_raw, issues, issue_other, description,
        faculty_raw, attachment_urls, form_row_ref,
        order_id_work, institute_id, teacher_id, issues_work, issue_other_work,
-       status, follow_up_date, escalated_to, resolved_at, resolved_by,
+       status, follow_up_date, escalated_to, escalation_kind, resolved_at, resolved_by,
        parent_ticket_id, merged_at, assigned_to, last_touched_at,
        counselling_enquiry_id`,
     )
