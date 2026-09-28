@@ -21,6 +21,10 @@ import { isValidMobile, normaliseMobile } from "@/lib/mobile";
 import { loadStudentByMobile, type StudentHistory } from "@/lib/students";
 import type { QuickAddMode } from "./grid";
 import { createClient } from "@/lib/supabase/server";
+import {
+  raiseTicketFromCounselling,
+  wonEnquiryFor,
+} from "@/lib/support/from-counselling";
 
 export type LookupResult = {
   error: string | null;
@@ -261,6 +265,12 @@ export type BulkRowResult = {
   case: DuplicateCase | null;
   action: "created" | "updated" | "returned" | "dismissed" | "untouched" | "failed";
   enquiryId: number | null;
+  /**
+   * §62.2. Set when the row raised a support ticket rather than a counselling
+   * enquiry, so the grid can link to it. enquiryId stays null in that case —
+   * there is no counselling record to open.
+   */
+  supportTicketId?: number;
   /** What happened, in the words the rule uses. */
   detail?: string;
   reason?: string;
@@ -475,33 +485,61 @@ export async function createManyEnquiries(
   }
 
   // ---- 3b. rows that want a ticket where none exists -----------------------
+  //
+  // §62.2. This used to create an after-sale enquiry in counselling. It now
+  // raises a support ticket instead: that is where after-sale work is worked,
+  // and opening a counselling record beside the lead only ever made a second
+  // place to look. The ticket is filed against the enquiry the student bought
+  // through where there is one, and the lead is left untouched.
   for (const job of openingTicket) {
-    const res = await createEnquiry({
-      mobile: job.mobile,
-      name: job.row.name,
-      type: "after_sale",
-      sourceId: job.row.sourceId,
-      productText: null,
-      discussion: null,
-      termId: null,
-      importance: null,
-      leadVerification: null,
-      supersedeEnquiryId: null,
+    // The student, and the enquiry they bought through if Calman knows of one.
+    const { data: student } = await supabase
+      .from("students")
+      .select("id")
+      .eq("mobile", job.mobile)
+      .maybeSingle();
+
+    if (!student) {
+      out[job.index] = {
+        mobile: job.mobile,
+        case: null,
+        action: "failed",
+        enquiryId: null,
+        reason: "the number is not on any student yet",
+      };
+      continue;
+    }
+
+    const won = await wonEnquiryFor(supabase, student.id);
+    const { error: raiseError, raised } = await raiseTicketFromCounselling(supabase, {
+      studentId: student.id,
+      enquiryId: won?.id ?? null,
+      orderId: won?.orderId ?? null,
+      discussion: job.row.discussion ?? null,
+      issueCategory: null,
+      outcome: "noted",
+      teacherId: won?.teacherId ?? null,
+      // The won enquiry is purchase history and stays as it is.
+      closeEnquiry: false,
     });
-    out[job.index] = res.error || !res.enquiry
+
+    out[job.index] = raiseError || !raised
       ? {
           mobile: job.mobile,
           case: null,
           action: "failed",
           enquiryId: null,
-          reason: res.error ?? "could not be saved",
+          reason: raiseError ?? "the support ticket could not be created",
         }
       : {
           mobile: job.mobile,
           case: null,
           action: "created",
-          enquiryId: res.enquiry.id,
-          detail: "Opened as a ticket beside the existing enquiry.",
+          enquiryId: null,
+          supportTicketId: raised.ticketId,
+          detail: raised.existingOpenTicket
+            ? `Support ticket #${raised.ticketId} created. This number already had open ticket #${raised.existingOpenTicket}.`
+            : `Support ticket #${raised.ticketId} created.`,
         };
   }
 

@@ -17,6 +17,10 @@ import {
   type LeadVerification,
 } from "@/lib/enquiry-labels";
 import { createClient } from "@/lib/supabase/server";
+import {
+  raiseTicketFromCounselling,
+  wonEnquiryFor,
+} from "@/lib/support/from-counselling";
 import { upcomingDates, type WorkingDayInfo } from "@/lib/working-days-shape";
 
 export type ItemDecision = {
@@ -104,6 +108,17 @@ export type LogCallResult = {
    * know so it can say so rather than silently showing a different row.
    */
   reopenedAs?: number;
+  /**
+   * §62.2. Set when the save raised a support ticket instead of — or as well as
+   * — carrying the counselling enquiry forward. The screen redirects to it.
+   */
+  supportTicketId?: number;
+  /**
+   * An open support ticket the number already had. Named in the toast, never
+   * merged into: §62.2 is explicit that a counselling call raises its own
+   * ticket, and the merge prompt is Brief 63's.
+   */
+  existingSupportTicketId?: number;
 };
 
 export type PanelCall = {
@@ -448,21 +463,52 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
   let convertedTo: number | undefined;
   let type = enquiry.type as EnquiryType;
 
+  /**
+   * §62.2. "This is an after-sale call" no longer converts anything.
+   *
+   * It used to call convert_to_after_sale, which closed the purchase enquiry as
+   * superseded and opened an after-sale one in counselling. Support is where
+   * that work lives now, so the save raises a ticket and leaves the lead exactly
+   * as it was — the student is still a live lead whatever went wrong with their
+   * order, and closing the one to record the other was always a side effect
+   * nobody asked for.
+   *
+   * No counselling call is written on this path: the call *is* the ticket, and
+   * its note is the ticket's description. The ticket is filed against the
+   * enquiry the student actually bought through rather than the lead being
+   * looked at, because that is what the complaint is about.
+   */
   if (input.convertToAfterSale && type === "purchase") {
-    const { data: converted, error: convertError } = await supabase.rpc(
-      "convert_to_after_sale",
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      { p_enquiry_id: input.enquiryId } as any,
-    );
-    if (convertError) {
-      return { error: `Could not convert to an after-sale enquiry: ${convertError.message}` };
+    const student = enquiry.student_id as string;
+    const won = await wonEnquiryFor(supabase, student);
+
+    const { error: raiseError, raised } = await raiseTicketFromCounselling(supabase, {
+      studentId: student,
+      enquiryId: won?.id ?? null,
+      orderId: input.ticketOrderId?.trim() || won?.orderId || null,
+      discussion: input.discussion,
+      issueCategory: input.issueCategory || null,
+      // Always `new` and unassigned from this door: the counsellor is handing
+      // it over, not taking it on.
+      outcome: "noted",
+      teacherId: input.ticketTeacherId ?? won?.teacherId ?? null,
+      // The won enquiry is the student's purchase history and stays open to
+      // being read; only the old after-sale pipeline gets closed out.
+      closeEnquiry: false,
+    });
+    if (raiseError) return { error: `Could not raise the support ticket: ${raiseError}` };
+
+    revalidatePath("/support");
+    if (enquiry.students) {
+      const mobile = (enquiry.students as { mobile: string } | null)?.mobile;
+      if (mobile) revalidatePath(`/students/${mobile}`);
     }
-    type = "after_sale";
-    const newId = Number(converted);
-    if (newId !== input.enquiryId) {
-      targetEnquiryId = newId;
-      convertedTo = newId;
-    }
+    return {
+      error: null,
+      ok: `Support ticket #${raised!.ticketId} created.`,
+      supportTicketId: raised!.ticketId,
+      existingSupportTicketId: raised!.existingOpenTicket ?? undefined,
+    };
   }
 
   // §38.2. The same move from the other side: the ticket stays exactly as it
@@ -951,6 +997,59 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
           ? `Call logged on purchase enquiry #${convertedTo}. Ticket #${input.enquiryId} is untouched and still open.`
           : `Call logged on ticket #${convertedTo}. Purchase enquiry #${input.enquiryId} is untouched.`,
       convertedTo,
+    };
+  }
+
+  /**
+   * §62.2. An after-sale call hands the enquiry to Support.
+   *
+   * The call itself is written above and stays in counselling, because it
+   * happened and the student's history should say so. What changes is where the
+   * work goes next: a ticket is raised carrying the outcome the counsellor
+   * chose, and the enquiry closes as handed_to_support so it stops appearing as
+   * live counselling work in two places.
+   *
+   * Done after the call rather than instead of it, so app.recompute_enquiry has
+   * already run on the outcome and the close is the last word — which the
+   * recompute's own guard on handed_to_support then keeps.
+   *
+   * This path exists for the enquiries already in the old after-sale pipeline.
+   * Nothing new enters it: the convert door above raises a ticket directly.
+   */
+  if (type === "after_sale") {
+    const student = enquiry.student_id as string;
+    const { error: raiseError, raised } = await raiseTicketFromCounselling(supabase, {
+      studentId: student,
+      enquiryId: targetEnquiryId,
+      orderId: orderId,
+      discussion: input.discussion,
+      issueCategory: input.issueCategory || null,
+      outcome: outcome as
+        | "noted"
+        | "working"
+        | "escalated"
+        | "pending_institute"
+        | "resolved",
+      followUpDate: input.nextFollowUpDate || null,
+      escalatedTo: input.escalatedTo ?? null,
+      teacherId: input.ticketTeacherId ?? null,
+      closeEnquiry: true,
+    });
+    // The call is already saved. A failure here must say so plainly rather than
+    // implying nothing happened.
+    if (raiseError) {
+      return {
+        error: `The call was logged, but the support ticket was not created: ${raiseError}`,
+      };
+    }
+
+    revalidatePath("/support");
+    revalidatePath("/tickets");
+    return {
+      error: null,
+      ok: `Call logged and support ticket #${raised!.ticketId} created. Enquiry #${targetEnquiryId} is now handed to Support.`,
+      supportTicketId: raised!.ticketId,
+      existingSupportTicketId: raised!.existingOpenTicket ?? undefined,
     };
   }
 

@@ -142,6 +142,15 @@ export type StudentHistory = {
    * lead.
    */
   addedBy: Record<number, string>;
+  /**
+   * §62.2. The support tickets raised from each enquiry, with their live status.
+   *
+   * Read rather than mirrored: nothing writes back into counselling when a
+   * ticket moves, so the badge on the enquiry asks Support what the ticket says
+   * right now. A student can raise more than one against the same purchase, so
+   * this is a list per enquiry.
+   */
+  supportTickets: Record<number, { id: number; status: string; kind: string | null }[]>;
 };
 
 const SELECT = `
@@ -242,7 +251,30 @@ async function withEdits(
     }
   }
 
-  return { ...student, editedCalls, addedBy };
+  const supportTickets: Record<
+    number,
+    { id: number; status: string; kind: string | null }[]
+  > = {};
+  if (enquiryIds.length) {
+    const { data } = await supabase.schema("support").rpc("tickets_for_enquiry", {
+      p_enquiry_ids: enquiryIds,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    for (const row of (data ?? []) as unknown as {
+      counselling_enquiry_id: number;
+      ticket_id: number;
+      status: string;
+      escalation_kind: string | null;
+    }[]) {
+      (supportTickets[row.counselling_enquiry_id] ??= []).push({
+        id: row.ticket_id,
+        status: row.status,
+        kind: row.escalation_kind,
+      });
+    }
+  }
+
+  return { ...student, editedCalls, addedBy, supportTickets };
 }
 
 /** null when the number has never been seen. */

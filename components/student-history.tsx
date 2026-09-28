@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { SUPPORT_STATUS_LABELS } from "@/lib/support/status-labels";
+
 import { AutoTag } from "@/components/enquiry-glance";
 import { EnquiryDetailsEditor, type DetailMasters } from "@/components/enquiry-details";
 import { EnquiryInterests } from "@/components/enquiry-interests";
@@ -119,7 +121,15 @@ export function StudentHistoryView({
    * it is a ticket somebody else is waiting on.
    */
   const nowCards = enquiries.filter(
-    (e) => e.status === "open" || e.status === "escalated",
+    (e) =>
+      e.status === "open" ||
+      e.status === "escalated" ||
+      // §62.2. An enquiry Support is working is a live conversation, whatever
+      // counselling's own status says. Without this the badge had nowhere to
+      // appear: a handed-over enquiry is closed and a won one was never a
+      // card, so the two cases the badge exists for were the two that folded
+      // away under Previous.
+      (student.supportTickets?.[e.id]?.length ?? 0) > 0,
   );
   const current = nowCards[0] ?? enquiries[0] ?? null;
   const shown = nowCards.length ? nowCards : current ? [current] : [];
@@ -601,6 +611,26 @@ function NowCard({
           {enquiry.re_enquired_at ? (
             <Badge dot tone="warn">Re-enquired {formatDate(enquiry.re_enquired_at)}</Badge>
           ) : null}
+          {/* §62.2. The crossflow, and the only one: the ticket's status is read
+              live from Support rather than copied here, so a status set by the
+              ticket team shows up without counselling being written to. Shown on
+              a handed-over enquiry and on any won one a ticket was raised
+              against — a student can raise more than one. */}
+          {(student.supportTickets?.[enquiry.id] ?? []).map((t) => (
+            <Link
+              key={t.id}
+              href={`/support/${t.id}`}
+              prefetch={false}
+              data-testid={`support-badge-${t.id}`}
+              className="inline-flex items-center gap-1 rounded border border-accent/40 bg-accent-soft/30 px-1.5 text-[10.5px] font-semibold text-accent hover:bg-accent-soft/60"
+            >
+              Support #{t.id}
+              <span className="font-normal text-ink-2">
+                {SUPPORT_STATUS_LABELS[t.status] ?? t.status}
+                {t.kind === "institute" ? " (institute)" : ""}
+              </span>
+            </Link>
+          ))}
           <span className="ml-auto text-[11.5px] text-ink-3">
             First seen {formatDate(student.created_at)}
           </span>

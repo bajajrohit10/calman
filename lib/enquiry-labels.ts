@@ -88,6 +88,9 @@ export const CLOSE_REASON_LABELS: Record<CloseReason, string> = {
   wrong_number: "wrong number",
   superseded: "superseded by a newer enquiry",
   converted: "converted to an after-sale enquiry",
+  // §62.2. The after-sale pipeline moved to Support; this is what closing an
+  // enquiry into it is called on every screen that reads a close reason.
+  handed_to_support: "handed to Support",
 };
 
 export const ITEM_STATUS_LABELS: Record<ItemStatus, string> = {

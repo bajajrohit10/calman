@@ -3550,7 +3550,11 @@ export type Database = {
         | "pending_institute"
         | "resolved"
         | "not_interested"
-      close_reason: "wrong_number" | "superseded" | "converted"
+      close_reason:
+        | "wrong_number"
+        | "superseded"
+        | "converted"
+        | "handed_to_support"
       enquiry_status:
         | "open"
         | "working"
@@ -3786,6 +3790,13 @@ export type Database = {
         }
         Returns: boolean
       }
+      issue_from_counselling: {
+        Args: { p_category: string }
+        Returns: {
+          issue_other: string
+          issues: string[]
+        }[]
+      }
       issue_options: { Args: never; Returns: string[] }
       log_ticket_touch: {
         Args: {
@@ -3796,6 +3807,13 @@ export type Database = {
           p_ticket_id: number
         }
         Returns: number
+      }
+      matches_search: {
+        Args: {
+          p_search: string
+          t: Database["support"]["Tables"]["tickets"]["Row"]
+        }
+        Returns: boolean
       }
       merge_ticket: {
         Args: { p_child_id: number; p_parent_id: number }
@@ -3868,6 +3886,21 @@ export type Database = {
           numbers: number
           value_id: string
         }[]
+      }
+      raise_from_counselling: {
+        Args: {
+          p_close_enquiry?: boolean
+          p_discussion?: string
+          p_enquiry_id?: number
+          p_escalated_to?: string
+          p_follow_up_date?: string
+          p_issue_category?: string
+          p_order_id?: string
+          p_outcome?: string
+          p_student_id: string
+          p_teacher_id?: string
+        }
+        Returns: Json
       }
       report_ageing: {
         Args: {
@@ -4011,6 +4044,18 @@ export type Database = {
         Returns: {
           n: number
           tab: string
+        }[]
+      }
+      tickets_for_enquiry: {
+        Args: { p_enquiry_ids: number[] }
+        Returns: {
+          counselling_enquiry_id: number
+          escalation_kind: string
+          follow_up_date: string
+          raised_at: string
+          resolved_at: string
+          status: Database["support"]["Enums"]["ticket_status"]
+          ticket_id: number
         }[]
       }
     }
@@ -4191,7 +4236,12 @@ export const Constants = {
         "resolved",
         "not_interested",
       ],
-      close_reason: ["wrong_number", "superseded", "converted"],
+      close_reason: [
+        "wrong_number",
+        "superseded",
+        "converted",
+        "handed_to_support",
+      ],
       enquiry_status: [
         "open",
         "working",

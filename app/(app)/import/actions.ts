@@ -127,7 +127,7 @@ export async function lookupNumbers(mobiles: string[]): Promise<{
     last_call_by: string | null;
     enquiry_count: number;
     closed_on: string | null;
-    closed_as: "won" | "lost" | "wrong_number" | null;
+    closed_as: "won" | "lost" | "wrong_number" | "handed_to_support" | null;
     assigned_to: string | null;
     ticket_enquiry_id: number | null;
     ticket_status: "open" | "escalated" | null;

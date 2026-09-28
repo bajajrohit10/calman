@@ -11,11 +11,19 @@ import { TicketView, type TicketDetail, type TicketEvent } from "./ticket-view";
 
 export const metadata = { title: "Ticket · Calman" };
 
-export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+export default async function Page({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const viewer = await requireUser();
   if (!viewer.profile || !showsSupport(viewer.profile.role)) notFound();
 
   const { id } = await params;
+  const sp = await searchParams;
+  const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
   const ticketId = Number(id);
   if (!Number.isInteger(ticketId) || ticketId < 1) notFound();
 
@@ -74,6 +82,22 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         title={`Ticket #${ticket.id}`}
         description="What the student submitted, what the team changed, and everything done since."
       />
+      {/* §62.2. The counselling side raised this and sent the counsellor here;
+          the message could not be shown from there because the navigation
+          unmounts that panel. */}
+      {one(sp.raised) === "1" ? (
+        <p
+          data-testid="raised-banner"
+          role="status"
+          className="rounded-md border border-ok/50 bg-ok-soft/40 px-3 py-2 text-[12.5px] text-ink"
+        >
+          Support ticket #{ticket.id} created.
+          {one(sp.existing)
+            ? ` This number already had open ticket #${one(sp.existing)} — they have not been merged.`
+            : ""}
+        </p>
+      ) : null}
+
       <TicketView
         ticket={ticket as unknown as TicketDetail}
         events={(events ?? []) as unknown as TicketEvent[]}

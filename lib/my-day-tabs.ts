@@ -9,19 +9,31 @@ import type { AssignmentBucket } from "@/lib/enquiry-labels";
  * from them, and a second copy of the mapping is exactly how an export starts
  * quietly disagreeing with the screen it came from.
  */
+/**
+ * The key stays in the union although "tickets" is no longer offered.
+ *
+ * §62.2 withdrew the tab: after-sale work is raised as a support ticket and
+ * worked in Support, so a tab reading counselling's after-sale enquiries looks at
+ * a pipeline nothing new enters. It is dropped from MY_DAY_TABS below, which is
+ * what the screen renders and what parseMyDayTab validates against — so it
+ * cannot be selected, and ?tab=tickets falls back to New.
+ *
+ * Kept in the type rather than removed because my-day.tsx still holds the tab's
+ * rendering code, now unreachable. Deleting several hundred lines of interwoven
+ * JSX from the screen the whole team opens first was not worth the risk in the
+ * same change that moved the work; it is a follow-up, not a loose end to forget.
+ */
 export type MyDayTabKey = "new" | "offer" | "assigned" | "custom" | "tickets";
 
 export const MY_DAY_TABS: {
   key: MyDayTabKey;
   label: string;
-  /** Empty for Tickets, which is not assignment-backed at all. */
   buckets: AssignmentBucket[];
 }[] = [
   { key: "new", label: "New Calls", buckets: ["fresh"] },
   { key: "offer", label: "Offer Calls", buckets: ["offer"] },
   { key: "assigned", label: "Assigned Calls", buckets: ["follow_up", "call_back"] },
   { key: "custom", label: "Customised", buckets: ["campaign"] },
-  { key: "tickets", label: "Tickets", buckets: [] },
 ];
 
 export type MyDayView = "pending" | "done";

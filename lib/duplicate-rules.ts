@@ -43,7 +43,7 @@ export type NumberStatus = {
   enquiryCount: number;
   /** When the most recent closed enquiry closed, for case 2. */
   closedOn: string | null;
-  closedAs: "won" | "lost" | "wrong_number" | null;
+  closedAs: "won" | "lost" | "wrong_number" | "handed_to_support" | null;
   /** Who holds the open lead today, for case 3. Null means the pool. */
   assignedTo: string | null;
   /**
@@ -106,6 +106,9 @@ const CLOSED_AS: Record<string, string> = {
   won: "Won",
   lost: "Lost",
   wrong_number: "Wrong number",
+  // §62.2. Without this the import review called a handed-over number "Lost",
+  // which is the opposite of what happened to it.
+  handed_to_support: "Handed to Support",
 };
 
 /**

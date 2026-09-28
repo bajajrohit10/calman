@@ -117,7 +117,6 @@ export type MyDayData = {
   error: string | null;
 };
 
-const TICKET_LIMIT = 500;
 
 export async function loadMyDay(input: {
   date: string;
@@ -139,28 +138,14 @@ export async function loadMyDay(input: {
         } as any)
         .range(from, to) as never,
     ),
-    // §33.3. Two questions, because they are two different questions: every
-    // unresolved ticket regardless of the date, and the ones resolved on the
-    // day being looked at. The first is not date-bound on purpose — a ticket
-    // raised last Tuesday is still somebody's problem today.
-    supabase.rpc("tickets_list", {
-      p_include_resolved: false,
-      p_sort: "reminder",
-      p_dir: "asc",
-      p_as_of: input.date,
-      p_limit: TICKET_LIMIT,
-      p_offset: 0,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any),
-    supabase.rpc("tickets_list", {
-      p_resolved_on: input.date,
-      p_sort: "reminder",
-      p_dir: "asc",
-      p_as_of: input.date,
-      p_limit: TICKET_LIMIT,
-      p_offset: 0,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any),
+    // §62.2. The ticket lists are no longer fetched.
+    //
+    // My Day's Tickets tab is withdrawn — after-sale work is raised as a support
+    // ticket and worked in Support — so these two round trips per render were
+    // paying for a tab nobody can open. Empty results keep the shape the screen
+    // still expects while its unreachable ticket rendering waits to be deleted.
+    Promise.resolve({ data: [] as unknown[], error: null as string | null }),
+    Promise.resolve({ data: [] as unknown[], error: null as string | null }),
   ]));
 
   type RawTicket = {
@@ -219,7 +204,8 @@ export async function loadMyDay(input: {
       called_today:
         input.date === today && istDateOf(t.last_call_at) === today,
     })),
-    error: day.error ?? tickets.error?.message ?? resolved.error?.message ?? null,
+    // The two ticket reads are stubbed out (§62.2), so only the day can fail.
+    error: day.error ?? null,
   };
 }
 

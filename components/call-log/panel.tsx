@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 
 import { Badge, Button, ErrorNote, Input, Select, Textarea, cx } from "@/components/ui";
@@ -627,6 +628,7 @@ export function CallLogPanel({
   const [askedAboutItems, setAskedAboutItems] = useState(false);
   const [result, setResult] = useState<LogCallResult | null>(null);
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const noteRef = useRef<HTMLTextAreaElement | null>(null);
   const firstTeacherRef = useRef<HTMLInputElement | null>(null);
@@ -964,6 +966,22 @@ export function CallLogPanel({
           })),
       });
       setResult(res);
+      // §62.2. A save that raised a support ticket sends the counsellor to it:
+      // the work is there now, and leaving them on a counselling enquiry that
+      // has just closed would be leaving them on a dead screen. The toast names
+      // any ticket the number already had, because that is the one thing they
+      // cannot see from here.
+      if (!res.error && res.supportTicketId) {
+        // The message travels in the URL rather than as a toast raised here: the
+        // push unmounts this component immediately, so anything shown from the
+        // panel would flash and vanish. The ticket page renders it on arrival.
+        const params = new URLSearchParams({ raised: "1" });
+        if (res.existingSupportTicketId) {
+          params.set("existing", String(res.existingSupportTicketId));
+        }
+        router.push(`/support/${res.supportTicketId}?${params.toString()}`);
+        return res;
+      }
       if (!res.error) onSaved?.(res.reopenedAs ? (res.ok ?? undefined) : undefined);
       return res;
     }
