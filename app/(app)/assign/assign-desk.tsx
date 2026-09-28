@@ -396,6 +396,13 @@ export function AssignDesk({
             <Link
               key={preset.label}
               href={`/assign?${preset.query(date)}`}
+              // §70.3. What the report will call these calls, before they are
+              // handed out rather than after somebody goes looking for them.
+              title={
+                preset.id === "offers"
+                  ? "Calls under this batch report as Offers. They still count as their follow-up rung under Calls by stage."
+                  : undefined
+              }
               className="inline-flex h-[24px] items-center rounded-full border border-line-2 bg-surface px-2.5 text-[12px] text-ink-2 hover:border-accent hover:text-accent"
             >
               {preset.label}
@@ -969,6 +976,15 @@ export function AssignDesk({
                   onChange={(e) => setLabel(e.target.value)}
                   placeholder="What is this batch? e.g. Evening call backs"
                 />
+                {/* §70.3. Said here because it is decided here. A follow-up
+                    handed out in a campaign batch is a Customised call on the
+                    report, which is how 22 first follow-ups went looking for
+                    themselves in the wrong column. Calls by stage now answers
+                    the other question. */}
+                <span className="text-[11px] leading-relaxed text-ink-3">
+                  Calls under this batch report as <strong>Customised</strong>.
+                  They still count as their follow-up rung under Calls by stage.
+                </span>
               </label>
             ) : null}
             <div className="flex gap-2">
@@ -1088,6 +1104,9 @@ export function AssignDesk({
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               placeholder="Campaign label"
+              // §70.3. The same warning as the full panel, where there is no
+              // room to print it.
+              title="Calls under this batch report as Customised. They still count as their follow-up rung under Calls by stage."
               className="w-[190px]"
             />
           ) : null}

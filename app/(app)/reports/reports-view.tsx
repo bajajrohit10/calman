@@ -333,15 +333,21 @@ export function ReportsView({
       </section>
 
       <p className="text-[11.5px] leading-relaxed text-ink-3">
-        A call is counted once in <strong>Calls by type</strong> and once in{" "}
-        <strong>Calls by outcome</strong>, so the two totals always match. Type is
-        decided in order: an after-sale call is a Ticket whatever it was assigned
-        as; otherwise a call assigned that day as an offer is an Offer and one
-        assigned as a campaign is Customised; everything left, including calls
-        nobody was assigned, goes by §4.3 slot — first-ever call is a New call, then
-        1st, 2nd and 3rd follow-up, where a slot is a distinct day after the fresh
-        call and anything past the third counts as 3rd. After-sale collects the
-        noted, escalated and resolved outcomes. Purchase amount is the value of
+        A call is counted once in <strong>Calls by type</strong>, once in{" "}
+        <strong>Calls by stage</strong> and once in{" "}
+        <strong>Calls by outcome</strong>, so all three totals always match. Type
+        is decided in order: an after-sale call is a Ticket whatever it was
+        assigned as; otherwise a call made under an offer assignment is an Offer
+        and one made under a campaign assignment is Customised; everything left,
+        including calls nobody was assigned, goes by §4.3 slot. The assignment a
+        call was made under is the one recorded against it, or for older calls
+        the caller&rsquo;s own standing assignment on that lead, then whatever
+        the lead was handed out as that day. Stage ignores all of that and reads
+        the slot alone — first-ever call is New, then 1st, 2nd and 3rd follow-up,
+        where a slot is a distinct day after the fresh call and anything past the
+        third counts as 3rd — so a follow-up handed out in a campaign batch shows
+        under Customised by type and under 1st follow-up by stage. After-sale
+        collects the noted, escalated and resolved outcomes. Purchase amount is the value of
         items won on that day, credited to the counsellor whose purchased call won
         them. PLI issued counts leads re-graded to A by a person, excluding imports.
       </p>

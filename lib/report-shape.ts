@@ -26,6 +26,14 @@ export type CallReportRow = {
   follow_up_3: number;
   customised: number;
   tickets: number;
+  // §70.2. The same calls by where they sat on the ladder, whatever batch they
+  // were handed out in. A second partition of the same set, so these five sum
+  // to total_calls too.
+  stage_new: number;
+  stage_fu1: number;
+  stage_fu2: number;
+  stage_fu3: number;
+  stage_after_sale: number;
   total_calls: number;
   // B. calls by outcome
   out_follow_up: number;
@@ -53,7 +61,7 @@ export type CallReportColumn = {
 };
 
 export type CallReportGroup = {
-  id: "type" | "outcome" | "results";
+  id: "type" | "stage" | "outcome" | "results";
   label: string;
   columns: CallReportColumn[];
 };
@@ -77,6 +85,28 @@ export const CALL_REPORT_GROUPS: CallReportGroup[] = [
       { key: "follow_up_3", label: "3rd follow-up" },
       { key: "customised", label: "Customised" },
       { key: "tickets", label: "Tickets" },
+      { key: "total_calls", label: "Total calls", isTotal: true },
+    ],
+  },
+  /**
+   * §70.2. What a counsellor means by "1st follow-up".
+   *
+   * Calls by type answers "which pile of work did this call come out of", and
+   * a follow-up handed out in a campaign batch is counted there as Customised —
+   * correctly, but it means the type block can never answer "how many first
+   * follow-ups did we make today". This block does, by reading the §4.3 slot
+   * and nothing else. The two disagree column by column on purpose and total to
+   * the same number.
+   */
+  {
+    id: "stage",
+    label: "Calls by stage",
+    columns: [
+      { key: "stage_new", label: "New" },
+      { key: "stage_fu1", label: "1st follow-up" },
+      { key: "stage_fu2", label: "2nd follow-up" },
+      { key: "stage_fu3", label: "3rd follow-up" },
+      { key: "stage_after_sale", label: "After-sale" },
       { key: "total_calls", label: "Total calls", isTotal: true },
     ],
   },
@@ -112,6 +142,11 @@ export type CallReportMetric =
   | "follow_up_3"
   | "customised"
   | "tickets"
+  | "stage_new"
+  | "stage_fu1"
+  | "stage_fu2"
+  | "stage_fu3"
+  | "stage_after_sale"
   | "total_calls"
   | "out_follow_up"
   | "out_call_back"

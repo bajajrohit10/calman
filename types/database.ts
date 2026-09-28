@@ -1165,6 +1165,10 @@ export type Database = {
       }
       calls: {
         Row: {
+          assignment_bucket:
+            | Database["public"]["Enums"]["assignment_bucket"]
+            | null
+          assignment_id: string | null
           call_date: string
           called_at: string
           called_by: string
@@ -1180,6 +1184,10 @@ export type Database = {
           whatsapp_sent: boolean
         }
         Insert: {
+          assignment_bucket?:
+            | Database["public"]["Enums"]["assignment_bucket"]
+            | null
+          assignment_id?: string | null
           call_date?: string
           called_at?: string
           called_by: string
@@ -1195,6 +1203,10 @@ export type Database = {
           whatsapp_sent?: boolean
         }
         Update: {
+          assignment_bucket?:
+            | Database["public"]["Enums"]["assignment_bucket"]
+            | null
+          assignment_id?: string | null
           call_date?: string
           called_at?: string
           called_by?: string
@@ -1210,6 +1222,13 @@ export type Database = {
           whatsapp_sent?: boolean
         }
         Relationships: [
+          {
+            foreignKeyName: "calls_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "assignments"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "calls_called_by_fkey"
             columns: ["called_by"]
@@ -2843,6 +2862,11 @@ export type Database = {
           out_purchased: number
           pli_issued: number
           purchase_amount: number
+          stage_after_sale: number
+          stage_fu1: number
+          stage_fu2: number
+          stage_fu3: number
+          stage_new: number
           tickets: number
           total_calls: number
           total_outcomes: number
@@ -3970,6 +3994,7 @@ export type Database = {
           p_order_id?: string
           p_outcome?: string
           p_student_id: string
+          p_supersede_lead_id?: number
           p_teacher_id?: string
         }
         Returns: Json

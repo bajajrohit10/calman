@@ -964,7 +964,8 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
   })
     // called_at is a column default, so the only way to know the instant the
     // database recorded is to read it back. The claim below is stamped with it.
-    .select("called_at")
+    // The id comes back for §70.1's assignment stamp.
+    .select("id, called_at")
     .single();
 
   if (callError) return { error: `Could not log the call: ${callError.message}` };
@@ -1009,6 +1010,44 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
     // failing a call that is already written.
     if (claimError && claimError.code !== "23505") {
       console.error("Could not claim the enquiry for today:", claimError.message);
+    }
+  }
+
+  /**
+   * §70.1. Record which assignment this call was made under.
+   *
+   * Written after the claim above, not before, because for a lead nobody had
+   * been given the claim *is* the assignment the call was made under — it is
+   * created by this very call.
+   *
+   * (enquiry_id, date) is unique, so "the assignment for this enquiry today" is
+   * exactly one row and there is nothing to choose between. That is deliberately
+   * not the same as "the caller's assignment": a counsellor ringing a lead from
+   * somebody else's batch really did make the call under that batch, and the
+   * report should say so rather than reaching for a stale row of their own.
+   *
+   * Best effort. The call is already saved and is the record that matters; a
+   * failure here costs the report a recorded link and falls back to inferring
+   * one, which is what every call before this column does anyway.
+   */
+  if (savedCall?.id) {
+    const { data: under } = await supabase
+      .from("assignments")
+      .select("id, bucket")
+      .eq("enquiry_id", targetEnquiryId)
+      .eq("date", istToday())
+      .maybeSingle();
+    if (under?.id) {
+      const { error: stampError } = await supabase
+        .from("calls")
+        // The bucket as well as the row: the desk upserts on (enquiry_id, date),
+        // so re-handing this lead later today would otherwise rewrite what this
+        // call was made under (§70.1).
+        .update({ assignment_id: under.id, assignment_bucket: under.bucket })
+        .eq("id", savedCall.id);
+      if (stampError) {
+        console.error("Could not record the call's assignment:", stampError.message);
+      }
     }
   }
 
