@@ -990,6 +990,10 @@ export function CallLogPanel({
         if (res.existingSupportTicketId) {
           params.set("existing", String(res.existingSupportTicketId));
         }
+        // §69.2. The lead this was raised from had no calls, so it closed behind
+        // us. Said on arrival, because a row quietly leaving New Calls is the
+        // kind of thing that gets reported as data loss.
+        if (res.supersededLeadId) params.set("leadClosed", "1");
         router.push(`/support/${res.supportTicketId}?${params.toString()}`);
         return res;
       }

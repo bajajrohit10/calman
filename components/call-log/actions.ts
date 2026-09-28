@@ -120,6 +120,12 @@ export type LogCallResult = {
    * ticket, and the merge prompt is Brief 63's.
    */
   existingSupportTicketId?: number;
+  /**
+   * §69.2. The purchase lead closed as superseded because the ticket was raised
+   * from a lead nobody had called yet. Named so the ticket page can say a row
+   * left New Calls, rather than letting it vanish without explanation.
+   */
+  supersededLeadId?: number;
 };
 
 export type PanelCall = {
@@ -517,6 +523,12 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
       // The won enquiry is the student's purchase history and stays open to
       // being read; only the old after-sale pipeline gets closed out.
       closeEnquiry: false,
+      // §69.2. The lead this panel was opened on. Quick Add creates one just to
+      // get here, and since this path writes no counselling call it was being
+      // left in New Calls with no name, no product and nobody to ring it. The
+      // function closes it as superseded only when it has no calls and no
+      // interest lines, so a lead with real work on it stays open.
+      supersedeLeadId: input.enquiryId,
     });
     if (raiseError) return { error: `Could not raise the support ticket: ${raiseError}` };
 
@@ -530,6 +542,9 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
       ok: `Support ticket #${raised!.ticketId} created.`,
       supportTicketId: raised!.ticketId,
       existingSupportTicketId: raised!.existingOpenTicket ?? undefined,
+      // §69.2. Travels to the ticket page in the URL, like the rest of this
+      // message: the redirect unmounts the panel before a toast could render.
+      supersededLeadId: raised!.supersededLead ?? undefined,
     };
   }
 

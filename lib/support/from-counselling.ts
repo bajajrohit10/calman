@@ -32,6 +32,13 @@ export type RaiseFromCounselling = {
   teacherId?: string | null;
   /** False from Quick Add, where the linked enquiry is a won one to keep. */
   closeEnquiry: boolean;
+  /**
+   * §69.2. The lead the call panel was opened on, when raising a ticket leaves it
+   * behind. Closed as superseded only if it is a purchase lead with no calls and
+   * no interest lines — the function checks the row, not our word for it — so a
+   * lead the counsellor is genuinely still selling to is untouched.
+   */
+  supersedeLeadId?: number | null;
 };
 
 export type RaisedTicket = {
@@ -40,6 +47,8 @@ export type RaisedTicket = {
   /** An open ticket the number already had. Named, never merged into (§62.2). */
   existingOpenTicket: number | null;
   closedEnquiry: boolean;
+  /** §69.2: the just-created lead closed as superseded, or null. */
+  supersededLead: number | null;
 };
 
 export async function raiseTicketFromCounselling(
@@ -57,6 +66,7 @@ export async function raiseTicketFromCounselling(
     p_escalated_to: input.escalatedTo ?? null,
     p_teacher_id: input.teacherId ?? null,
     p_close_enquiry: input.closeEnquiry,
+    p_supersede_lead_id: input.supersedeLeadId ?? null,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
 
@@ -67,6 +77,8 @@ export async function raiseTicketFromCounselling(
     status: string;
     existing_open_ticket: number | null;
     closed_enquiry: boolean;
+    /** §69.2: the lead closed behind us, or null. */
+    superseded_lead: number | null;
   } | null;
   if (!row?.ticket_id) return { error: "The support ticket was not created." };
 
@@ -77,6 +89,7 @@ export async function raiseTicketFromCounselling(
       status: row.status,
       existingOpenTicket: row.existing_open_ticket ?? null,
       closedEnquiry: Boolean(row.closed_enquiry),
+      supersededLead: row.superseded_lead ?? null,
     },
   };
 }
