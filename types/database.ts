@@ -2869,7 +2869,6 @@ export type Database = {
         }[]
       }
       confirm_batch_export: { Args: { p_batch_id: string }; Returns: undefined }
-      convert_to_after_sale: { Args: { p_enquiry_id: number }; Returns: number }
       convert_to_purchase: { Args: { p_enquiry_id: number }; Returns: number }
       enquiries_called_by_facets: {
         Args: {
@@ -3856,6 +3855,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      institute_of_teacher: { Args: { p_teacher_id: string }; Returns: string }
       issue_from_counselling: {
         Args: { p_category: string }
         Returns: {
@@ -4002,6 +4002,7 @@ export type Database = {
           day: string
           escalated_institute: number
           escalated_team: number
+          handed_over: number
           open_at_eod: number
           raised: number
           resolved: number
@@ -4122,6 +4123,7 @@ export type Database = {
           p_escalated_to: string
           p_escalation_kind?: string
           p_follow_up_date: string
+          p_handover?: boolean
           p_institute_id: string
           p_issue_other: string
           p_issues: string[]
@@ -4152,6 +4154,13 @@ export type Database = {
           tab: string
         }[]
       }
+      tab_matches: {
+        Args: {
+          p_tab: string
+          t: Database["support"]["Tables"]["tickets"]["Row"]
+        }
+        Returns: boolean
+      }
       tickets_for_enquiry: {
         Args: { p_enquiry_ids: number[] }
         Returns: {
@@ -4178,6 +4187,7 @@ export type Database = {
         | "resolved"
         | "reopened"
         | "counselling_link"
+        | "handover"
       ticket_source:
         | "form"
         | "mail"
@@ -4408,6 +4418,7 @@ export const Constants = {
         "resolved",
         "reopened",
         "counselling_link",
+        "handover",
       ],
       ticket_source: [
         "form",
