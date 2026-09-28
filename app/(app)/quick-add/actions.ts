@@ -534,6 +534,11 @@ export async function createManyEnquiries(
       orderId: won?.orderId ?? null,
       discussion: job.row.discussion ?? null,
       issueCategory: null,
+      // §65.0. There is no outcome to pick on this door — Quick Add is an
+      // arrival, not a call — so it sends the default, and the default now keeps
+      // the ticket with the counsellor who raised it: working, assigned to them,
+      // due the next working day. It lands in the Counsellor tab, and the
+      // redirect to /support/[id] is there for escalating it straight on.
       outcome: "noted",
       teacherId: won?.teacherId ?? null,
       // The won enquiry is purchase history and stays as it is.

@@ -8,6 +8,7 @@ import { dropDuplicateLines, rowShape } from "@/lib/interest-shape";
 import { isAdmin, requireUser } from "@/lib/auth";
 import { istToday } from "@/lib/format";
 import {
+  AFTER_SALE_OUTCOMES,
   outcomesFor,
   type CallOutcome,
   type EnquiryStatus,
@@ -482,15 +483,36 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
     const student = enquiry.student_id as string;
     const won = await wonEnquiryFor(supabase, student);
 
+    /**
+     * §65.0. The outcome the counsellor chose, carried across.
+     *
+     * This door used to send 'noted' whatever was picked, so a counsellor who
+     * chose "Working on it" watched their ticket appear in the ticket team's New
+     * queue — the bug behind #178. Ticking "this is an after-sale call" switches
+     * the form to AFTER_SALE_OUTCOMES, so the choice is already one of the five
+     * the mapping understands; it is checked rather than trusted because a
+     * purchase outcome arriving here would raise inside the transaction.
+     *
+     * 'noted' and 'working' both keep the ticket with the counsellor now;
+     * Escalated and Pending with institute are still a hand-over to New.
+     */
+    const chosen = (AFTER_SALE_OUTCOMES as readonly string[]).includes(input.outcome)
+      ? (input.outcome as (typeof AFTER_SALE_OUTCOMES)[number])
+      : "noted";
+
     const { error: raiseError, raised } = await raiseTicketFromCounselling(supabase, {
       studentId: student,
       enquiryId: won?.id ?? null,
       orderId: input.ticketOrderId?.trim() || won?.orderId || null,
       discussion: input.discussion,
       issueCategory: input.issueCategory || null,
-      // Always `new` and unassigned from this door: the counsellor is handing
-      // it over, not taking it on.
-      outcome: "noted",
+      outcome: chosen,
+      // The date the counsellor set, if they set one; the mapping defaults it to
+      // the next working day when they did not.
+      followUpDate: input.nextFollowUpDate || null,
+      // So an Escalated choice on this door names the person, as it does on the
+      // after-sale door below.
+      escalatedTo: input.escalatedTo ?? null,
       teacherId: input.ticketTeacherId ?? won?.teacherId ?? null,
       // The won enquiry is the student's purchase history and stays open to
       // being read; only the old after-sale pipeline gets closed out.
