@@ -10,7 +10,13 @@ import { showsSupportReports } from "@/lib/roles";
 import { logServerTiming } from "@/lib/server-timing";
 import { createClient } from "@/lib/supabase/server";
 
-import { ESCALATION_KIND_LABELS, OPEN_STATUSES, STATUS_LABELS } from "../filters";
+import {
+  AGE_BAND_LABELS,
+  DUE_LABELS,
+  ESCALATION_KIND_LABELS,
+  OPEN_STATUSES,
+  STATUS_LABELS,
+} from "../filters";
 
 export const metadata = { title: "Support reports · Calman" };
 
@@ -58,7 +64,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
   const db = supabase.schema("support");
   const masters = await loadMasters();
 
-  const [staff, status, ageing, byInstitute, byIssue, perPerson, ttr, instEsc] =
+  const [staff, status, ageing, byInstitute, byIssue, perPerson, ttr, byDue, daily, instEsc] =
     await Promise.all([
       supabase
         .from("profiles")
@@ -77,6 +83,16 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
       db.rpc("report_resolved_per_person", args as any),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       db.rpc("report_time_to_resolve", args as any),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      db.rpc("report_open_by_due", args as any),
+      db.rpc("report_daily", {
+        p_from: from || null,
+        p_to: to || null,
+        p_institute_id: args.p_institute_id,
+        p_teacher_id: args.p_teacher_id,
+        p_assigned_to: args.p_assigned_to,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any),
       db.rpc("report_institute_escalations", {
         p_institute_id: args.p_institute_id,
         p_teacher_id: args.p_teacher_id,
@@ -108,6 +124,16 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
     median_days: number | null;
     min_days: number | null;
     max_days: number | null;
+  }[];
+  const dueRows = (byDue.data ?? []) as unknown as { bucket: string; n: number }[];
+  const dailyRows = (daily.data ?? []) as unknown as {
+    day: string;
+    raised: number;
+    resolved: number;
+    escalated_team: number;
+    escalated_institute: number;
+    set_future: number;
+    open_at_eod: number;
   }[];
   const escRows = (instEsc.data ?? []) as unknown as {
     id: number;
@@ -143,31 +169,6 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
     return `/support?${p.toString()}`;
   };
 
-  /**
-   * The queue has no "age" filter, and it does not need one: an age bucket IS a
-   * raised-date window. 0–3 days means raised between today-3 and today, so the
-   * bucket is expressed in the parameter the queue already understands, narrowed
-   * by whatever window the report itself is showing.
-   */
-  const ageingLink = (bucket: string) => {
-    const shift = (n: number) => {
-      const d = new Date(`${todayIst}T00:00:00Z`);
-      d.setUTCDate(d.getUTCDate() - n);
-      return d.toISOString().slice(0, 10);
-    };
-    const window =
-      bucket === "0-3"
-        ? { lo: shift(3), hi: todayIst }
-        : bucket === "4-7"
-          ? { lo: shift(7), hi: shift(4) }
-          : { lo: "", hi: shift(8) };
-    // Intersect with the report's own range, so clicking a bucket cannot widen
-    // the scope the page is describing.
-    const lo = [window.lo, from].filter(Boolean).sort().at(-1) ?? "";
-    const hi = [window.hi, to].filter(Boolean).sort().at(0) ?? "";
-    return queueLink({ ...OPEN_SCOPE, raisedFrom: lo, raisedTo: hi });
-  };
-
   const days = [...new Set(personRows.map((r) => r.day))].sort();
   const people = [...new Map(personRows.map((r) => [r.person_name, r.person_id])).entries()]
     .sort((a, b) => a[0].localeCompare(b[0]));
@@ -177,7 +178,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
   const overall = ttrRows.find((r) => r.scope === "overall");
   const perInstitute = ttrRows.filter((r) => r.scope === "institute");
 
-  const errors = [status, ageing, byInstitute, byIssue, perPerson, ttr, instEsc]
+  const errors = [status, ageing, byInstitute, byIssue, perPerson, ttr, byDue, daily, instEsc]
     .map((r) => r.error?.message)
     .filter(Boolean);
 
@@ -346,24 +347,31 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
       {/* 3. Ageing */}
       <Section
         title="Ageing of open tickets"
-        hint="Calendar days since the form was submitted. The queue's red badge turns on above 3, so 0–3 is the quiet bucket."
+        hint="Calendar days since the form was submitted. The four bands are exclusive and sum to the open total; “over 3 days” is the roll-up beside them, so it deliberately overlaps."
       >
         <div className="flex flex-wrap gap-2" data-testid="ageing">
           {[
-            { id: "0-3", label: "0–3 days", tone: "ok" as const },
-            { id: "4-7", label: "4–7 days", tone: "warn" as const },
-            { id: "8+", label: "8+ days", tone: "danger" as const },
+            { id: "0-3", tone: "ok" as const },
+            { id: "4-5", tone: "warn" as const },
+            { id: "6-10", tone: "warn" as const },
+            { id: "over-10", tone: "danger" as const },
+            { id: "over-3", tone: "danger" as const, rollUp: true },
           ].map((b) => {
             const n = ageingRows.find((r) => r.bucket === b.id)?.n ?? 0;
             return (
               <Link
                 key={b.id}
-                href={ageingLink(b.id)}
+                href={queueLink({ ...OPEN_SCOPE, age: b.id })}
                 prefetch={false}
                 data-testid={`ageing-${b.id}`}
-                className="flex min-w-[130px] flex-col rounded-md border border-line-2 bg-surface-2 px-3 py-2 hover:border-accent"
+                className={cx(
+                  "flex min-w-[118px] flex-col rounded-md border px-3 py-2 hover:border-accent",
+                  b.rollUp
+                    ? "border-dashed border-line-2 bg-surface"
+                    : "border-line-2 bg-surface-2",
+                )}
               >
-                <span className="text-[11px] text-ink-3">{b.label}</span>
+                <span className="text-[11px] text-ink-3">{AGE_BAND_LABELS[b.id]}</span>
                 <span className="flex items-center gap-1.5">
                   <span className="text-[18px] font-semibold tabular-nums text-ink">{n}</span>
                   {n > 0 && b.tone !== "ok" ? <Badge tone={b.tone}>&nbsp;</Badge> : null}
@@ -371,6 +379,99 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
               </Link>
             );
           })}
+        </div>
+      </Section>
+
+      {/* §63.2. When the open work is next due. */}
+      <Section title="Open by follow-up date" hint="As on today.">
+        <div className="flex flex-wrap gap-2" data-testid="by-due">
+          {["overdue", "today", "future", "none"].map((b) => {
+            const n = dueRows.find((r) => r.bucket === b)?.n ?? 0;
+            return (
+              <Link
+                key={b}
+                href={queueLink({ ...OPEN_SCOPE, due: b })}
+                prefetch={false}
+                data-testid={`due-${b}`}
+                className="flex min-w-[118px] flex-col rounded-md border border-line-2 bg-surface-2 px-3 py-2 hover:border-accent"
+              >
+                <span className="text-[11px] text-ink-3">{DUE_LABELS[b]}</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="text-[18px] font-semibold tabular-nums text-ink">{n}</span>
+                  {n > 0 && b === "overdue" ? <Badge tone="danger">&nbsp;</Badge> : null}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </Section>
+
+      {/* §63.2. One row per day in the range. */}
+      <Section
+        title="Per day"
+        hint="Counted from the ticket history by the day each thing happened, so a ticket escalated twice in a day counts once. “Open at end of day” is a position: raised on or before that day and neither resolved nor merged by the end of it."
+      >
+        <div className="overflow-x-auto">
+          <table data-testid="per-day" className="w-full border-collapse text-[12.5px]">
+            <thead>
+              <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+                <th className="px-1.5 py-[7px]">Day</th>
+                <th className="px-1.5 py-[7px] text-right">Raised</th>
+                <th className="px-1.5 py-[7px] text-right">Resolved</th>
+                <th className="px-1.5 py-[7px] text-right">Esc · team</th>
+                <th className="px-1.5 py-[7px] text-right">Esc · institute</th>
+                <th className="px-1.5 py-[7px] text-right">Future date</th>
+                <th className="px-1.5 py-[7px] text-right">Open at EOD</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dailyRows.map((r) => (
+                <tr key={r.day} className="border-b border-line last:border-b-0">
+                  <td className="whitespace-nowrap px-1.5 py-[5px] text-ink-2">
+                    {formatDate(r.day)}
+                  </td>
+                  {[r.raised, r.resolved, r.escalated_team, r.escalated_institute, r.set_future].map(
+                    (n, i) => (
+                      <td
+                        key={i}
+                        className={cx(
+                          "px-1.5 py-[5px] text-right tabular-nums",
+                          n ? "text-ink-2" : "text-ink-3",
+                        )}
+                      >
+                        {n || "—"}
+                      </td>
+                    ),
+                  )}
+                  <td className="px-1.5 py-[5px] text-right font-semibold tabular-nums text-ink">
+                    {r.open_at_eod}
+                  </td>
+                </tr>
+              ))}
+              {dailyRows.length ? (
+                <tr className="bg-sunk">
+                  <td className="px-1.5 py-[5px] text-[11px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+                    Total
+                  </td>
+                  {(["raised", "resolved", "escalated_team", "escalated_institute", "set_future"] as const).map(
+                    (k) => (
+                      <td key={k} className="px-1.5 py-[5px] text-right font-semibold tabular-nums text-ink">
+                        {dailyRows.reduce((sum, r) => sum + r[k], 0)}
+                      </td>
+                    ),
+                  )}
+                  {/* No total: a running position does not add up across days. */}
+                  <td className="px-1.5 py-[5px] text-right text-[11px] text-ink-3">—</td>
+                </tr>
+              ) : (
+                <tr>
+                  <td colSpan={7} className="px-3 py-5 text-center text-ink-3">
+                    Nothing in this range.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </Section>
 

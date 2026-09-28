@@ -48,6 +48,15 @@ export default async function Page({
 
   const masters = await loadMasters();
 
+  // §63.1. The live duplicate suggestion, in either direction. Loaded here so the
+  // dialog can quote the other ticket's issues without a round trip on click.
+  const { data: candidate } = await db
+    .rpc("duplicate_candidate_of", {
+      p_ticket_id: ticketId,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+    .maybeSingle();
+
   // The timeline includes the children's events: a merged duplicate is the same
   // complaint, and its history belongs on the thread the team actually reads.
   const { data: children } = await db
@@ -112,6 +121,18 @@ export default async function Page({
         people={Object.fromEntries(people)}
         staff={(staff ?? []).map((p) => ({ id: p.id, name: p.full_name ?? "(no name)" }))}
         masters={{ institutes: masters.institutes, teachers: masters.teachers }}
+        duplicate={
+          candidate
+            ? (candidate as unknown as {
+                other_ticket_id: number;
+                other_issues: string[] | null;
+                other_issue_other: string | null;
+                child_id: number;
+                parent_id: number;
+                same_issue: boolean;
+              })
+            : null
+        }
       />
     </div>
   );

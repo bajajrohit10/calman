@@ -111,7 +111,7 @@ export async function POST(request: Request) {
       {
         ticketId: result.ticketId,
         existing: result.existing,
-        mergedInto: result.mergedInto ?? null,
+        duplicateOf: result.duplicateOf ?? null,
         mobile: result.mobile,
         orderId: result.orderId,
         instituteId: result.instituteId,

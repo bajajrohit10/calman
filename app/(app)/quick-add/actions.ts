@@ -492,24 +492,41 @@ export async function createManyEnquiries(
   // place to look. The ticket is filed against the enquiry the student bought
   // through where there is one, and the lead is left untouched.
   for (const job of openingTicket) {
-    // The student, and the enquiry they bought through if Calman knows of one.
-    const { data: student } = await supabase
+    // §63.3. The student, created if the number is new — and nothing else. No
+    // enquiry of any kind: a support ticket is not a counselling conversation,
+    // and the lead this used to leave behind was a row nobody ever worked.
+    let studentId: string | null = null;
+    const { data: existing } = await supabase
       .from("students")
       .select("id")
       .eq("mobile", job.mobile)
       .maybeSingle();
+    studentId = existing?.id ?? null;
 
-    if (!student) {
-      out[job.index] = {
-        mobile: job.mobile,
-        case: null,
-        action: "failed",
-        enquiryId: null,
-        reason: "the number is not on any student yet",
-      };
-      continue;
+    if (!studentId) {
+      const { data: made, error: studentError } = await supabase
+        .from("students")
+        .insert({
+          mobile: job.mobile,
+          name: job.row.name?.trim() || null,
+          created_by: viewer.userId,
+        })
+        .select("id")
+        .single();
+      if (studentError || !made) {
+        out[job.index] = {
+          mobile: job.mobile,
+          case: null,
+          action: "failed",
+          enquiryId: null,
+          reason: studentError?.message ?? "the student could not be saved",
+        };
+        continue;
+      }
+      studentId = made.id;
     }
 
+    const student = { id: studentId };
     const won = await wonEnquiryFor(supabase, student.id);
     const { error: raiseError, raised } = await raiseTicketFromCounselling(supabase, {
       studentId: student.id,

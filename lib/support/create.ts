@@ -49,8 +49,11 @@ export type CreateTicketResult = {
   ticketId: number;
   /** True when rowRef had already been seen and nothing was written. */
   existing: boolean;
-  /** Set when the new ticket was filed as a duplicate of this one. */
-  mergedInto?: number;
+  /**
+   * §63.1. Another live ticket sharing this order id, recorded as a suggestion.
+   * Nothing has been merged — the ticket page asks first.
+   */
+  duplicateOf?: number | null;
   mobile: string | null;
   orderId: string | null;
   instituteId: string | null;
@@ -130,7 +133,7 @@ export async function createSupportTicket(
       return {
         ticketId: seen.id,
         existing: true,
-        mergedInto: seen.parent_ticket_id ?? undefined,
+        duplicateOf: null,
         mobile: seen.mobile,
         orderId: seen.order_id,
         instituteId: seen.institute_id,
@@ -145,37 +148,20 @@ export async function createSupportTicket(
   const attachments = parseSupportAttachments(input.attachments);
   const { instituteId, teacherId } = await matchFaculty(base, input.faculty);
 
-  // §58.3b. The duplicate probe. Both halves of the key must be known — a
-  // ticket with no order id tells us nothing about which complaint it repeats,
-  // and merging on mobile alone would fold a student's unrelated problems into
-  // one thread.
-  // follow_up_date and escalated_to come back with it, because a child copies
-  // the parent's status and those two are what that status has to satisfy — a
-  // child inheriting 'escalated' with no escalatee, or 'working' with no date,
-  // is refused by the table's own constraints at insert time.
-  type Parent = {
-    id: number;
-    status: Database["support"]["Enums"]["ticket_status"];
-    follow_up_date: string | null;
-    escalated_to: string | null;
-    /** §61.2: travels with the status, or the table's check refuses the row. */
-    escalation_kind: string | null;
-    institute_id: string | null;
-  };
-  let parent: Parent | null = null;
-  if (mobile && orderId) {
-    const { data } = await db
-      .from("tickets")
-      .select("id, status, follow_up_date, escalated_to, escalation_kind, institute_id")
-      .eq("mobile", mobile)
-      .eq("order_id", orderId)
-      .is("parent_ticket_id", null)
-      .neq("status", "resolved")
-      .order("id", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    parent = data ?? null;
-  }
+  /**
+   * §63.1. Intake no longer merges. It suggests.
+   *
+   * It used to file a second form row as a child of the first whenever the
+   * mobile and order id both matched. That is usually right and occasionally
+   * wrong, and when it is wrong the second complaint has disappeared into a
+   * thread nobody is reading. So the match is recorded as a candidate and the
+   * person working the ticket confirms it — see
+   * support.record_duplicate_candidate, called after the insert below.
+   *
+   * Mobile is out of the match entirely (§63.1): a parent ringing about two
+   * children's orders shares a number and nothing else, and that pairing was the
+   * one most likely to be wrong.
+   */
 
   const now = new Date().toISOString();
   const { data: created, error } = await db
@@ -200,24 +186,14 @@ export async function createSupportTicket(
       order_id_work: orderId,
       issues_work: issues,
       issue_other_work: other,
-      // §61.2. When the parent is escalated to an institute the child must name
-      // that institute, whatever its own faculty text resolved to — the check
-      // constraint requires it and the two tickets are the same complaint.
-      institute_id:
-        parent?.escalation_kind === "institute"
-          ? (parent.institute_id ?? instituteId)
-          : instituteId,
+      institute_id: instituteId,
       teacher_id: teacherId,
-      // A child copies the parent's state: it is the same complaint, and a
-      // duplicate showing "new" beside a parent being worked would read as two
-      // different situations. The probe only ever finds an unresolved parent,
-      // so the resolved-needs-a-timestamp constraint cannot fire here.
-      status: parent ? parent.status : "new",
-      follow_up_date: parent?.follow_up_date ?? null,
-      escalated_to: parent?.escalated_to ?? null,
-      escalation_kind: parent?.escalation_kind ?? null,
-      parent_ticket_id: parent?.id ?? null,
-      merged_at: parent ? now : null,
+      status: "new",
+      follow_up_date: null,
+      escalated_to: null,
+      escalation_kind: null,
+      parent_ticket_id: null,
+      merged_at: null,
       last_touched_at: now,
     })
     .select("id")
@@ -248,32 +224,31 @@ export async function createSupportTicket(
     },
   ];
 
-  if (parent) {
-    events.push({
-      ticket_id: ticketId,
-      actor_id: actorId,
-      kind: "merged_into",
-      detail: { ticket_id: parent.id, reason: "same mobile and order id", automatic: true },
-    });
-    events.push({
-      ticket_id: parent.id,
-      actor_id: actorId,
-      kind: "child_merged",
-      detail: { ticket_id: ticketId, reason: "same mobile and order id", automatic: true },
-    });
-  }
-
   const { error: eventError } = await db.from("events").insert(events);
   if (eventError) throw new Error(`Ticket ${ticketId} saved, but its history did not: ${eventError.message}`);
 
-  if (parent) {
-    await db.from("tickets").update({ last_touched_at: now }).eq("id", parent.id);
+  // §63.1. Suggest, do not merge. Records a candidate when another live ticket
+  // shares this order id; the ticket page asks before anything is joined.
+  let duplicateOf: number | null = null;
+  if (orderId) {
+    await db.rpc("record_duplicate_candidate", {
+      p_ticket_id: ticketId,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    const { data: candidate } = await db
+      .rpc("duplicate_candidate_of", {
+        p_ticket_id: ticketId,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any)
+      .maybeSingle();
+    duplicateOf =
+      (candidate as unknown as { other_ticket_id: number } | null)?.other_ticket_id ?? null;
   }
 
   return {
     ticketId,
     existing: false,
-    mergedInto: parent?.id,
+    duplicateOf,
     mobile,
     orderId,
     instituteId,

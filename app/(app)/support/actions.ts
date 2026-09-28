@@ -82,8 +82,10 @@ export async function newSupportTicket(input: {
     return {
       error: null,
       ticketId: result.ticketId,
-      ok: result.mergedInto
-        ? `Ticket #${result.ticketId} created and merged into #${result.mergedInto} — same number and order id.`
+      // §63.1. Nothing is merged on create any more; a matching order id is a
+      // suggestion the ticket page asks about.
+      ok: result.duplicateOf
+        ? `Ticket #${result.ticketId} created. #${result.duplicateOf} has the same order id — you will be asked whether to merge.`
         : `Ticket #${result.ticketId} created.`,
     };
   } catch (e) {
@@ -162,6 +164,64 @@ export async function logTicketTouch(input: {
     error: null,
     ok: input.kind === "note" ? "Note added." : input.kind === "called" ? "Call logged." : "Message logged.",
   };
+}
+
+/**
+ * §63.1. The duplicate prompt's two answers.
+ *
+ * Both end in the save the user asked for, so the outcome they picked is never
+ * lost to answering a question about something else. Merge applies it to the
+ * surviving parent; Keep separate records the decision for that pair so the
+ * prompt never returns, then saves this ticket.
+ */
+export async function resolveDuplicateThenSave(input: {
+  ticketId: number;
+  otherId: number;
+  choice: "merge" | "separate";
+  /** The direction a merge would take: newer into older. */
+  childId: number;
+  parentId: number;
+  save: Parameters<typeof saveTicketAction>[0];
+}): Promise<SupportResult & { savedOn?: number }> {
+  const { error } = await gate();
+  if (error) return { error };
+
+  const supabase = await createClient();
+  const db = supabase.schema("support");
+
+  if (input.choice === "merge") {
+    const { error: mergeError } = await db.rpc("merge_ticket", {
+      p_child_id: input.childId,
+      p_parent_id: input.parentId,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    if (mergeError) return { error: mergeError.message };
+
+    // The outcome applies to whichever ticket survived, not to the one the user
+    // happened to be looking at — a merged child refuses an action anyway.
+    const res = await saveTicketAction({ ...input.save, ticketId: input.parentId });
+    if (res.error) {
+      return {
+        error: `Merged into #${input.parentId}, but the action did not save: ${res.error}`,
+      };
+    }
+    revalidatePath(`/support/${input.childId}`);
+    revalidatePath(`/support/${input.parentId}`);
+    revalidatePath("/support");
+    return { error: null, ok: `Merged into #${input.parentId} and saved.`, savedOn: input.parentId };
+  }
+
+  const { error: dismissError } = await db.rpc("dismiss_duplicate_candidate", {
+    p_ticket_id: input.ticketId,
+    p_other_id: input.otherId,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any);
+  if (dismissError) return { error: dismissError.message };
+
+  const res = await saveTicketAction(input.save);
+  if (res.error) return { error: res.error };
+  revalidatePath(`/support/${input.otherId}`);
+  return { error: null, ok: "Kept separate and saved.", savedOn: input.ticketId };
 }
 
 /** §58.4. Merge into… */

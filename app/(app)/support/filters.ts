@@ -61,6 +61,25 @@ export const STATUS_LABELS: Record<string, string> = {
 /** "Nobody" is a real answer to "assigned to whom", so it is an option id. */
 export const UNASSIGNED = "nobody";
 
+/** §63.2. The ageing bands, and the roll-up shown beside them. */
+export const AGE_BANDS = ["0-3", "4-5", "6-10", "over-10", "over-3"] as const;
+export const AGE_BAND_LABELS: Record<string, string> = {
+  "0-3": "0–3 days",
+  "4-5": "4–5 days",
+  "6-10": "6–10 days",
+  "over-10": "over 10 days",
+  "over-3": "over 3 days",
+};
+
+/** §63.2. When a ticket is next due. */
+export const DUE_BUCKETS = ["overdue", "today", "future", "none"] as const;
+export const DUE_LABELS: Record<string, string> = {
+  overdue: "Overdue",
+  today: "Due today",
+  future: "Future",
+  none: "No date",
+};
+
 /** §61.2. The two kinds of escalation, as chips on the Escalated tab. */
 export const ESCALATION_KINDS = [
   { id: "team", label: "Team" },
@@ -101,6 +120,10 @@ export type SupportQueueArgs = {
   /** §61.3: the reports link through with a raised-date window. */
   p_raised_from: string | undefined;
   p_raised_to: string | undefined;
+  /** §63.2: an ageing band, from the reports. */
+  p_age_band: string | undefined;
+  /** §63.2: overdue | today | future | none, from the reports. */
+  p_due: string | undefined;
   p_institute_id: string | undefined;
   p_teacher_id: string | undefined;
   p_issues: string[] | undefined;
@@ -165,6 +188,12 @@ export function parseSupportParams(get: ParamReader): {
       p_escalation_kinds: escalationKinds.length ? escalationKinds : undefined,
       p_raised_from: opt(str(get, "raisedFrom")),
       p_raised_to: opt(str(get, "raisedTo")),
+      p_age_band: AGE_BANDS.includes(str(get, "age") as never)
+        ? (str(get, "age") as string)
+        : undefined,
+      p_due: DUE_BUCKETS.includes(str(get, "due") as never)
+        ? (str(get, "due") as string)
+        : undefined,
       p_institute_id: opt(str(get, "institute")),
       p_teacher_id: opt(str(get, "teacher")),
       p_issues: issues.length ? issues : undefined,

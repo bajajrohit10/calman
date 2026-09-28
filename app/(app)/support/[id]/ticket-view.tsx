@@ -13,6 +13,7 @@ import {
   findMergeTargets,
   logTicketTouch,
   mergeTicket,
+  resolveDuplicateThenSave,
   saveTicketAction,
 } from "../actions";
 import { SOURCE_LABELS, STATUS_LABELS } from "../filters";
@@ -66,6 +67,31 @@ export type TicketEvent = {
 type Master = { id: string; name: string };
 
 /**
+ * The issues on a ticket, as one readable phrase.
+ *
+ * "none recorded" rather than an empty string: the prompt compares two tickets
+ * and a blank on one side would read as a rendering fault rather than as a fact
+ * about the ticket.
+ */
+function issueSummary(issues: string[] | null, other: string | null): string {
+  const parts = [...(issues ?? []), ...(other ? [other] : [])];
+  return parts.length ? parts.join(", ") : "none recorded";
+}
+
+/** The action-panel save, as the server action takes it. */
+type SavePayload = Parameters<typeof saveTicketAction>[0];
+
+/** §63.1. The other half of a live duplicate suggestion. */
+export type DuplicateCandidate = {
+  other_ticket_id: number;
+  other_issues: string[] | null;
+  other_issue_other: string | null;
+  child_id: number;
+  parent_id: number;
+  same_issue: boolean;
+};
+
+/**
  * §61.2. The outcome control, where the two escalations are separate choices.
  *
  * The dropdown value carries both the status and the kind, because to the person
@@ -109,6 +135,7 @@ export function TicketView({
   people,
   staff,
   masters,
+  duplicate,
 }: {
   ticket: TicketDetail;
   events: TicketEvent[];
@@ -124,6 +151,8 @@ export function TicketView({
   people: Record<string, string>;
   staff: Master[];
   masters: { institutes: Master[]; teachers: Master[] };
+  /** §63.1: a live duplicate suggestion, in either direction. */
+  duplicate: DuplicateCandidate | null;
 }) {
   // §62.3. The same label the queue column prints, from the same table.
   const sourceLabel = SOURCE_LABELS[ticket.source] ?? ticket.source;
@@ -224,7 +253,12 @@ export function TicketView({
       </section>
 
       {ticket.parent_ticket_id ? null : (
-        <ActionPanel ticket={ticket} staff={staff} masters={masters} />
+        <ActionPanel
+          ticket={ticket}
+          staff={staff}
+          masters={masters}
+          duplicate={duplicate}
+        />
       )}
 
       {ticket.parent_ticket_id ? null : (
@@ -305,10 +339,12 @@ function ActionPanel({
   ticket,
   staff,
   masters,
+  duplicate,
 }: {
   ticket: TicketDetail;
   staff: Master[];
   masters: { institutes: Master[]; teachers: Master[] };
+  duplicate: DuplicateCandidate | null;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -328,14 +364,17 @@ function ActionPanel({
   const needsInstitute = chosen.kind === "institute";
   const [instituteId, setInstituteId] = useState<string>(ticket.institute_id ?? "");
   const instituteMissing = needsInstitute && !instituteId;
+  /**
+   * §63.1. The save the user asked for, held while the duplicate question is
+   * answered. Held rather than abandoned: whichever way they answer, the outcome
+   * they picked is what gets applied — to the parent after a merge, to this
+   * ticket after keeping them separate.
+   */
+  const [askingAbout, setAskingAbout] = useState<SavePayload | null>(null);
 
-  function submit(form: HTMLFormElement) {
-    if (lock.current) return;
-    lock.current = true;
-    const data = new FormData(form);
-    setResult(null);
-    start(async () => {
-      const res = await saveTicketAction({
+  /** The payload both paths share, built once from the form. */
+  function payloadFrom(data: FormData): SavePayload {
+    return {
         ticketId: ticket.id,
         issues,
         issueOther: String(data.get("issueOther") ?? "").trim() || null,
@@ -347,13 +386,54 @@ function ActionPanel({
         escalationKind: chosen.kind,
         followUpDate: String(data.get("followUpDate") ?? "") || null,
         escalatedTo: String(data.get("escalatedTo") ?? "") || null,
-        called: data.get("called") === "on",
-        messaged: data.get("messaged") === "on",
+      called: data.get("called") === "on",
+      messaged: data.get("messaged") === "on",
+    };
+  }
+
+  function submit(form: HTMLFormElement) {
+    if (lock.current) return;
+    const data = new FormData(form);
+    const payload = payloadFrom(data);
+
+    // §63.1. The question comes before the write, so nothing is saved twice and
+    // nothing is merged without an answer.
+    if (duplicate) {
+      setResult(null);
+      setAskingAbout(payload);
+      return;
+    }
+
+    lock.current = true;
+    setResult(null);
+    start(async () => {
+      const res = await saveTicketAction(payload);
+      setResult(res);
+      lock.current = false;
+      if (!res.error) router.refresh();
+    });
+  }
+
+  /** Merge into #N, or keep separate — then the save either way. */
+  function answer(choice: "merge" | "separate") {
+    if (!duplicate || !askingAbout || lock.current) return;
+    lock.current = true;
+    start(async () => {
+      const res = await resolveDuplicateThenSave({
+        ticketId: ticket.id,
+        otherId: duplicate.other_ticket_id,
+        choice,
+        childId: duplicate.child_id,
+        parentId: duplicate.parent_id,
+        save: askingAbout,
       });
       setResult(res);
       lock.current = false;
+      setAskingAbout(null);
       if (!res.error) {
-        router.refresh();
+        // A merge moves the work to the parent, so that is where to land.
+        if (res.savedOn && res.savedOn !== ticket.id) router.push(`/support/${res.savedOn}`);
+        else router.refresh();
       }
     });
   }
@@ -548,6 +628,64 @@ function ActionPanel({
           </div>
         </div>
       </div>
+
+      {/* §63.1. Asked once per pair, before anything is written. The wording
+          turns on whether the two tickets are about the same thing, because
+          "same order, same issue" and "same order, different issue" are
+          different decisions and a single sentence for both would hide the one
+          that needs thought. */}
+      {askingAbout && duplicate ? (
+        <div
+          data-testid="duplicate-dialog"
+          role="alertdialog"
+          aria-label="Possible duplicate"
+          className="mx-4 mb-2 rounded-md border border-warn/60 bg-warn-soft/40 px-3 py-2.5"
+        >
+          <p className="text-[12.5px] text-ink">
+            {duplicate.same_issue ? (
+              <>
+                Ticket #{duplicate.other_ticket_id} has the same order ID and the
+                same issue. Merge this into #{duplicate.parent_id}?
+              </>
+            ) : (
+              <>
+                Ticket #{duplicate.other_ticket_id} has the same order ID but a
+                different issue (#{duplicate.other_ticket_id}:{" "}
+                {issueSummary(duplicate.other_issues, duplicate.other_issue_other)}; this:{" "}
+                {issueSummary(issues, null)}). Merge, or keep separate?
+              </>
+            )}
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="primary"
+              disabled={pending}
+              onClick={() => answer("merge")}
+            >
+              {/* The direction is in the label: newer into older, always. */}
+              Merge #{duplicate.child_id} into #{duplicate.parent_id}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={pending}
+              onClick={() => answer("separate")}
+            >
+              Keep separate
+            </Button>
+            <button
+              type="button"
+              onClick={() => setAskingAbout(null)}
+              className="text-[12px] text-ink-3 underline-offset-2 hover:underline"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {result?.error ? (
         <div className="px-4 pb-2">

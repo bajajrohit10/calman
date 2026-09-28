@@ -51,6 +51,8 @@ export type TicketRow = {
   last_touched_at: string;
   source: string;
   child_count: number;
+  /** §63.1: another live ticket with the same order id. Nothing is merged yet. */
+  duplicate_of: number | null;
   total_count: number;
 };
 
@@ -348,6 +350,18 @@ export function SupportBoard({
                     {r.child_count > 0 ? (
                       <span className="ml-1.5" title={`${r.child_count} merged duplicate(s)`}>
                         <Badge tone="neutral">+{r.child_count}</Badge>
+                      </span>
+                    ) : null}
+                    {/* §63.1. A suggestion, not a state: the chip says another
+                        ticket shares this order id and disappears once somebody
+                        has merged or kept them separate. */}
+                    {r.duplicate_of ? (
+                      <span
+                        className="ml-1.5"
+                        data-testid={`dup-chip-${r.id}`}
+                        title={`Ticket #${r.duplicate_of} has the same order id`}
+                      >
+                        <Badge tone="warn">dup of #{r.duplicate_of}</Badge>
                       </span>
                     ) : null}
                   </Cell>

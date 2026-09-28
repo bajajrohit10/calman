@@ -3601,6 +3601,54 @@ export type Database = {
   }
   support: {
     Tables: {
+      duplicate_candidates: {
+        Row: {
+          detected_at: string
+          dismissed_at: string | null
+          dismissed_by: string | null
+          hi_ticket_id: number
+          id: number
+          lo_ticket_id: number
+          merged_at: string | null
+          order_id: string
+        }
+        Insert: {
+          detected_at?: string
+          dismissed_at?: string | null
+          dismissed_by?: string | null
+          hi_ticket_id: number
+          id?: number
+          lo_ticket_id: number
+          merged_at?: string | null
+          order_id: string
+        }
+        Update: {
+          detected_at?: string
+          dismissed_at?: string | null
+          dismissed_by?: string | null
+          hi_ticket_id?: number
+          id?: number
+          lo_ticket_id?: number
+          merged_at?: string | null
+          order_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "duplicate_candidates_hi_ticket_id_fkey"
+            columns: ["hi_ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "duplicate_candidates_lo_ticket_id_fkey"
+            columns: ["lo_ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       events: {
         Row: {
           actor_id: string | null
@@ -3779,6 +3827,24 @@ export type Database = {
     }
     Functions: {
       age_days: { Args: { p_raised: string }; Returns: number }
+      dismiss_duplicate_candidate: {
+        Args: { p_other_id: number; p_ticket_id: number }
+        Returns: number
+      }
+      duplicate_candidate_of: {
+        Args: { p_ticket_id: number }
+        Returns: {
+          candidate_id: number
+          child_id: number
+          order_id: string
+          other_issue_other: string
+          other_issues: string[]
+          other_status: Database["support"]["Enums"]["ticket_status"]
+          other_ticket_id: number
+          parent_id: number
+          same_issue: boolean
+        }[]
+      }
       in_report_scope: {
         Args: {
           p_assigned_to: string[]
@@ -3821,7 +3887,9 @@ export type Database = {
       }
       queue: {
         Args: {
+          p_age_band?: string
           p_assigned_to?: string[]
+          p_due?: string
           p_escalation_kinds?: string[]
           p_follow_from?: string
           p_follow_to?: string
@@ -3842,6 +3910,7 @@ export type Database = {
           assigned_to: string
           assigned_to_name: string
           child_count: number
+          duplicate_of: number
           escalated_label: string
           escalated_to_name: string
           escalation_kind: string
@@ -3867,7 +3936,9 @@ export type Database = {
       }
       queue_facets: {
         Args: {
+          p_age_band?: string
           p_assigned_to?: string[]
+          p_due?: string
           p_escalation_kinds?: string[]
           p_follow_from?: string
           p_follow_to?: string
@@ -3902,6 +3973,10 @@ export type Database = {
         }
         Returns: Json
       }
+      record_duplicate_candidate: {
+        Args: { p_ticket_id: number }
+        Returns: number
+      }
       report_ageing: {
         Args: {
           p_assigned_to?: string[]
@@ -3913,6 +3988,24 @@ export type Database = {
         Returns: {
           bucket: string
           n: number
+        }[]
+      }
+      report_daily: {
+        Args: {
+          p_assigned_to?: string[]
+          p_from: string
+          p_institute_id?: string
+          p_teacher_id?: string
+          p_to: string
+        }
+        Returns: {
+          day: string
+          escalated_institute: number
+          escalated_team: number
+          open_at_eod: number
+          raised: number
+          resolved: number
+          set_future: number
         }[]
       }
       report_institute_escalations: {
@@ -3933,6 +4026,19 @@ export type Database = {
           overdue: boolean
           raised_at: string
           student_name: string
+        }[]
+      }
+      report_open_by_due: {
+        Args: {
+          p_assigned_to?: string[]
+          p_from?: string
+          p_institute_id?: string
+          p_teacher_id?: string
+          p_to?: string
+        }
+        Returns: {
+          bucket: string
+          n: number
         }[]
       }
       report_open_by_institute: {
