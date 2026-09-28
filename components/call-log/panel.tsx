@@ -797,14 +797,21 @@ export function CallLogPanel({
     // landed. The chips are still there to say otherwise.
     if (next === "call_back" || next === "follow_up") {
       setFollowUpDate(enquiry.defaultFollowUpDate ?? "");
-    } else if (next === "noted") {
-      // §33.4. A ticket's reminder is today, not the next working day. A
-      // purchase lead is a thing to do next; an unresolved complaint is a
-      // thing to do now, and dating it tomorrow was how a ticket raised this
-      // morning disappeared from this morning's queue. It carries itself
-      // forward from here — nothing is date-bound until it is resolved — and
-      // the chips are still there to say "not until Friday".
-      setFollowUpDate(istToday());
+    } else if (next === "noted" || next === "working") {
+      /**
+       * §65.4. Working and noted open on the next working day, and neither is
+       * demanded any more.
+       *
+       * This supersedes §33.4, which dated a ticket's reminder today so a
+       * complaint raised in the morning did not drop out of the morning's queue.
+       * That reasoning belonged to a world where the complaint lived in
+       * counselling. It lives in Support now, where §65.0 gives the ticket its
+       * own next-working-day follow-up and the counsellor sees it on the
+       * Counsellor tab — so this field is the counselling record's reminder, and
+       * the working day is the right default for it. The chips still say
+       * otherwise in one click.
+       */
+      setFollowUpDate(enquiry.defaultFollowUpDate ?? istToday());
     } else {
       setFollowUpDate("");
     }
@@ -889,7 +896,11 @@ export function CallLogPanel({
     // §44.3. Every after-sale state but Resolved has a day somebody looks at it
     // again, and the field is on screen — so the form asks for it rather than
     // storing a ticket with no next date.
-    if (outcomeTakesDate(outcome) && !followUpDate) {
+    // §65.4. Working and noted are defaulted, not demanded: the form opens them
+    // on the next working day, and a counsellor who clears the field is saying
+    // "no date", not making a mistake.
+    if (outcomeTakesDate(outcome) && !followUpDate
+        && outcome !== "working" && outcome !== "noted") {
       refuse(
         asAfterSale ? "Set a reminder date." : "Set the next follow-up date.",
         () => {

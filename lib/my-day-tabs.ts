@@ -10,20 +10,17 @@ import type { AssignmentBucket } from "@/lib/enquiry-labels";
  * quietly disagreeing with the screen it came from.
  */
 /**
- * The key stays in the union although "tickets" is no longer offered.
+ * §65.2. "tickets" is gone from the union as well as from the list.
  *
- * §62.2 withdrew the tab: after-sale work is raised as a support ticket and
- * worked in Support, so a tab reading counselling's after-sale enquiries looks at
- * a pipeline nothing new enters. It is dropped from MY_DAY_TABS below, which is
- * what the screen renders and what parseMyDayTab validates against — so it
- * cannot be selected, and ?tab=tickets falls back to New.
- *
- * Kept in the type rather than removed because my-day.tsx still holds the tab's
- * rendering code, now unreachable. Deleting several hundred lines of interwoven
- * JSX from the screen the whole team opens first was not worth the risk in the
- * same change that moved the work; it is a follow-up, not a loose end to forget.
+ * §62.2 withdrew the tab — after-sale work is raised as a support ticket and
+ * worked in Support, so a tab reading counselling's after-sale enquiries looked
+ * at a pipeline nothing new enters — but left its rendering in my-day.tsx,
+ * unreachable, and the key in this union to keep that code compiling. The
+ * rendering is now deleted, along with the two round trips per render that were
+ * fetching lists for a tab nobody could open, so the key goes too:
+ * `?tab=tickets` was already falling back to New and now cannot even be named.
  */
-export type MyDayTabKey = "new" | "offer" | "assigned" | "custom" | "tickets";
+export type MyDayTabKey = "new" | "offer" | "assigned" | "custom";
 
 export const MY_DAY_TABS: {
   key: MyDayTabKey;

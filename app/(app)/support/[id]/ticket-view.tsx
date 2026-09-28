@@ -101,6 +101,15 @@ export type DuplicateCandidate = {
  */
 const OUTCOMES = [
   { id: "working", label: "Working on it", status: "working", kind: null },
+  /**
+   * §65.3. The counsellor's way of giving the ticket back.
+   *
+   * Its status underneath is `new` — the team's queue — but it is not "set the
+   * status to new": it also unassigns, clears the date and writes its own event
+   * kind, so the reports can tell a hand-over from an escalation. The status
+   * here is what the row ends up as; `handover` is what the save is told.
+   */
+  { id: "handover", label: "Hand over to support team", status: "new", kind: null },
   {
     id: "escalated_team",
     label: "Escalated to team member",
@@ -119,12 +128,30 @@ const OUTCOMES = [
 
 type OutcomeId = (typeof OUTCOMES)[number]["id"];
 
+/**
+ * §65.3. Which outcomes this ticket may take.
+ *
+ * On a counsellor's own working ticket — the Counsellor tab — escalating is not
+ * theirs to do: they hand it to the team, and the team escalates. Offering both
+ * would put a counselling ticket on the Escalated tab without the team ever
+ * having seen it. Everywhere else the full list returns, hand-over included only
+ * where it means something.
+ */
+function outcomesFor(source: string, status: string): readonly (typeof OUTCOMES)[number][] {
+  const inCounsellorTab = source === "counselling" && status === "working";
+  return OUTCOMES.filter((o) =>
+    inCounsellorTab ? o.id !== "escalated_team" && o.id !== "escalated_institute" : o.id !== "handover",
+  );
+}
+
 /** Which dropdown entry a stored status + kind corresponds to. */
 function outcomeIdFor(status: string, kind: string | null): OutcomeId {
   if (status === "escalated") {
     return kind === "institute" ? "escalated_institute" : "escalated_team";
   }
-  const hit = OUTCOMES.find((o) => o.status === status && o.kind === null);
+  // `handover` shares its status with New, so it is never the *current* reading
+  // of a row — only ever a choice being made now.
+  const hit = OUTCOMES.find((o) => o.status === status && o.kind === null && o.id !== "handover");
   return hit?.id ?? "working";
 }
 
@@ -373,9 +400,18 @@ function ActionPanel({
   );
   const lock = useRef(false);
 
-  const chosen = OUTCOMES.find((o) => o.id === outcome)!;
-  const needsDate = chosen.status !== "resolved";
+  // §65.3. What this ticket may become, decided once from where it stands.
+  const allowedOutcomes = outcomesFor(ticket.source, ticket.status);
+  const chosen = allowedOutcomes.find((o) => o.id === outcome) ?? allowedOutcomes[0];
+  const isHandover = chosen.id === "handover";
+  // A hand-over clears the date, so asking for one would be asking for something
+  // that is about to be thrown away.
+  const needsDate = chosen.status !== "resolved" && !isHandover;
   const needsPerson = chosen.kind === "team";
+  // §65.3. The picker stays on a hand-over — a counsellor often knows who should
+  // look at it — but it is a suggestion recorded in the note, never a required
+  // field and never written to escalated_to.
+  const showsPerson = needsPerson || isHandover;
   // §61.2. An institute escalation is a claim about a specific institute, so the
   // ticket has to name one. Said here as well as refused by the server, because
   // an error arriving after the save is a worse way to learn it.
@@ -430,7 +466,12 @@ function ActionPanel({
         details: String(data.get("details") ?? ""),
         outcome: chosen.status,
         escalationKind: chosen.kind,
+        // §65.3. The hand-over is a flag, not a status: the status it lands on is
+        // `new`, but unassigning and the event kind are what make it a hand-over.
+        handover: chosen.id === "handover",
         followUpDate: String(data.get("followUpDate") ?? "") || null,
+        // §65.3. Still sent when handing over: the save records a named person in
+        // the note, and nowhere else.
         escalatedTo: String(data.get("escalatedTo") ?? "") || null,
       called: data.get("called") === "on",
       messaged: data.get("messaged") === "on",
@@ -633,7 +674,7 @@ Action details <span className="font-normal normal-case tracking-normal text-ink
               value={outcome}
               onChange={(e) => setOutcome(e.target.value as OutcomeId)}
             >
-              {OUTCOMES.map((o) => (
+              {allowedOutcomes.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.label}
                 </option>
@@ -651,16 +692,23 @@ Action details <span className="font-normal normal-case tracking-normal text-ink
             </p>
           ) : null}
 
-          {needsPerson ? (
+          {showsPerson ? (
             <label className="block">
               <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-                Escalated to <span className="text-danger">*</span>
+                Escalated to{" "}
+                {needsPerson ? (
+                  <span className="text-danger">*</span>
+                ) : (
+                  <span className="font-normal normal-case tracking-normal text-ink-3">
+                    — optional, noted only
+                  </span>
+                )}
               </span>
               <Select
                 name="escalatedTo"
                 aria-label="Escalated to"
                 defaultValue={ticket.escalated_to ?? ""}
-                required
+                required={needsPerson}
               >
                 <option value="">Choose a person</option>
                 {staff.map((p) => (

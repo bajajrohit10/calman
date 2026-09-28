@@ -5,10 +5,8 @@ import { loadMasters } from "@/lib/masters";
 import { ServerTiming, logServerTiming, timed } from "@/lib/server-timing";
 import { loadMyDay } from "@/lib/my-day";
 import { loadEscalatees } from "@/lib/escalatees";
-import { TICKET_OWNER_MINE } from "@/lib/ticket-tabs";
 import { loadOfferCallBadges } from "@/lib/offer-badges";
 import { loadTeamDay } from "@/lib/my-day-team";
-import { parseTicketTab } from "@/lib/ticket-tabs";
 import {
   ALL_COUNSELLORS,
   ALL_COUNSELLORS_LABEL,
@@ -175,12 +173,9 @@ export default async function Page({
         initialTab={parseMyDayTab(one(sp.tab))}
         initialView={one(sp.view) === "done" ? "done" : "pending"}
         initialSubTab={parseSubTab(one(sp.sub))}
-        initialTicketTab={parseTicketTab(one(sp.ticket))}
         // §45.2: "Pending with me" is the default — what a counsellor opens
         // this tab to find out.
-        initialTicketOwner={one(sp.owner) ?? TICKET_OWNER_MINE}
         nextWorkingDay={(nextWorkingDay.data as string | null) ?? null}
-        viewerId={viewer.userId ?? null}
         isAdmin={admin}
         counsellorName={viewer.profile?.full_name ?? null}
         counsellorId={counsellorId}

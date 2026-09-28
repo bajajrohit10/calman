@@ -6,9 +6,7 @@ import type {
   EnquiryStatus,
   EnquiryType,
   Importance,
-  IssueCategory,
 } from "@/lib/enquiry-labels";
-import { istDateOf, istToday } from "@/lib/format";
 import {
   matchesSubTab,
   MY_DAY_TABS,
@@ -76,42 +74,11 @@ export type MyDayRow = {
   carried_to: string | null;
 };
 
-/** A ticket, plus the one thing the Tickets screen does not need to know. */
-export type MyDayTicket = {
-  enquiry_id: number;
-  mobile: string;
-  student_name: string | null;
-  status: EnquiryStatus;
-  reminder_date: string | null;
-  created_at: string;
-  last_call_at: string | null;
-  last_outcome: CallOutcome | null;
-  last_discussion: string | null;
-  issue_category: IssueCategory | null;
-  last_caller_name: string | null;
-  last_caller_id: string | null;
-  created_by: string | null;
-  /** §33.4: the reminder has passed and nobody has closed it. */
-  is_overdue: boolean;
-  /** The day it was resolved, for the Resolved tab. */
-  resolved_on: string | null;
-  /** An after-sale call logged today. `calls` rows here are after-sale only. */
-  called_today: boolean;
-  /** §44.1/§44.4: what the ticket carries, drawn by the shared table. */
-  order_id: string | null;
-  teacher_name: string | null;
-  institute_name: string | null;
-  escalated_to: string | null;
-  escalated_to_name: string | null;
-  open_days: number | null;
-};
-
 /** One offer sub-tab: the offer, and what it is aimed at (§24.2). */
 export type OfferTab = { id: string; name: string; label: string | null };
 
 export type MyDayData = {
   rows: MyDayRow[];
-  tickets: MyDayTicket[];
   /** The offers behind today's offer rows, named for their sub-tabs. */
   offerTabs: OfferTab[];
   error: string | null;
@@ -123,9 +90,8 @@ export async function loadMyDay(input: {
   counsellorId: string;
 }): Promise<MyDayData> {
   const supabase = await createClient();
-  const today = istToday();
 
-  const [day, tickets, resolved] = await timed("list", () => Promise.all([
+  const [day] = await timed("list", () => Promise.all([
     // Paged even though a day is rarely more than a hundred rows: PostgREST
     // caps an RPC at max_rows without saying so, and a campaign day is exactly
     // the day somebody would notice the list stopping at 1,000.
@@ -138,43 +104,7 @@ export async function loadMyDay(input: {
         } as any)
         .range(from, to) as never,
     ),
-    // §62.2. The ticket lists are no longer fetched.
-    //
-    // My Day's Tickets tab is withdrawn — after-sale work is raised as a support
-    // ticket and worked in Support — so these two round trips per render were
-    // paying for a tab nobody can open. Empty results keep the shape the screen
-    // still expects while its unreachable ticket rendering waits to be deleted.
-    Promise.resolve({ data: [] as unknown[], error: null as string | null }),
-    Promise.resolve({ data: [] as unknown[], error: null as string | null }),
   ]));
-
-  type RawTicket = {
-    enquiry_id: number;
-    mobile: string;
-    student_name: string | null;
-    status: EnquiryStatus;
-    reminder_date: string | null;
-    created_at: string;
-    last_call_at: string | null;
-    last_outcome: CallOutcome | null;
-    last_discussion: string | null;
-    issue_category: IssueCategory | null;
-    last_caller_name: string | null;
-    last_caller_id: string | null;
-    created_by: string | null;
-    is_overdue: boolean;
-    resolved_on: string | null;
-    order_id: string | null;
-    teacher_name: string | null;
-    institute_name: string | null;
-    escalated_to: string | null;
-    escalated_to_name: string | null;
-    open_days: number | null;
-  };
-  const ticketRows = [
-    ...((tickets.data ?? []) as unknown as RawTicket[]),
-    ...((resolved.data ?? []) as unknown as RawTicket[]),
-  ];
 
   // The offers actually on this day, named. Asked only when there are offer
   // rows, so an ordinary day pays nothing for a feature it is not using.
@@ -196,15 +126,6 @@ export async function loadMyDay(input: {
   return {
     rows: day.rows,
     offerTabs,
-    // "Done" for a ticket means it was called today, so it is the viewed day
-    // that decides — and on any day but today, nothing counts as done, which
-    // is the honest answer: tickets_list only carries the *latest* call.
-    tickets: ticketRows.map((t) => ({
-      ...t,
-      called_today:
-        input.date === today && istDateOf(t.last_call_at) === today,
-    })),
-    // The two ticket reads are stubbed out (§62.2), so only the day can fail.
     error: day.error ?? null,
   };
 }
@@ -230,7 +151,7 @@ export async function loadMyDayIds(input: {
   /** §24: the export is of the sub-tab on screen, not of the whole tab. */
   subTab?: MyDaySubTab;
 }): Promise<{ ids: number[]; error: string | null }> {
-  const { rows, tickets, error } = await loadMyDay({
+  const { rows, error } = await loadMyDay({
     date: input.date,
     counsellorId: input.counsellorId,
   });
@@ -238,13 +159,6 @@ export async function loadMyDayIds(input: {
 
   const done = input.view === "done";
   const sub = input.subTab ?? { kind: "all" as const };
-
-  if (input.tab === "tickets") {
-    return {
-      ids: tickets.filter((t) => t.called_today === done).map((t) => t.enquiry_id),
-      error: null,
-    };
-  }
 
   const buckets = MY_DAY_TABS.find((t) => t.key === input.tab)?.buckets ?? [];
   return {

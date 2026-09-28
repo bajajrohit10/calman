@@ -105,6 +105,14 @@ export async function saveTicketAction(input: {
   outcome: Status;
   /** §61.2: 'team' | 'institute', required when the outcome is escalated. */
   escalationKind: string | null;
+  /**
+   * §65.3. Hand over to the support team.
+   *
+   * Not an outcome value — the status it lands on is `new` — but the save also
+   * unassigns, clears the date and writes a `handover` event, so the reports can
+   * count it apart from an escalation.
+   */
+  handover?: boolean;
   followUpDate: string | null;
   escalatedTo: string | null;
   called: boolean;
@@ -128,6 +136,7 @@ export async function saveTicketAction(input: {
     p_escalated_to: input.escalatedTo,
     p_called: input.called,
     p_messaged: input.messaged,
+    p_handover: input.handover ?? false,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
 
@@ -232,6 +241,32 @@ export async function resolveDuplicateThenSave(input: {
         error: `Merged into #${input.parentId}, but the action did not save: ${res.error}`,
       };
     }
+    /**
+     * §65.3. The child follows the parent's *post-save* status.
+     *
+     * merge_ticket copies the parent's status onto the child at merge time, and
+     * then the save moves the parent — so the child was left holding the status
+     * the parent had a moment ago. Nobody works a merged child, but its status
+     * is read: by the queue when somebody lists all tickets, and by the export.
+     * Re-stamped from the row as it now stands rather than from the payload,
+     * because the save itself decides what `new` or `resolved` means.
+     */
+    const { data: after } = await db
+      .from("tickets")
+      .select("status, escalation_kind, institute_id")
+      .eq("id", input.parentId)
+      .single();
+    if (after) {
+      await db
+        .from("tickets")
+        .update({
+          status: after.status,
+          escalation_kind: after.escalation_kind,
+          institute_id: after.institute_id,
+        })
+        .eq("id", input.childId);
+    }
+
     revalidatePath(`/support/${input.childId}`);
     revalidatePath(`/support/${input.parentId}`);
     revalidatePath("/support");

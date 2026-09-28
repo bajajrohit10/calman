@@ -90,6 +90,8 @@ export type RecentSave = {
   at: string;
   action: BulkRowResult["action"];
   detail: string;
+  /** §65.4. Set when the row raised a Support ticket rather than a lead. */
+  support?: boolean;
 };
 
 const ACTION_WORDS: Record<BulkRowResult["action"], string> = {
@@ -620,6 +622,7 @@ export function QuickAddGrid({
               at: stamp,
               action: r.action,
               detail: r.detail ?? r.reason ?? ACTION_WORDS[r.action],
+              support: r.supportTicketId != null,
             })),
             ...prev,
           ].slice(0, 10),
@@ -886,7 +889,8 @@ export function QuickAddGrid({
                         r.action === "failed" ? "text-danger" : "text-ink-2",
                       )}
                     >
-                      {ACTION_WORDS[r.action]}
+                      {/* §65.4. A row that raised a ticket is not a new lead. */}
+                      {r.support ? "Support ticket" : ACTION_WORDS[r.action]}
                       {r.detail && r.detail !== ACTION_WORDS[r.action] ? (
                         <span className="ml-1.5 text-ink-3">— {r.detail}</span>
                       ) : null}

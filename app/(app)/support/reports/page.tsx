@@ -133,6 +133,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
     escalated_team: number;
     escalated_institute: number;
     set_future: number;
+    /** §65.3. A counsellor gave the ticket back to the team. Not an escalation. */
+    handed_over: number;
     open_at_eod: number;
   }[];
   const escRows = (instEsc.data ?? []) as unknown as {
@@ -422,6 +424,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
                 <th className="px-1.5 py-[7px] text-right">Esc · team</th>
                 <th className="px-1.5 py-[7px] text-right">Esc · institute</th>
                 <th className="px-1.5 py-[7px] text-right">Future date</th>
+                {/* §65.3. Beside the escalations and counted apart from them. */}
+                <th className="px-1.5 py-[7px] text-right">Handed over</th>
                 <th className="px-1.5 py-[7px] text-right">Open at EOD</th>
               </tr>
             </thead>
@@ -431,7 +435,14 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
                   <td className="whitespace-nowrap px-1.5 py-[5px] text-ink-2">
                     {formatDate(r.day)}
                   </td>
-                  {[r.raised, r.resolved, r.escalated_team, r.escalated_institute, r.set_future].map(
+                  {[
+                    r.raised,
+                    r.resolved,
+                    r.escalated_team,
+                    r.escalated_institute,
+                    r.set_future,
+                    r.handed_over,
+                  ].map(
                     (n, i) => (
                       <td
                         key={i}
@@ -454,7 +465,14 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
                   <td className="px-1.5 py-[5px] text-[11px] font-semibold uppercase tracking-[0.045em] text-ink-3">
                     Total
                   </td>
-                  {(["raised", "resolved", "escalated_team", "escalated_institute", "set_future"] as const).map(
+                  {([
+                    "raised",
+                    "resolved",
+                    "escalated_team",
+                    "escalated_institute",
+                    "set_future",
+                    "handed_over",
+                  ] as const).map(
                     (k) => (
                       <td key={k} className="px-1.5 py-[5px] text-right font-semibold tabular-nums text-ink">
                         {dailyRows.reduce((sum, r) => sum + r[k], 0)}
@@ -466,7 +484,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
                 </tr>
               ) : (
                 <tr>
-                  <td colSpan={7} className="px-3 py-5 text-center text-ink-3">
+                  <td colSpan={8} className="px-3 py-5 text-center text-ink-3">
                     Nothing in this range.
                   </td>
                 </tr>

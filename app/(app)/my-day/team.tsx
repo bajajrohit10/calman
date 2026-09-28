@@ -102,11 +102,7 @@ export function TeamDayGrid({
               <th className="px-2.5 py-[7px]">Counsellor</th>
               {MY_DAY_TABS.map((t) => (
                 <th key={t.key} className="border-l border-line px-1.5 py-[7px] text-right">
-                  {/* Named for what it is here. Nothing assigns a ticket, so
-                      this column is the same queue on every row and sits
-                      outside Total; saying so in the heading is cheaper than
-                      a footnote nobody reads. */}
-                  {t.key === "tickets" ? "Tickets (shared)" : t.label}
+                  {t.label}
                 </th>
               ))}
               <th className="border-l border-line px-1.5 py-[7px] text-right">Total</th>

@@ -172,8 +172,12 @@ export function describeNumber(
     }
     return {
       case: 1,
-      label: "New ticket",
-      action: "New after-sale enquiry in Tickets",
+      // §65.4. What actually happens, since §63.3: a Support ticket and no
+      // counselling enquiry at all. The old wording sent counsellors to
+      // /tickets looking for an after-sale row that is never created, and said
+      // nothing about the ticket being theirs until they hand it over (§65.0).
+      label: "Support ticket",
+      action: "Opens in Support, stays with you until handed over",
       rule: "new_enquiry",
       tone: "ok",
       needsDecision: false,

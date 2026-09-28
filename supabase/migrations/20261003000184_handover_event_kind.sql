@@ -1,0 +1,11 @@
+-- §65.3. A hand-over is its own kind of event.
+--
+-- Alone in its own migration because ALTER TYPE ... ADD VALUE cannot be *used*
+-- in the transaction that adds it, and the function and report that follow both
+-- use it.
+--
+-- Why a kind and not just a status move to `new`: a hand-over and an escalation
+-- are different acts that the reports must not conflate. "The counsellor gave
+-- this to the team" is not "the team escalated it", and with only the status to
+-- go on the per-day table could not tell them apart.
+alter type support.event_kind add value if not exists 'handover';
