@@ -199,7 +199,34 @@ export async function resolveDuplicateThenSave(input: {
 
     // The outcome applies to whichever ticket survived, not to the one the user
     // happened to be looking at — a merged child refuses an action anyway.
-    const res = await saveTicketAction({ ...input.save, ticketId: input.parentId });
+    //
+    // §64.3. But only the *action* moves across. The issue, institute, teacher
+    // and order id in the form were typed against the child and describe the
+    // child, which keeps them; re-aiming them at the parent overwrote the
+    // parent's own classification with whatever the child happened to have —
+    // and since a child raised by the form usually has none, merging routinely
+    // wiped the surviving ticket's institute. Found while re-testing the merge
+    // click: the merge itself now works, and this was the fault behind it.
+    const { data: survivor, error: readError } = await db
+      .from("tickets")
+      .select("issues_work, issue_other_work, institute_id, teacher_id, order_id_work")
+      .eq("id", input.parentId)
+      .single();
+    if (readError) {
+      return {
+        error: `Merged into #${input.parentId}, but could not read it to save the action: ${readError.message}`,
+      };
+    }
+
+    const res = await saveTicketAction({
+      ...input.save,
+      ticketId: input.parentId,
+      issues: survivor.issues_work ?? [],
+      issueOther: survivor.issue_other_work,
+      instituteId: survivor.institute_id,
+      teacherId: survivor.teacher_id,
+      orderIdWork: survivor.order_id_work,
+    });
     if (res.error) {
       return {
         error: `Merged into #${input.parentId}, but the action did not save: ${res.error}`,

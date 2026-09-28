@@ -14,6 +14,9 @@ export const PAGE_SIZE = 50;
 export const SUPPORT_TABS = [
   { id: "new", label: "New" },
   { id: "working", label: "Working on it" },
+  // §64.2. Counselling's own work in progress, between Working and Escalated.
+  // Working excludes these, so the six tabs still sum to All.
+  { id: "counsellor", label: "Counsellor" },
   { id: "escalated", label: "Escalated" },
   { id: "future", label: "Future date" },
   { id: "resolved", label: "Resolved" },
@@ -53,6 +56,7 @@ export const SOURCE_LABELS: Record<string, string> = Object.fromEntries(
 export const STATUS_LABELS: Record<string, string> = {
   new: "New",
   working: "Working on it",
+  counsellor: "Counsellor (working)",
   escalated: "Escalated",
   future: "Future date",
   resolved: "Resolved",

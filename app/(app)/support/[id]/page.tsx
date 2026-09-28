@@ -48,6 +48,13 @@ export default async function Page({
 
   const masters = await loadMasters();
 
+  // §64.1. The date the panel opens on. Asked of the database rather than
+  // computed here, so Mon–Sat, the holidays table and is_working_override all
+  // apply — the same answer the counselling call form gets.
+  const { data: nextWorking } = await supabase.rpc("next_working_day", {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any);
+
   // §63.1. The live duplicate suggestion, in either direction. Loaded here so the
   // dialog can quote the other ticket's issues without a round trip on click.
   const { data: candidate } = await db
@@ -121,6 +128,16 @@ export default async function Page({
         people={Object.fromEntries(people)}
         staff={(staff ?? []).map((p) => ({ id: p.id, name: p.full_name ?? "(no name)" }))}
         masters={{ institutes: masters.institutes, teachers: masters.teachers }}
+        // §64.1. Where Save goes back to: the queue exactly as it was left.
+        backTo={one(sp.from) || null}
+        nextWorkingDay={(nextWorking as unknown as string | null) ?? null}
+        // §64.1. Which house each teacher sells through, so the panel can fill
+        // the institute without a round trip per change.
+        teacherInstitutes={Object.fromEntries(
+          masters.teachers
+            .filter((t) => t.institute_id)
+            .map((t) => [t.id, t.institute_id as string]),
+        )}
         duplicate={
           candidate
             ? (candidate as unknown as {

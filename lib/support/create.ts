@@ -86,7 +86,21 @@ async function matchFaculty(
   // alias rows are looked up by candidate rather than iterated as returned.
   for (const key of candidates) {
     const hit = (aliases ?? []).find((a) => a.raw_norm === key);
-    if (hit) return { instituteId: hit.institute_id, teacherId: hit.teacher_id };
+    if (hit) {
+      // §64.1. An alias that names only a teacher still implies their institute.
+      if (hit.teacher_id && !hit.institute_id) {
+        const { data: withInstitute } = await base
+          .from("teachers")
+          .select("institute_id")
+          .eq("id", hit.teacher_id)
+          .maybeSingle();
+        return {
+          instituteId: withInstitute?.institute_id ?? null,
+          teacherId: hit.teacher_id,
+        };
+      }
+      return { instituteId: hit.institute_id, teacherId: hit.teacher_id };
+    }
   }
 
   // No alias. Try the masters by name, case-insensitively, teacher first: a
@@ -94,11 +108,16 @@ async function matchFaculty(
   for (const key of candidates) {
     const { data: teacher } = await base
       .from("teachers")
-      .select("id")
+      // §64.1. institute_id comes back with the match: a teacher implies the
+      // house that sells them, so the ticket carries both rather than leaving
+      // the institute for somebody to look up.
+      .select("id, institute_id")
       .ilike("name", key)
       .limit(1)
       .maybeSingle();
-    if (teacher) return { instituteId: null, teacherId: teacher.id };
+    if (teacher) {
+      return { instituteId: teacher.institute_id ?? null, teacherId: teacher.id };
+    }
 
     const { data: institute } = await base
       .from("institutes")

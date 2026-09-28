@@ -265,13 +265,14 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
       {/* 1. Open by status */}
       <Section title="Open tickets by status" hint="Everything not resolved, in scope.">
         <div className="flex flex-wrap gap-2" data-testid="by-status">
-          {["new", "working", "escalated_team", "escalated_institute", "future"].map((b) => {
+          {["new", "working", "counsellor", "escalated_team", "escalated_institute", "future"].map((b) => {
             const n = statusRows.find((r) => r.bucket === b)?.n ?? 0;
             const href =
               b === "escalated_team"
                 ? queueLink({ tab: "escalated", kind: "team" })
                 : b === "escalated_institute"
                   ? queueLink({ tab: "escalated", kind: "institute" })
+                  // §64.2. Its own tab, so the card opens exactly that list.
                   : queueLink({ tab: b });
             return (
               <Link

@@ -345,7 +345,7 @@ export function SupportBoard({
                   key={r.id}
                   className="group border-b border-line last:border-b-0 hover:bg-surface-2"
                 >
-                  <Cell id={r.id} first className="tabular-nums">
+                  <Cell id={r.id} first from={search} className="tabular-nums">
                     <span className="text-accent group-hover:underline">{r.id}</span>
                     {r.child_count > 0 ? (
                       <span className="ml-1.5" title={`${r.child_count} merged duplicate(s)`}>
@@ -365,10 +365,10 @@ export function SupportBoard({
                       </span>
                     ) : null}
                   </Cell>
-                  <Cell id={r.id} className="whitespace-nowrap text-ink-3">
+                  <Cell id={r.id} from={search} className="whitespace-nowrap text-ink-3">
                     {formatDate(r.raised_at)}
                   </Cell>
-                  <Cell id={r.id} className="tabular-nums">
+                  <Cell id={r.id} from={search} className="tabular-nums">
                     {/* §58.4. Red past three calendar days, and only while it is
                         still somebody's problem — a resolved ticket's age is
                         history, not a warning. */}
@@ -378,7 +378,7 @@ export function SupportBoard({
                       <span className="text-ink-3">{r.age_days}d</span>
                     )}
                   </Cell>
-                  <Cell id={r.id}>
+                  <Cell id={r.id} from={search}>
                     <span className="text-ink">{r.student_name || "No name"}</span>
                     {r.mobile ? (
                       <span className="ml-1.5 tabular-nums text-ink-3">
@@ -390,7 +390,7 @@ export function SupportBoard({
                       </span>
                     )}
                   </Cell>
-                  <Cell id={r.id} className="tabular-nums text-ink-2">
+                  <Cell id={r.id} from={search} className="tabular-nums text-ink-2">
                     {order ? (
                       <span title={rawDiffers ? `As submitted: ${r.order_id_raw}` : undefined}>
                         {order}
@@ -400,12 +400,12 @@ export function SupportBoard({
                       "—"
                     )}
                   </Cell>
-                  <Cell id={r.id} className="text-ink-2">
+                  <Cell id={r.id} from={search} className="text-ink-2">
                     {r.institute_name ?? r.teacher_name ?? (
                       <span className="text-warn">not matched</span>
                     )}
                   </Cell>
-                  <Cell id={r.id} className="max-w-[240px] text-ink-3">
+                  <Cell id={r.id} from={search} className="max-w-[240px] text-ink-3">
                     <span className="block truncate" title={r.issues_work.join(", ")}>
                       {r.issues_work.length ? r.issues_work.join(", ") : "—"}
                     </span>
@@ -415,10 +415,10 @@ export function SupportBoard({
                       </span>
                     ) : null}
                   </Cell>
-                  <Cell id={r.id} className="whitespace-nowrap text-ink-2">
+                  <Cell id={r.id} from={search} className="whitespace-nowrap text-ink-2">
                     {SOURCE_LABELS[r.source] ?? r.source}
                   </Cell>
-                  <Cell id={r.id}>
+                  <Cell id={r.id} from={search}>
                     <Badge dot tone={statusTone(r.status)}>
                       {STATUS_LABELS[r.status] ?? r.status}
                     </Badge>
@@ -429,7 +429,7 @@ export function SupportBoard({
                       </span>
                     ) : null}
                   </Cell>
-                  <Cell id={r.id} className="whitespace-nowrap tabular-nums">
+                  <Cell id={r.id} from={search} className="whitespace-nowrap tabular-nums">
                     {r.follow_up_date ? (
                       <span className={r.overdue ? "text-danger" : "text-ink-2"}>
                         {formatDate(r.follow_up_date)}
@@ -438,10 +438,10 @@ export function SupportBoard({
                       <span className="text-ink-3">—</span>
                     )}
                   </Cell>
-                  <Cell id={r.id} className="text-ink-2">
+                  <Cell id={r.id} from={search} className="text-ink-2">
                     {r.assigned_to_name ?? <span className="text-ink-3">nobody</span>}
                   </Cell>
-                  <Cell id={r.id} className="whitespace-nowrap text-[11px] text-ink-3">
+                  <Cell id={r.id} from={search} className="whitespace-nowrap text-[11px] text-ink-3">
                     {formatDateTime(r.last_touched_at)}
                   </Cell>
                 </tr>
@@ -650,16 +650,19 @@ function Cell({
   first,
   className,
   children,
+  from,
 }: {
   id: number;
   first?: boolean;
   className?: string;
   children: React.ReactNode;
+  /** §64.1: the queue's own query string, so Save can come back to it. */
+  from?: string;
 }) {
   return (
     <td className={cx("relative px-1.5 py-[5px]", className)}>
       <Link
-        href={`/support/${id}`}
+        href={from ? `/support/${id}?from=${encodeURIComponent(from)}` : `/support/${id}`}
         prefetch={false}
         tabIndex={first ? undefined : -1}
         aria-hidden={first ? undefined : true}

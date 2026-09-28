@@ -136,6 +136,9 @@ export function TicketView({
   staff,
   masters,
   duplicate,
+  backTo,
+  nextWorkingDay,
+  teacherInstitutes,
 }: {
   ticket: TicketDetail;
   events: TicketEvent[];
@@ -153,6 +156,12 @@ export function TicketView({
   masters: { institutes: Master[]; teachers: Master[] };
   /** §63.1: a live duplicate suggestion, in either direction. */
   duplicate: DuplicateCandidate | null;
+  /** §64.1: the queue's query string, so Save returns to where it was opened. */
+  backTo: string | null;
+  /** §64.1: Mon–Sat, holidays and overrides applied by the database. */
+  nextWorkingDay: string | null;
+  /** §64.1: teacher id → institute id, from the masters. */
+  teacherInstitutes: Record<string, string>;
 }) {
   // §62.3. The same label the queue column prints, from the same table.
   const sourceLabel = SOURCE_LABELS[ticket.source] ?? ticket.source;
@@ -258,6 +267,9 @@ export function TicketView({
           staff={staff}
           masters={masters}
           duplicate={duplicate}
+          backTo={backTo}
+          nextWorkingDay={nextWorkingDay}
+          teacherInstitutes={teacherInstitutes}
         />
       )}
 
@@ -340,11 +352,17 @@ function ActionPanel({
   staff,
   masters,
   duplicate,
+  backTo,
+  nextWorkingDay,
+  teacherInstitutes,
 }: {
   ticket: TicketDetail;
   staff: Master[];
   masters: { institutes: Master[]; teachers: Master[] };
   duplicate: DuplicateCandidate | null;
+  backTo: string | null;
+  nextWorkingDay: string | null;
+  teacherInstitutes: Record<string, string>;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -363,6 +381,34 @@ function ActionPanel({
   // an error arriving after the save is a worse way to learn it.
   const needsInstitute = chosen.kind === "institute";
   const [instituteId, setInstituteId] = useState<string>(ticket.institute_id ?? "");
+  const [teacherId, setTeacherId] = useState<string>(ticket.teacher_id ?? "");
+  /**
+   * §64.1. Picking a teacher fills the institute from the masters.
+   *
+   * The grouping is already recorded there — a teacher belongs to the house that
+   * sells them — so a ticket naming a teacher and no institute was carrying an
+   * answer it could have worked out. Institute stays editable, and changing the
+   * teacher again re-fills it: the teacher is the more specific statement, so it
+   * wins when it moves.
+   */
+  function pickTeacher(next: string) {
+    setTeacherId(next);
+    const derived = next ? teacherInstitutes[next] : null;
+    if (derived) setInstituteId(derived);
+  }
+  /** §64.1. Ticked neither Called nor WhatsApp — asked once, never blocked. */
+  const [confirmNoTouch, setConfirmNoTouch] = useState<SavePayload | null>(null);
+  /**
+   * §64.1. Opens on the next working day rather than blank.
+   *
+   * A date the team has to type every time is a date that gets skipped, and the
+   * answer is nearly always "tomorrow, unless tomorrow is a Sunday or a
+   * holiday" — which the database already knows. A date already on the ticket
+   * wins: that was somebody's decision.
+   */
+  const [followUpDate, setFollowUpDate] = useState<string>(
+    ticket.follow_up_date ?? nextWorkingDay ?? "",
+  );
   const instituteMissing = needsInstitute && !instituteId;
   /**
    * §63.1. The save the user asked for, held while the duplicate question is
@@ -391,6 +437,31 @@ function ActionPanel({
     };
   }
 
+  /**
+   * §64.1. Where a finished save goes.
+   *
+   * Back to the queue as it was opened — same tab, filters and page — because a
+   * ticket is worked from a list and being dropped on a refreshed New tab means
+   * finding your place again every time. The query string was carried in on the
+   * link; with none (someone opened the ticket directly) the plain queue is the
+   * honest fallback.
+   */
+  function leave() {
+    router.push(backTo ? `/support?${backTo}` : "/support");
+  }
+
+  function doSave(payload: SavePayload) {
+    lock.current = true;
+    setResult(null);
+    start(async () => {
+      const res = await saveTicketAction(payload);
+      setResult(res);
+      lock.current = false;
+      setConfirmNoTouch(null);
+      if (!res.error) leave();
+    });
+  }
+
   function submit(form: HTMLFormElement) {
     if (lock.current) return;
     const data = new FormData(form);
@@ -404,14 +475,16 @@ function ActionPanel({
       return;
     }
 
-    lock.current = true;
-    setResult(null);
-    start(async () => {
-      const res = await saveTicketAction(payload);
-      setResult(res);
-      lock.current = false;
-      if (!res.error) router.refresh();
-    });
+    // §64.1. Neither box ticked is usually a slip — the work almost always
+    // involved ringing or messaging somebody — so it is worth one question. A
+    // nudge, not a rule: plenty of saves are genuinely neither.
+    if (!payload.called && !payload.messaged) {
+      setResult(null);
+      setConfirmNoTouch(payload);
+      return;
+    }
+
+    doSave(payload);
   }
 
   /** Merge into #N, or keep separate — then the save either way. */
@@ -429,11 +502,11 @@ function ActionPanel({
       });
       setResult(res);
       lock.current = false;
-      setAskingAbout(null);
       if (!res.error) {
-        // A merge moves the work to the parent, so that is where to land.
-        if (res.savedOn && res.savedOn !== ticket.id) router.push(`/support/${res.savedOn}`);
-        else router.refresh();
+        setAskingAbout(null);
+        // §64.1. Back to the queue either way; the merge is recorded and the
+        // parent is where the work now lives, which the queue will show.
+        leave();
       }
     });
   }
@@ -518,7 +591,12 @@ function ActionPanel({
             <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
               Teacher
             </span>
-            <Select name="teacherId" defaultValue={ticket.teacher_id ?? ""} aria-label="Teacher">
+            <Select
+              name="teacherId"
+              value={teacherId}
+              onChange={(e) => pickTeacher(e.target.value)}
+              aria-label="Teacher"
+            >
               <option value="">—</option>
               {masters.teachers.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -533,12 +611,11 @@ function ActionPanel({
       <div className="grid gap-3 border-t border-line px-4 py-3 md:grid-cols-2">
         <label className="block">
           <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-            Action details <span className="text-danger">*</span>
+Action details <span className="font-normal normal-case tracking-normal text-ink-3">(optional)</span>
           </span>
           <textarea
             name="details"
             aria-label="Action details"
-            required
             rows={4}
             placeholder="What was done, and what happens next."
             className="w-full rounded-md border border-line-2 bg-surface px-2 py-1.5 text-[12.5px] text-ink outline-none focus:border-accent"
@@ -610,7 +687,8 @@ function ActionPanel({
               type="date"
               name="followUpDate"
               aria-label="Follow-up date"
-              defaultValue={ticket.follow_up_date ?? ""}
+              value={followUpDate}
+              onChange={(e) => setFollowUpDate(e.target.value)}
               required={needsDate}
               disabled={!needsDate}
             />
@@ -683,6 +761,41 @@ function ActionPanel({
             >
               Cancel
             </button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* §64.1. The nudge. Save anyway is the primary button, because the
+          answer is usually yes — this exists to catch the slip, not to argue. */}
+      {confirmNoTouch ? (
+        <div
+          data-testid="no-touch-confirm"
+          role="alertdialog"
+          aria-label="Nothing ticked"
+          className="mx-4 mb-2 rounded-md border border-warn/60 bg-warn-soft/40 px-3 py-2.5"
+        >
+          <p className="text-[12.5px] text-ink">
+            You haven&apos;t marked Called or WhatsApp — save anyway?
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="primary"
+              disabled={pending}
+              onClick={() => doSave(confirmNoTouch)}
+            >
+              Save anyway
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={pending}
+              onClick={() => setConfirmNoTouch(null)}
+            >
+              Go back
+            </Button>
           </div>
         </div>
       ) : null}
@@ -942,7 +1055,150 @@ function MergePanel({ ticketId }: { ticketId: number }) {
   );
 }
 
-/** Newest first, with who did it and when. Children's events are folded in. */
+/**
+ * §64.4. The history, in two blocks.
+ *
+ * One flat list of every event was unreadable the moment a ticket had a few
+ * saves on it: one save writes up to six rows — a field change per field, the
+ * status move, the note, a called and a messaged tick — so five saves produced
+ * thirty lines and the reader had to reassemble each save in their head.
+ *
+ * So the writes from one save are grouped into one entry. The grouping key is
+ * the actor and the instant: every event in a save is inserted in one
+ * transaction, and now() is the transaction time, so they share `at` exactly.
+ *
+ * Discussion carries what somebody said or decided. Other activity carries the
+ * rest — a tick with no note, an assignment, the intake row — collapsed, because
+ * it is the record you check rather than the record you read.
+ */
+type Grouped = {
+  key: string;
+  at: string;
+  actorId: string | null;
+  fromTicket: number | null;
+  events: TicketEvent[];
+};
+
+/** The message channels, as a person reads them. */
+const CHANNEL_LABELS: Record<string, string> = {
+  whatsapp: "WhatsApp",
+  mail: "Mail",
+  other: "Message",
+};
+
+const DISCUSSION_KINDS = new Set([
+  "note",
+  "status_change",
+  "resolved",
+  "reopened",
+  "merged_into",
+  "child_merged",
+  "counselling_link",
+]);
+
+/** A group belongs in Discussion if anything in it was said or decided. */
+function isDiscussion(g: Grouped): boolean {
+  return g.events.some(
+    (e) =>
+      DISCUSSION_KINDS.has(e.kind) ||
+      // A field change with text in it — a description or an issue — is a
+      // decision; one that only moved an id is bookkeeping.
+      (e.kind === "field_change" &&
+        ["issues_work", "issue_other_work", "description"].includes(
+          String(e.detail?.field ?? ""),
+        )) ||
+      // A tick that carried a note is somebody telling you what was said.
+      (["called", "messaged"].includes(e.kind) && Boolean(e.detail?.note)),
+  );
+}
+
+function groupEvents(events: TicketEvent[], ticketId: number): Grouped[] {
+  const out = new Map<string, Grouped>();
+  for (const e of events) {
+    // A merge writes the same fact twice — `child_merged` on the parent and
+    // `merged_into` on the child — and the parent's page reads both, so the
+    // merge appeared as two entries saying the same thing. On the parent, keep
+    // its own; the child's page still shows the child's, which is all it has.
+    if (e.kind === "merged_into" && e.ticket_id !== ticketId) continue;
+    const key = `${e.ticket_id}|${e.actor_id ?? "system"}|${e.at}`;
+    const g = out.get(key);
+    if (g) g.events.push(e);
+    else
+      out.set(key, {
+        key,
+        at: e.at,
+        actorId: e.actor_id,
+        fromTicket: e.ticket_id === ticketId ? null : e.ticket_id,
+        events: [e],
+      });
+  }
+  // The query already ordered newest first; Map preserves insertion order.
+  return [...out.values()];
+}
+
+/** One save, as a sentence: what moved, what was ticked, and what was said. */
+function summarise(g: Grouped, people: Record<string, string>): {
+  headline: string | null;
+  note: string | null;
+  ticks: string | null;
+  rest: string[];
+} {
+  const status = g.events.find((e) =>
+    ["status_change", "resolved", "reopened"].includes(e.kind),
+  );
+  const note = g.events.find((e) => e.kind === "note");
+  const called = g.events.find((e) => e.kind === "called");
+  const messaged = g.events.find((e) => e.kind === "messaged");
+
+  const headline = status
+    ? status.kind === "resolved"
+      ? "Resolved"
+      : status.kind === "reopened"
+        ? `Reopened as ${String(status.detail?.new ?? "")}`
+        : (() => {
+            const d = status.detail ?? {};
+            const to =
+              d.escalation_kind === "institute"
+                ? " → the institute"
+                : d.escalated_to
+                  ? ` → ${people[String(d.escalated_to)] ?? "someone"}`
+                  : "";
+            const on = d.follow_up_date ? `, follow up ${String(d.follow_up_date)}` : "";
+            return `${String(d.old ?? "")} → ${String(d.new ?? "")}${to}${on}`;
+          })()
+    : null;
+
+  const ticks = [
+    called ? (called.detail?.picked ? "Called" : "Not picked") : null,
+    // The stored channel is a lowercase key; this is the line a person reads.
+    messaged ? (CHANNEL_LABELS[String(messaged.detail?.channel ?? "")] ?? "Messaged") : null,
+  ]
+    .filter(Boolean)
+    .join(", ") || null;
+
+  // Only the changes a reader would call a decision. A teacher or institute
+  // moving is real but it is bookkeeping, and printing it here meant printing
+  // raw uuids into the middle of a conversation — those belong to Other activity.
+  const rest = g.events
+    .filter((e) => e !== status && e !== note && e !== called && e !== messaged)
+    .filter(
+      (e) =>
+        e.kind !== "field_change" ||
+        ["issues_work", "issue_other_work", "description"].includes(
+          String(e.detail?.field ?? ""),
+        ),
+    )
+    .map((e) => describe(e, people))
+    .filter(Boolean);
+
+  return {
+    headline,
+    note: note ? String(note.detail?.text ?? "") : null,
+    ticks,
+    rest,
+  };
+}
+
 function Timeline({
   events,
   people,
@@ -952,35 +1208,88 @@ function Timeline({
   people: Record<string, string>;
   ticketId: number;
 }) {
+  const groups = groupEvents(events, ticketId);
+  const discussion = groups.filter(isDiscussion);
+  const other = groups.filter((g) => !isDiscussion(g));
+
   return (
-    <section className="rounded-lg border border-line bg-surface shadow-card">
-      <div className="border-b border-line px-4 py-2 text-[13px] font-semibold text-ink">
-        History
-      </div>
-      <ol data-testid="timeline" className="flex flex-col">
-        {events.map((e) => (
-          <li
-            key={`${e.ticket_id}-${e.id}`}
-            className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 border-b border-line px-4 py-2 text-[12.5px] last:border-b-0"
-          >
-            <span className="text-[11px] tabular-nums text-ink-3">
-              {formatDateTime(e.at)}
-            </span>
-            <Badge tone="neutral">{e.kind.replace(/_/g, " ")}</Badge>
-            <span className="text-ink-2">{describe(e, people)}</span>
-            <span className="ml-auto text-[11px] text-ink-3">
-              {e.actor_id ? (people[e.actor_id] ?? "someone") : "system"}
-              {e.ticket_id !== ticketId ? ` · from #${e.ticket_id}` : ""}
-            </span>
-          </li>
-        ))}
-        {events.length === 0 ? (
-          <li className="px-4 py-6 text-center text-[12.5px] text-ink-3">
-            Nothing recorded yet.
-          </li>
-        ) : null}
-      </ol>
-    </section>
+    <>
+      <section className="rounded-lg border border-line bg-surface shadow-card">
+        <div className="border-b border-line px-4 py-2 text-[13px] font-semibold text-ink">
+          Discussion
+        </div>
+        <ol data-testid="discussion" className="flex flex-col">
+          {discussion.map((g) => {
+            const s = summarise(g, people);
+            return (
+              <li
+                key={g.key}
+                className="border-b border-line px-4 py-2 text-[12.5px] last:border-b-0"
+              >
+                <div className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="text-[11px] tabular-nums text-ink-3">
+                    {formatDateTime(g.at)}
+                  </span>
+                  <span className="text-[11.5px] font-medium text-ink-2">
+                    {g.actorId ? (people[g.actorId] ?? "someone") : "system"}
+                  </span>
+                  {s.headline ? <Badge tone="neutral">{s.headline}</Badge> : null}
+                  {s.ticks ? (
+                    <span className="text-[11.5px] text-ink-3">{s.ticks}</span>
+                  ) : null}
+                  {g.fromTicket ? (
+                    <span className="ml-auto text-[11px] text-ink-3">
+                      from #{g.fromTicket}
+                    </span>
+                  ) : null}
+                </div>
+                {s.note ? (
+                  <p className="mt-0.5 whitespace-pre-wrap text-ink">{s.note}</p>
+                ) : null}
+                {s.rest.map((line, i) => (
+                  <p key={i} className="mt-0.5 text-[11.5px] text-ink-2">
+                    {line}
+                  </p>
+                ))}
+              </li>
+            );
+          })}
+          {discussion.length === 0 ? (
+            <li className="px-4 py-6 text-center text-[12.5px] text-ink-3">
+              Nothing said yet.
+            </li>
+          ) : null}
+        </ol>
+      </section>
+
+      {other.length ? (
+        <details className="rounded-lg border border-line bg-surface shadow-card">
+          <summary className="cursor-pointer px-4 py-2 text-[13px] font-semibold text-ink">
+            Other activity{" "}
+            <span className="font-normal text-ink-3">({other.length})</span>
+          </summary>
+          <ol data-testid="other-activity" className="flex flex-col border-t border-line">
+            {other.map((g) => (
+              <li
+                key={g.key}
+                className="flex flex-wrap items-baseline gap-x-2 border-b border-line px-4 py-1.5 text-[12px] last:border-b-0"
+              >
+                <span className="text-[11px] tabular-nums text-ink-3">
+                  {formatDateTime(g.at)}
+                </span>
+                <span className="text-ink-2">
+                  {g.events.map((e) => describe(e, people)).filter(Boolean).join(" · ")}
+                </span>
+                <span className="ml-auto text-[11px] text-ink-3">
+                  {g.actorId ? (people[g.actorId] ?? "someone") : "system"}
+                  {g.fromTicket ? ` · from #${g.fromTicket}` : ""}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </details>
+      ) : null}
+    </>
   );
 }
 
