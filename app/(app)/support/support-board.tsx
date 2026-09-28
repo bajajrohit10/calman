@@ -17,6 +17,7 @@ import {
   ESCALATION_KINDS,
   ISSUE_FILTER_OPTIONS,
   STATUS_LABELS,
+  SOURCE_LABELS,
   SUPPORT_SOURCES,
   SUPPORT_TABS,
   UNASSIGNED,
@@ -313,7 +314,7 @@ export function SupportBoard({
       ) : null}
 
       <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
-        <table className="w-full min-w-[1180px] border-collapse text-[12.5px]">
+        <table className="w-full min-w-[1260px] border-collapse text-[12.5px]">
           <thead>
             <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
               <th className="px-1.5 py-[7px]">#</th>
@@ -323,6 +324,10 @@ export function SupportBoard({
               <th className="px-1.5 py-[7px]">Order id</th>
               <th className="px-1.5 py-[7px]">Institute / teacher</th>
               <th className="px-1.5 py-[7px]">Issues</th>
+              {/* §62.3. Where the ticket came from, on every tab. It matters
+                  more now that counselling raises them: "the form" and "a
+                  counsellor rang about it" are different situations. */}
+              <th className="px-1.5 py-[7px]">Source</th>
               <th className="px-1.5 py-[7px]">Status</th>
               <th className="px-1.5 py-[7px]">Follow-up</th>
               <th className="px-1.5 py-[7px]">Assigned</th>
@@ -410,6 +415,9 @@ export function SupportBoard({
                       </span>
                     ) : null}
                   </td>
+                  <td className="whitespace-nowrap px-1.5 py-[5px] text-ink-2">
+                    {SOURCE_LABELS[r.source] ?? r.source}
+                  </td>
                   <td className="px-1.5 py-[5px]">
                     <Badge dot tone={statusTone(r.status)}>
                       {STATUS_LABELS[r.status] ?? r.status}
@@ -441,7 +449,7 @@ export function SupportBoard({
             })}
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={11} className={cx("px-3 py-8 text-center text-ink-3")}>
+                <td colSpan={12} className={cx("px-3 py-8 text-center text-ink-3")}>
                   No tickets with these filters.
                 </td>
               </tr>

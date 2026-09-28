@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
-import { showsSupport } from "@/lib/roles";
+import { showsSupportReports } from "@/lib/roles";
 import { createClient } from "@/lib/supabase/server";
 
 import { parseSupportParams } from "../filters";
@@ -106,7 +106,9 @@ function istDateTime(value: unknown): string {
 
 export async function GET(request: Request) {
   const viewer = await requireUser();
-  if (!viewer.profile || !showsSupport(viewer.profile.role)) notFound();
+  // §62.1. Narrower than the queue: the whole team works tickets, only
+  // managers and super admins read the numbers about the team.
+  if (!viewer.profile || !showsSupportReports(viewer.profile.role)) notFound();
 
   const url = new URL(request.url);
   const { tab, filters } = parseSupportParams((k) => url.searchParams.get(k));

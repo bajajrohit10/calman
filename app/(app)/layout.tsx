@@ -12,7 +12,7 @@ import { createClient } from "@/lib/supabase/server";
 
 import { Sidebar } from "./sidebar";
 import { showsCounselling } from "@/lib/accounts/landing";
-import { showsSupport } from "@/lib/roles";
+import { showsSupport, showsSupportReports } from "@/lib/roles";
 
 /**
  * The number on the New Calls badge (§5.12).
@@ -169,6 +169,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
             // included. Was `profile.role === "super_admin" || profile.role
             // === "accounts"`; restoring it is this one expression.
             showSupport={showsSupport(profile.role)}
+            showSupportReports={showsSupportReports(profile.role)}
             fullName={profile.full_name}
             roleLabel={ROLE_LABELS[profile.role]}
             theme={profile.theme === "light" ? "light" : "dark"}

@@ -6,7 +6,7 @@ import { requireUser } from "@/lib/auth";
 import { formatDate } from "@/lib/format";
 import { loadMasters } from "@/lib/masters";
 import { formatMobile } from "@/lib/mobile";
-import { showsSupport } from "@/lib/roles";
+import { showsSupportReports } from "@/lib/roles";
 import { logServerTiming } from "@/lib/server-timing";
 import { createClient } from "@/lib/supabase/server";
 
@@ -30,7 +30,9 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) 
  */
 export default async function Page({ searchParams }: { searchParams: Promise<Params> }) {
   const viewer = await requireUser();
-  if (!viewer.profile || !showsSupport(viewer.profile.role)) notFound();
+  // §62.1. Narrower than the queue: the whole team works tickets, only
+  // managers and super admins read the numbers about the team.
+  if (!viewer.profile || !showsSupportReports(viewer.profile.role)) notFound();
 
   const sp = await searchParams;
 

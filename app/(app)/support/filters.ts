@@ -22,6 +22,13 @@ export const SUPPORT_TABS = [
 
 export type SupportTab = (typeof SUPPORT_TABS)[number]["id"];
 
+/**
+ * Every source a ticket can have, in the order they are offered.
+ *
+ * 'form' and 'counselling' are never offered on the New-ticket form — the
+ * webhook owns one and §62.2 owns the other — but both appear here because the
+ * filter and the queue column have to be able to name them.
+ */
 export const SUPPORT_SOURCES = [
   { id: "form", name: "Form" },
   { id: "mail", name: "Mail" },
@@ -30,6 +37,17 @@ export const SUPPORT_SOURCES = [
   { id: "counselling", name: "Counselling" },
   { id: "manual", name: "Manual" },
 ] as const;
+
+/**
+ * §62.3. The label for each source, keyed by the stored value.
+ *
+ * Built from SUPPORT_SOURCES rather than written out again: the queue column,
+ * the filter and the ticket header all read these names, and a second copy is
+ * how "Calling team" becomes "Calling Team" on one screen only.
+ */
+export const SOURCE_LABELS: Record<string, string> = Object.fromEntries(
+  SUPPORT_SOURCES.map((s) => [s.id, s.name]),
+);
 
 /** The status labels, shared by the tabs, the badges and the outcome control. */
 export const STATUS_LABELS: Record<string, string> = {

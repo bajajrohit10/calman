@@ -15,7 +15,7 @@ import {
   mergeTicket,
   saveTicketAction,
 } from "../actions";
-import { STATUS_LABELS, SUPPORT_SOURCES } from "../filters";
+import { SOURCE_LABELS, STATUS_LABELS } from "../filters";
 import { statusTone } from "../support-board";
 
 export type TicketDetail = {
@@ -125,8 +125,8 @@ export function TicketView({
   staff: Master[];
   masters: { institutes: Master[]; teachers: Master[] };
 }) {
-  const sourceLabel =
-    SUPPORT_SOURCES.find((s) => s.id === ticket.source)?.name ?? ticket.source;
+  // §62.3. The same label the queue column prints, from the same table.
+  const sourceLabel = SOURCE_LABELS[ticket.source] ?? ticket.source;
   const instituteName =
     masters.institutes.find((i) => i.id === ticket.institute_id)?.name ?? null;
 

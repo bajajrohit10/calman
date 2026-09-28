@@ -148,13 +148,14 @@ const SUPPORT: Item = {
   icon: "☂",
   // §61.3. A child of Support, not of Reports: these numbers are about the
   // ticket queue and share no data with the counselling reports next door.
-  sub: [
-    {
-      href: "/support/reports",
-      label: "Reports",
-      hint: "Open work, ageing and resolutions",
-    },
-  ],
+  // §62.1: admin-only, so it is attached below rather than declared here.
+};
+
+/** §62.1. The Support reports, for managers and super admins only. */
+const SUPPORT_REPORTS = {
+  href: "/support/reports",
+  label: "Reports",
+  hint: "Open work, ageing and resolutions",
 };
 
 const SETTINGS: Item = {
@@ -178,6 +179,7 @@ export function Sidebar({
   showSettings,
   showCounselling,
   showSupport,
+  showSupportReports,
   fullName,
   roleLabel,
   theme,
@@ -191,8 +193,10 @@ export function Sidebar({
    * showing it none.
    */
   showCounselling: boolean;
-  /** §58.0: the ticket team, managers and super admins. Not counsellors. */
+  /** §62.1: every staff role except accounts. */
   showSupport: boolean;
+  /** §62.1: the Support reports child — managers and super admins only. */
+  showSupportReports: boolean;
   fullName: string;
   roleLabel: string;
   /** §43.2: which palette this person is looking at. */
@@ -215,7 +219,11 @@ export function Sidebar({
   const counselling = showSettings ? ITEMS : ITEMS.filter((item) => !item.adminOnly);
   const items = [
     ...(showCounselling ? counselling : []),
-    ...(showSupport ? [SUPPORT] : []),
+    // §62.1. Support for every staff role; its Reports child only for the two
+    // roles that may read it, so nobody is shown a link to their own 404.
+    ...(showSupport
+      ? [showSupportReports ? { ...SUPPORT, sub: [SUPPORT_REPORTS] } : SUPPORT]
+      : []),
     // §58.0. Accounts is on hold, so its links are gone from every role,
     // super_admin included. Nothing else was removed: the /accounts routes, the
     // accounts schema and the accounts role all still work, and putting the
