@@ -1,0 +1,13 @@
+-- §68.2. `resolved` becomes a close reason.
+--
+-- Alone in its own migration: ALTER TYPE ... ADD VALUE cannot be *used* in the
+-- transaction that adds it, and both the recompute and the backfill that follow
+-- use it.
+--
+-- Why it is needed. An after-sale enquiry closed because its last call said
+-- "resolved" recorded no reason at all, so a genuine resolution was stored
+-- identically to any other reasonless close. That is not merely untidy: it made
+-- the four such rows look like unlabelled hand-offs, which is how Brief 67 came
+-- to propose labelling them handed_to_support — a value that would have been
+-- false. A close that can say why it happened cannot be mistaken for another.
+alter type public.close_reason add value if not exists 'resolved';

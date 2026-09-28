@@ -91,6 +91,10 @@ export const CLOSE_REASON_LABELS: Record<CloseReason, string> = {
   // §62.2. The after-sale pipeline moved to Support; this is what closing an
   // enquiry into it is called on every screen that reads a close reason.
   handed_to_support: "handed to Support",
+  // §68.2. An after-sale complaint that was actually dealt with. Capitalised
+  // where its neighbours are not, because this one is a verdict rather than a
+  // circumstance — and it is the word Support already uses for the same state.
+  resolved: "Resolved",
 };
 
 export const ITEM_STATUS_LABELS: Record<ItemStatus, string> = {

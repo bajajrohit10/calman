@@ -3554,6 +3554,7 @@ export type Database = {
         | "superseded"
         | "converted"
         | "handed_to_support"
+        | "resolved"
       enquiry_status:
         | "open"
         | "working"
@@ -4357,6 +4358,7 @@ export const Constants = {
         "superseded",
         "converted",
         "handed_to_support",
+        "resolved",
       ],
       enquiry_status: [
         "open",
