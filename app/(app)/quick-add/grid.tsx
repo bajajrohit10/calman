@@ -889,10 +889,14 @@ export function QuickAddGrid({
                         r.action === "failed" ? "text-danger" : "text-ink-2",
                       )}
                     >
-                      {/* §65.4. A row that raised a ticket is not a new lead. */}
-                      {r.support ? "Support ticket" : ACTION_WORDS[r.action]}
+                      {/* §65.4. A row that raised a ticket is not a new lead. Its
+                          detail already names the ticket, so the word is dropped
+                          rather than printed twice. */}
+                      {r.support ? null : ACTION_WORDS[r.action]}
                       {r.detail && r.detail !== ACTION_WORDS[r.action] ? (
-                        <span className="ml-1.5 text-ink-3">— {r.detail}</span>
+                        <span className={r.support ? "" : "ml-1.5 text-ink-3"}>
+                          {r.support ? r.detail : `— ${r.detail}`}
+                        </span>
                       ) : null}
                     </td>
                   </tr>
