@@ -25,6 +25,25 @@ export const ISSUE_OPTIONS = [
 
 export type IssueOption = (typeof ISSUE_OPTIONS)[number];
 
+/**
+ * §72.2. What support.issue_from_counselling() leaves behind when the counsellor
+ * named no category.
+ *
+ * The fallback exists so a ticket is never issue-less for the reports, and it is
+ * written by the database (see 20260930000174). Named here because the ticket
+ * team's Issue requirement has to be able to tell it apart from an Other
+ * somebody actually typed — otherwise every counselling ticket arrives already
+ * satisfying a rule nobody applied to it.
+ */
+export const COUNSELLING_ISSUE_FALLBACK = "Raised from counselling";
+
+/** Whether a person has said what this ticket is about. */
+export function hasRealIssue(issues: string[], issueOther: string | null): boolean {
+  if (issues.length > 0) return true;
+  const other = (issueOther ?? "").trim();
+  return other !== "" && other !== COUNSELLING_ISSUE_FALLBACK;
+}
+
 export function isIssueOption(v: string): v is IssueOption {
   return (ISSUE_OPTIONS as readonly string[]).includes(v);
 }

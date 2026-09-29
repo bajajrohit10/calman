@@ -674,7 +674,6 @@ export function CallLogPanel({
    * wrong is the thing you are looking at.
    */
   const needsIssue = asAfterSale && !issueCategory;
-  const [issueAsked, setIssueAsked] = useState(false);
   /**
    * §44.1. The order id is the first thing an institute asks for, and a ticket
    * without one is a ticket nobody can chase. Refused on the field, in the
@@ -682,11 +681,9 @@ export function CallLogPanel({
    * wrong should be the thing you are looking at.
    */
   const needsOrderId = asAfterSale && !orderId.trim();
-  const [orderAsked, setOrderAsked] = useState(false);
   const orderRef = useRef<HTMLInputElement | null>(null);
   /** §44.2. Escalating without saying to whom is not escalating. */
   const needsEscalatee = asAfterSale && outcome === "escalated" && !escalatedTo;
-  const [escalateeAsked, setEscalateeAsked] = useState(false);
   const escalateeRef = useRef<HTMLSelectElement | null>(null);
   /**
    * §62 addendum, bug 3. The outcome had no guard and no ref.
@@ -700,12 +697,6 @@ export function CallLogPanel({
   const outcomeRef = useRef<HTMLSelectElement | null>(null);
   /** The reminder / next-follow-up field, for the same reason. */
   const dateRef = useRef<HTMLInputElement | null>(null);
-
-  function focusOrder() {
-    setOrderAsked(true);
-    orderRef.current?.focus();
-    orderRef.current?.scrollIntoView({ block: "center" });
-  }
 
   /** §46.2. The same bundle idea for the purchase block. */
   const labelOfLine = (line: NewLine) => {
@@ -743,7 +734,6 @@ export function CallLogPanel({
     orderId,
     setOrderId,
     needsOrderId,
-    orderAsked,
     orderRef,
     ticketProduct,
     setTicketProduct,
@@ -752,23 +742,10 @@ export function CallLogPanel({
     escalatedTo,
     setEscalatedTo,
     needsEscalatee,
-    escalateeAsked,
     escalateeRef,
     masters,
     escalatees,
   };
-
-  function focusEscalatee() {
-    setEscalateeAsked(true);
-    escalateeRef.current?.focus();
-    escalateeRef.current?.scrollIntoView({ block: "center" });
-  }
-
-  function focusIssue() {
-    setIssueAsked(true);
-    issueRef.current?.focus();
-    issueRef.current?.scrollIntoView({ block: "center" });
-  }
 
   function focusInterests() {
     firstTeacherRef.current?.focus();
@@ -870,16 +847,17 @@ export function CallLogPanel({
       focus();
     };
 
-    // Before anything else: Close ticket is a save too, and closing a ticket
-    // nobody ever categorised is exactly how a queue loses its shape.
-    if (needsIssue) {
-      refuse("Pick an issue category.", focusIssue);
-      return;
-    }
-    if (needsOrderId) {
-      refuse("A ticket needs an order ID.", focusOrder);
-      return;
-    }
+    /**
+     * §72.1. Nothing is mandatory on an after-sale query but the outcome and
+     * what was said.
+     *
+     * The issue type and the order id were both refused here. A counsellor on
+     * the phone to an angry student does not always have an order number to
+     * hand, and being unable to record the call at all is worse for Support
+     * than a ticket with a gap in it: the call gets logged as something else,
+     * or not at all. The ticket carries whatever was supplied, Support asks for
+     * the rest, and §72.3 nudges once at hand-over rather than blocking.
+     */
     // The blank outcome, refused here rather than at the server: the round trip
     // it used to make could convert a lead to a ticket before refusing.
     if (!outcome) {
@@ -887,10 +865,6 @@ export function CallLogPanel({
         outcomeRef.current?.focus();
         outcomeRef.current?.scrollIntoView({ block: "center" });
       });
-      return;
-    }
-    if (asAfterSale && outcome === "escalated" && !escalatedTo) {
-      refuse("Say who this ticket is escalated to.", focusEscalatee);
       return;
     }
     // §44.3. Every after-sale state but Resolved has a day somebody looks at it
@@ -908,6 +882,16 @@ export function CallLogPanel({
           dateRef.current?.scrollIntoView({ block: "center" });
         },
       );
+      return;
+    }
+    // §72.1. The outcome says where it went; the note says what happened. A
+    // ticket that records neither the order nor the issue nor a word of what was
+    // said is not a record of anything.
+    if (asAfterSale && !discussion.trim()) {
+      refuse("Say what the query is.", () => {
+        noteRef.current?.focus();
+        noteRef.current?.scrollIntoView({ block: "center" });
+      });
       return;
     }
     if (blocksSave) {
@@ -1213,7 +1197,6 @@ export function CallLogPanel({
           issueCategory={issueCategory}
           setIssueCategory={setIssueCategory}
           issueRef={issueRef}
-          issueAsked={issueAsked}
           needsIssue={needsIssue}
           ticketFields={ticketFields}
           purchaseBlock={purchaseBlock}
@@ -1320,7 +1303,7 @@ export function CallLogPanel({
               <span
                 className={cx(
                   "text-[10px] font-semibold uppercase tracking-[0.045em]",
-                  issueAsked && needsIssue ? "text-warn" : "text-ink-3",
+                  "text-ink-3",
                 )}
               >
                 Issue category
@@ -1328,10 +1311,6 @@ export function CallLogPanel({
               <Select
                 ref={issueRef}
                 aria-label="Issue category"
-                aria-invalid={issueAsked && needsIssue ? true : undefined}
-                className={
-                  issueAsked && needsIssue ? "border-warn bg-warn-soft/40" : undefined
-                }
                 value={issueCategory}
                 onChange={(e) => setIssueCategory(e.target.value as IssueCategory | "")}
               >
@@ -1342,9 +1321,10 @@ export function CallLogPanel({
                   </option>
                 ))}
               </Select>
-              {issueAsked && needsIssue ? (
-                <span role="alert" className="text-[11.5px] font-medium text-warn">
-                  Choose an issue type to save this ticket
+              {/* §72.1. Optional, and said so — Support asks for it later. */}
+              {needsIssue ? (
+                <span className="text-[11.5px] text-ink-3">
+                  Optional. Helps Support group the query.
                 </span>
               ) : null}
             </label>
@@ -1688,7 +1668,6 @@ function FirstCallFields({
   issueCategory,
   setIssueCategory,
   issueRef,
-  issueAsked,
   needsIssue,
   followUpDate,
   setFollowUpDate,
@@ -1745,7 +1724,6 @@ function FirstCallFields({
   issueCategory: IssueCategory | "";
   setIssueCategory: (v: IssueCategory | "") => void;
   issueRef: React.RefObject<HTMLSelectElement | null>;
-  issueAsked: boolean;
   needsIssue: boolean;
   followUpDate: string;
   setFollowUpDate: (v: string) => void;
@@ -2065,10 +2043,6 @@ function FirstCallFields({
           <Select
             ref={issueRef}
             aria-label="Issue category"
-            aria-invalid={issueAsked && needsIssue ? true : undefined}
-            className={
-              issueAsked && needsIssue ? "border-warn bg-warn-soft/40" : undefined
-            }
             value={issueCategory}
             onChange={(e) => setIssueCategory(e.target.value as IssueCategory | "")}
           >
@@ -2077,9 +2051,10 @@ function FirstCallFields({
               <option key={v} value={v}>{l}</option>
             ))}
           </Select>
-          {issueAsked && needsIssue ? (
-            <span role="alert" className="text-[11.5px] font-medium text-warn">
-              Choose an issue type to save this ticket
+          {/* §72.1. Optional, and said so — Support asks for it later. */}
+          {needsIssue ? (
+            <span className="text-[11.5px] text-ink-3">
+              Optional. Helps Support group the query.
             </span>
           ) : null}
         </FirstCallField>
@@ -2217,7 +2192,6 @@ export type TicketFieldsProps = {
   orderId: string;
   setOrderId: (v: string) => void;
   needsOrderId: boolean;
-  orderAsked: boolean;
   orderRef: React.Ref<HTMLInputElement>;
   ticketProduct: string;
   setTicketProduct: (v: string) => void;
@@ -2226,7 +2200,6 @@ export type TicketFieldsProps = {
   escalatedTo: string;
   setEscalatedTo: (v: string) => void;
   needsEscalatee: boolean;
-  escalateeAsked: boolean;
   escalateeRef: React.Ref<HTMLSelectElement>;
   masters: PanelMasters;
   escalatees: { id: string; name: string }[];
@@ -2238,7 +2211,6 @@ function TicketFields({
   orderId,
   setOrderId,
   needsOrderId,
-  orderAsked,
   orderRef,
   ticketProduct,
   setTicketProduct,
@@ -2247,7 +2219,6 @@ function TicketFields({
   escalatedTo,
   setEscalatedTo,
   needsEscalatee,
-  escalateeAsked,
   escalateeRef,
   masters,
   escalatees,
@@ -2265,7 +2236,7 @@ function TicketFields({
           <span
             className={cx(
               "text-[10px] font-semibold uppercase tracking-[0.045em]",
-              orderAsked && needsOrderId ? "text-warn" : "text-ink-3",
+              "text-ink-3",
             )}
           >
             Order ID
@@ -2274,16 +2245,14 @@ function TicketFields({
             ref={orderRef}
             aria-label="Order ID"
             placeholder="ZI-00000"
-            aria-invalid={orderAsked && needsOrderId ? true : undefined}
-            className={
-              orderAsked && needsOrderId ? "border-warn bg-warn-soft/40" : undefined
-            }
             value={orderId}
             onChange={(e) => setOrderId(e.target.value)}
           />
-          {orderAsked && needsOrderId ? (
-            <span role="alert" className="text-[11.5px] font-medium text-warn">
-              An order ID is needed to save this ticket
+          {/* §72.1. Optional. Support cannot match duplicates without it, which
+              §72.3 says once at hand-over rather than refusing here. */}
+          {needsOrderId ? (
+            <span className="text-[11.5px] text-ink-3">
+              Optional, but Support needs it to match duplicates.
             </span>
           ) : null}
         </label>
@@ -2327,7 +2296,7 @@ function TicketFields({
           <span
             className={cx(
               "text-[10px] font-semibold uppercase tracking-[0.045em]",
-              escalateeAsked && needsEscalatee ? "text-warn" : "text-ink-3",
+              "text-ink-3",
             )}
           >
             Escalate to
@@ -2335,12 +2304,6 @@ function TicketFields({
           <Select
             ref={escalateeRef}
             aria-label="Escalate to"
-            aria-invalid={escalateeAsked && needsEscalatee ? true : undefined}
-            className={
-              escalateeAsked && needsEscalatee
-                ? "border-warn bg-warn-soft/40"
-                : undefined
-            }
             value={escalatedTo}
             onChange={(e) => setEscalatedTo(e.target.value)}
           >
@@ -2351,9 +2314,11 @@ function TicketFields({
               </option>
             ))}
           </Select>
-          {escalateeAsked && needsEscalatee ? (
-            <span role="alert" className="text-[11.5px] font-medium text-warn">
-              Say who this is escalated to
+          {/* §72.1. Optional. A name given here is recorded in the ticket's
+              opening note; the ticket still goes to the team's queue. */}
+          {needsEscalatee ? (
+            <span className="text-[11.5px] text-ink-3">
+              Optional. Noted on the ticket if given.
             </span>
           ) : null}
         </label>

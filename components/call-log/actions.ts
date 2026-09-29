@@ -581,19 +581,24 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
     return { error: "A follow-up needs a next follow-up date." };
   }
 
-  if (type === "after_sale" && !input.issueCategory) {
-    return { error: "An after-sale call needs an issue category." };
-  }
-
-  // §44.1. The same refusal the screen makes, made again here: a server action
-  // is a public endpoint and the amber box proves nothing.
-  if (type === "after_sale" && !input.ticketOrderId?.trim()) {
-    return { error: "A ticket needs an order ID." };
-  }
-  // §44.2. Escalating is handing the ticket to somebody; without a name it is
-  // a status with nobody behind it.
-  if (type === "after_sale" && outcome === "escalated" && !input.escalatedTo) {
-    return { error: "Say who this ticket is escalated to." };
+  /**
+   * §72.1. An after-sale query needs an outcome and a note. Nothing else.
+   *
+   * The issue category, the order id and — when escalating — a named person
+   * were each refused here. Every one of them is information Support would like
+   * and the counsellor may simply not have: a student rings about a course they
+   * cannot open and has no order number to hand, and the choice being offered
+   * was between a ticket with a gap in it and no ticket at all. The gap is
+   * better. Support asks for the rest on the ticket, and §72.3 nudges once at
+   * hand-over instead of blocking.
+   *
+   * The note stays required, because a ticket with no order, no issue and no
+   * word of what was said records nothing at all. `issue_from_counselling(null)`
+   * already fills issue_other_work with "Raised from counselling", so the row is
+   * never issue-less for the reports.
+   */
+  if (type === "after_sale" && !input.discussion.trim()) {
+    return { error: "Say what the query is." };
   }
 
   const ticked =

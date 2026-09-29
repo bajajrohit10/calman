@@ -7,7 +7,7 @@ import { useRef, useState, useTransition } from "react";
 import { Badge, Button, ErrorNote, Input, Select, cx } from "@/components/ui";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile";
-import { ISSUE_OPTIONS } from "@/lib/support/normalise";
+import { hasRealIssue, ISSUE_OPTIONS } from "@/lib/support/normalise";
 
 import {
   findMergeTargets,
@@ -412,6 +412,16 @@ function ActionPanel({
   // look at it — but it is a suggestion recorded in the note, never a required
   // field and never written to escalated_to.
   const showsPerson = needsPerson || isHandover;
+  /**
+   * §72.2. Whose ticket this is, for the purpose of what the form insists on.
+   *
+   * A counsellor logging a query has an angry student on the line and may not
+   * have the order number, let alone a tidy category — so on the Counsellor tab
+   * only the outcome and its date are required. Once it is handed over the
+   * ticket team works it from the queue, and the queue is grouped by issue, so
+   * there the issue is required again.
+   */
+  const inCounsellorTab = ticket.source === "counselling" && ticket.status === "working";
   // §61.2. An institute escalation is a claim about a specific institute, so the
   // ticket has to name one. Said here as well as refused by the server, because
   // an error arriving after the save is a worse way to learn it.
@@ -433,7 +443,15 @@ function ActionPanel({
     if (derived) setInstituteId(derived);
   }
   /** §64.1. Ticked neither Called nor WhatsApp — asked once, never blocked. */
-  const [confirmNoTouch, setConfirmNoTouch] = useState<SavePayload | null>(null);
+  /**
+   * §64.1, §72.3. The soft prompts, as one thing.
+   *
+   * Each holds the payload it is asking about and the sentence to ask. One at a
+   * time, and "Save anyway" always gets through — these catch slips, they do not
+   * argue.
+   */
+  const [confirmNoTouch, setConfirmNoTouch] =
+    useState<{ payload: SavePayload; message: string } | null>(null);
   /**
    * §64.1. Opens on the next working day rather than blank.
    *
@@ -508,6 +526,14 @@ function ActionPanel({
     const data = new FormData(form);
     const payload = payloadFrom(data);
 
+    // §72.2. The ticket team says what the ticket is about. Refused rather than
+    // nudged: this is the queue's own grouping, and the person saving is the
+    // person whose queue it is.
+    if (!inCounsellorTab && !hasRealIssue(payload.issues, payload.issueOther)) {
+      setResult({ error: "Pick an issue — the queue is grouped by it." });
+      return;
+    }
+
     // §63.1. The question comes before the write, so nothing is saved twice and
     // nothing is merged without an answer.
     if (duplicate) {
@@ -521,8 +547,40 @@ function ActionPanel({
     // nudge, not a rule: plenty of saves are genuinely neither.
     if (!payload.called && !payload.messaged) {
       setResult(null);
-      setConfirmNoTouch(payload);
+      setConfirmNoTouch({
+        payload,
+        message: "You haven't marked Called or WhatsApp — save anyway?",
+      });
       return;
+    }
+
+    /**
+     * §72.3. Handing over without an order id or without an issue.
+     *
+     * Both are optional (§72.1, §72.2) and both cost the support team something
+     * real, so they are said once, here, at the moment the ticket stops being the
+     * counsellor's. Never on Resolved: a query the counsellor has already settled
+     * is going nowhere and needs nothing.
+     */
+    if (chosen.id === "handover") {
+      if (!payload.orderIdWork) {
+        setResult(null);
+        setConfirmNoTouch({
+          payload,
+          message:
+            "No order ID — the support team won't be able to match duplicates. Save anyway?",
+        });
+        return;
+      }
+      if (!hasRealIssue(payload.issues, payload.issueOther)) {
+        setResult(null);
+        setConfirmNoTouch({
+          payload,
+          message:
+            "No issue picked — the support team won't be able to group this. Save anyway?",
+        });
+        return;
+      }
     }
 
     doSave(payload);
@@ -819,19 +877,17 @@ Action details <span className="font-normal normal-case tracking-normal text-ink
         <div
           data-testid="no-touch-confirm"
           role="alertdialog"
-          aria-label="Nothing ticked"
+          aria-label="Confirm this save"
           className="mx-4 mb-2 rounded-md border border-warn/60 bg-warn-soft/40 px-3 py-2.5"
         >
-          <p className="text-[12.5px] text-ink">
-            You haven&apos;t marked Called or WhatsApp — save anyway?
-          </p>
+          <p className="text-[12.5px] text-ink">{confirmNoTouch.message}</p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Button
               type="button"
               size="sm"
               variant="primary"
               disabled={pending}
-              onClick={() => doSave(confirmNoTouch)}
+              onClick={() => doSave(confirmNoTouch.payload)}
             >
               Save anyway
             </Button>
