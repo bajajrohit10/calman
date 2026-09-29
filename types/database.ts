@@ -4147,6 +4147,7 @@ export type Database = {
       }
       save_ticket_action: {
         Args: {
+          p_assigned_to?: string
           p_called?: boolean
           p_details: string
           p_escalated_to: string
@@ -4217,6 +4218,7 @@ export type Database = {
         | "reopened"
         | "counselling_link"
         | "handover"
+        | "assignment"
       ticket_source:
         | "form"
         | "mail"
@@ -4449,6 +4451,7 @@ export const Constants = {
         "reopened",
         "counselling_link",
         "handover",
+        "assignment",
       ],
       ticket_source: [
         "form",

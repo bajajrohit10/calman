@@ -165,6 +165,7 @@ export function TicketView({
   masters,
   duplicate,
   backTo,
+  viewerId,
   nextWorkingDay,
   teacherInstitutes,
 }: {
@@ -186,6 +187,8 @@ export function TicketView({
   duplicate: DuplicateCandidate | null;
   /** §64.1: the queue's query string, so Save returns to where it was opened. */
   backTo: string | null;
+  /** §74: who is saving, so ownership can be described rather than assumed. */
+  viewerId: string | null;
   /** §64.1: Mon–Sat, holidays and overrides applied by the database. */
   nextWorkingDay: string | null;
   /** §64.1: teacher id → institute id, from the masters. */
@@ -296,6 +299,7 @@ export function TicketView({
           masters={masters}
           duplicate={duplicate}
           backTo={backTo}
+          viewerId={viewerId}
           nextWorkingDay={nextWorkingDay}
           teacherInstitutes={teacherInstitutes}
         />
@@ -381,6 +385,7 @@ function ActionPanel({
   masters,
   duplicate,
   backTo,
+  viewerId,
   nextWorkingDay,
   teacherInstitutes,
 }: {
@@ -389,6 +394,8 @@ function ActionPanel({
   masters: { institutes: Master[]; teachers: Master[] };
   duplicate: DuplicateCandidate | null;
   backTo: string | null;
+  /** §74: who is saving. */
+  viewerId: string | null;
   nextWorkingDay: string | null;
   teacherInstitutes: Record<string, string>;
 }) {
@@ -410,6 +417,20 @@ function ActionPanel({
    * it, or it is handed over, it is worked from a queue grouped by issue, and
    * there the issue is required again.
    */
+  /**
+   * §74. Whose ticket this is, and whether this save would take it.
+   *
+   * The four outcomes that mean "carrying on with it" claim an unowned ticket.
+   * One already on somebody else's desk is never taken silently — the line below
+   * says whose it is and offers the picker, and only naming a replacement moves
+   * it.
+   */
+  const ownedByOther =
+    ticket.assigned_to !== null && ticket.assigned_to !== viewerId;
+  const ownerName = ticket.assigned_to
+    ? (staff.find((p) => p.id === ticket.assigned_to)?.name ?? "someone")
+    : null;
+
   const inCounsellorTab =
     ticket.source === "counselling" &&
     ticket.status === "working" &&
@@ -420,6 +441,11 @@ function ActionPanel({
   const allowedOutcomes = outcomesFor(inCounsellorTab);
   const chosen = allowedOutcomes.find((o) => o.id === outcome) ?? allowedOutcomes[0];
   const isHandover = chosen.id === "handover";
+  // §74. Resolved does not claim: finishing somebody else's ticket is not taking
+  // it. Hand-over clears the column instead.
+  const claims = ["working", "escalated_team", "escalated_institute", "future"].includes(
+    chosen.id,
+  );
   // A hand-over clears the date, so asking for one would be asking for something
   // that is about to be thrown away.
   const needsDate = chosen.status !== "resolved" && !isHandover;
@@ -497,6 +523,9 @@ function ActionPanel({
         // §65.3. Still sent when handing over: the save records a named person in
         // the note, and nowhere else.
         escalatedTo: String(data.get("escalatedTo") ?? "") || null,
+        // §74. Only when the saver names somebody. Null means "leave ownership
+        // as it is", which the save then reads together with the outcome.
+        assignedTo: String(data.get("assignedTo") ?? "") || null,
       called: data.get("called") === "on",
       messaged: data.get("messaged") === "on",
     };
@@ -754,6 +783,30 @@ Action details <span className="font-normal normal-case tracking-normal text-ink
             >
               Set Institute first — an institute escalation has to name one.
             </p>
+          ) : null}
+
+          {/* §74. Whose ticket this is, said before the save rather than
+              discovered after it. Only when it is somebody else's and this save
+              would otherwise have claimed it — a ticket already yours needs no
+              announcement, and Resolved is not a claim. */}
+          {ownedByOther && claims ? (
+            <label className="block" data-testid="owned-by-other">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+                Assigned to {ownerName} — reassign?
+              </span>
+              <Select
+                name="assignedTo"
+                aria-label="Reassign to"
+                defaultValue=""
+              >
+                <option value="">Leave it with {ownerName}</option>
+                {staff.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </Select>
+            </label>
           ) : null}
 
           {showsPerson ? (

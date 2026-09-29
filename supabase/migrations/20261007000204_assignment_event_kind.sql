@@ -1,0 +1,11 @@
+-- §74. Taking a ticket is a thing that happened, so it goes on the timeline.
+--
+-- Alone in its own migration: ALTER TYPE ... ADD VALUE cannot be used in the
+-- transaction that adds it, and the function that follows uses it.
+--
+-- Until now assigned_to changed with nothing to show for it — the queue's
+-- "Assigned to" column would differ from yesterday and the history would not say
+-- who took it or when. It is also the one field save_ticket_action has never
+-- written, so a ticket the team was actively working sat unassigned and turned up
+-- in Working by default rather than by anybody's decision (§73).
+alter type support.event_kind add value if not exists 'assignment';

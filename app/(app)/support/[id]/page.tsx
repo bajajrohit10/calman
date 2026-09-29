@@ -134,6 +134,9 @@ export default async function Page({
         masters={{ institutes: masters.institutes, teachers: masters.teachers }}
         // §64.1. Where Save goes back to: the queue exactly as it was left.
         backTo={one(sp.from) || null}
+        // §74. So the panel can tell "mine" from "somebody else's" without
+        // guessing from the name.
+        viewerId={viewer.userId ?? null}
         nextWorkingDay={(nextWorking as unknown as string | null) ?? null}
         // §64.1. Which house each teacher sells through, so the panel can fill
         // the institute without a round trip per change.

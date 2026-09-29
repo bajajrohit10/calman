@@ -113,6 +113,12 @@ export async function saveTicketAction(input: {
    * count it apart from an escalation.
    */
   handover?: boolean;
+  /**
+   * §74. An explicit reassignment, when the saver names somebody. Null means
+   * "leave ownership alone" — which the save reads together with the outcome, so
+   * an unowned ticket is claimed by whoever is carrying on with it.
+   */
+  assignedTo?: string | null;
   followUpDate: string | null;
   escalatedTo: string | null;
   called: boolean;
@@ -137,6 +143,7 @@ export async function saveTicketAction(input: {
     p_called: input.called,
     p_messaged: input.messaged,
     p_handover: input.handover ?? false,
+    p_assigned_to: input.assignedTo ?? null,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
 
