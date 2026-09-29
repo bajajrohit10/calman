@@ -1091,22 +1091,16 @@ export function CallLogPanel({
             nextFollowUpDate: enquiry.nextFollowUpDate,
             reEnquiredAt: enquiry.reEnquiredAt,
             createdAt: enquiry.createdAt,
+            // §75.2. Always, not only when the chips are guesses.
+            productText: enquiry.productText,
           }}
         />
-        {/* §49.2. The title the lead arrived with, shown on the follow-up
-            window whenever the interests below are guesses or absent — those
-            are exactly the moments when the chips cannot be taken at face
-            value and the counsellor needs the words the student actually
-            sent. Hidden once somebody has recorded real lines, because then
-            the chips are the better summary. */}
-        {enquiry.productText && (items.length === 0 || items.every((i) => i.isAuto)) ? (
-          <p className="text-[12px] text-ink-2">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-              Product{" "}
-            </span>
-            {enquiry.productText}
-          </p>
-        ) : null}
+        {/* §75.2. The product line moved into EnquiryGlanceLine, and stopped
+            being conditional. §49.2 showed it only when the chips were guesses
+            or absent, on the reasoning that the chips are the better summary
+            once somebody has recorded real lines. They are a summary either
+            way, and the counsellor asking "what did they actually ask for" was
+            being shown it exactly when the answer mattered least. */}
         <InterestChips items={items} />
       </div>
 

@@ -46,6 +46,12 @@ export type EnquiryGlanceFields = {
   archived?: boolean;
   /** Why it ended, when it has ended. */
   resolution?: string | null;
+  /**
+   * §75.2. The words the lead arrived with — product_text, as Quick Add or the
+   * import stored it. Shown in full and never parsed here: the chips below are
+   * the system's reading of it, and this is the thing being read.
+   */
+  productText?: string | null;
 };
 
 export type GlanceItem = {
@@ -92,7 +98,9 @@ function Fact({ label, value }: { label: string; value: string }) {
 }
 
 export function EnquiryGlanceLine({ glance }: { glance: EnquiryGlanceFields }) {
+  const product = (glance.productText ?? "").trim();
   return (
+    <>
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12px]">
       <span className="text-[13px] font-semibold text-ink">#{glance.id}</span>
       <Badge tone="neutral">{ENQUIRY_TYPE_LABELS[glance.type]}</Badge>
@@ -143,6 +151,21 @@ export function EnquiryGlanceLine({ glance }: { glance: EnquiryGlanceFields }) {
         opened {formatDateTime(glance.createdAt)}
       </span>
     </div>
+    {/* §75.2. Directly under the facts and above the chips, because the chips
+        are a reading of this and a reader comparing the two should not have to
+        go looking. In full and wrapping: a product line is often several
+        courses joined with " | " by the import, and the join is the meaning.
+        Nothing at all when there is nothing — an empty label is worse than a
+        gap. */}
+    {product ? (
+      <p data-testid="glance-product" className="text-[12px] leading-relaxed text-ink-2">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+          Product{" "}
+        </span>
+        <span className="whitespace-pre-wrap break-words">{product}</span>
+      </p>
+    ) : null}
+    </>
   );
 }
 
