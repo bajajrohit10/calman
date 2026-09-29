@@ -51,6 +51,8 @@ export type TicketDetail = {
   parent_ticket_id: number | null;
   merged_at: string | null;
   assigned_to: string | null;
+  /** §73. The counsellor who raised it; null for the form webhook. */
+  raised_by: string | null;
   last_touched_at: string;
   counselling_enquiry_id: number | null;
 };
@@ -137,8 +139,7 @@ type OutcomeId = (typeof OUTCOMES)[number]["id"];
  * having seen it. Everywhere else the full list returns, hand-over included only
  * where it means something.
  */
-function outcomesFor(source: string, status: string): readonly (typeof OUTCOMES)[number][] {
-  const inCounsellorTab = source === "counselling" && status === "working";
+function outcomesFor(inCounsellorTab: boolean): readonly (typeof OUTCOMES)[number][] {
   return OUTCOMES.filter((o) =>
     inCounsellorTab ? o.id !== "escalated_team" && o.id !== "escalated_institute" : o.id !== "handover",
   );
@@ -400,8 +401,23 @@ function ActionPanel({
   );
   const lock = useRef(false);
 
+  /**
+   * §72.2, §73. Whose ticket this is, for the purpose of what the form insists on.
+   *
+   * A counsellor logging a query has an angry student on the line and may not
+   * have the order number, let alone a tidy category — so while the ticket is
+   * still theirs only the outcome and its date are required. Once the team takes
+   * it, or it is handed over, it is worked from a queue grouped by issue, and
+   * there the issue is required again.
+   */
+  const inCounsellorTab =
+    ticket.source === "counselling" &&
+    ticket.status === "working" &&
+    ticket.raised_by !== null &&
+    ticket.assigned_to === ticket.raised_by;
+
   // §65.3. What this ticket may become, decided once from where it stands.
-  const allowedOutcomes = outcomesFor(ticket.source, ticket.status);
+  const allowedOutcomes = outcomesFor(inCounsellorTab);
   const chosen = allowedOutcomes.find((o) => o.id === outcome) ?? allowedOutcomes[0];
   const isHandover = chosen.id === "handover";
   // A hand-over clears the date, so asking for one would be asking for something
@@ -412,16 +428,6 @@ function ActionPanel({
   // look at it — but it is a suggestion recorded in the note, never a required
   // field and never written to escalated_to.
   const showsPerson = needsPerson || isHandover;
-  /**
-   * §72.2. Whose ticket this is, for the purpose of what the form insists on.
-   *
-   * A counsellor logging a query has an angry student on the line and may not
-   * have the order number, let alone a tidy category — so on the Counsellor tab
-   * only the outcome and its date are required. Once it is handed over the
-   * ticket team works it from the queue, and the queue is grouped by issue, so
-   * there the issue is required again.
-   */
-  const inCounsellorTab = ticket.source === "counselling" && ticket.status === "working";
   // §61.2. An institute escalation is a claim about a specific institute, so the
   // ticket has to name one. Said here as well as refused by the server, because
   // an error arriving after the save is a worse way to learn it.

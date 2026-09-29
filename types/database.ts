@@ -3760,6 +3760,7 @@ export type Database = {
           order_id_work: string | null
           parent_ticket_id: number | null
           raised_at: string
+          raised_by: string | null
           resolved_at: string | null
           resolved_by: string | null
           source: Database["support"]["Enums"]["ticket_source"]
@@ -3794,6 +3795,7 @@ export type Database = {
           order_id_work?: string | null
           parent_ticket_id?: number | null
           raised_at?: string
+          raised_by?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
           source: Database["support"]["Enums"]["ticket_source"]
@@ -3828,6 +3830,7 @@ export type Database = {
           order_id_work?: string | null
           parent_ticket_id?: number | null
           raised_at?: string
+          raised_by?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
           source?: Database["support"]["Enums"]["ticket_source"]
