@@ -3739,6 +3739,7 @@ export type Database = {
           counselling_enquiry_id: number | null
           created_at: string
           description: string | null
+          escalated_institute_id: string | null
           escalated_to: string | null
           escalation_kind: string | null
           faculty_raw: string | null
@@ -3746,6 +3747,7 @@ export type Database = {
           form_row_ref: string | null
           id: number
           institute_id: string | null
+          institute_ids: string[]
           issue_other: string | null
           issue_other_work: string | null
           issues: string[]
@@ -3767,6 +3769,7 @@ export type Database = {
           status: Database["support"]["Enums"]["ticket_status"]
           student_name: string | null
           teacher_id: string | null
+          teacher_ids: string[]
         }
         Insert: {
           assigned_to?: string | null
@@ -3774,6 +3777,7 @@ export type Database = {
           counselling_enquiry_id?: number | null
           created_at?: string
           description?: string | null
+          escalated_institute_id?: string | null
           escalated_to?: string | null
           escalation_kind?: string | null
           faculty_raw?: string | null
@@ -3781,6 +3785,7 @@ export type Database = {
           form_row_ref?: string | null
           id?: number
           institute_id?: string | null
+          institute_ids?: string[]
           issue_other?: string | null
           issue_other_work?: string | null
           issues?: string[]
@@ -3802,6 +3807,7 @@ export type Database = {
           status?: Database["support"]["Enums"]["ticket_status"]
           student_name?: string | null
           teacher_id?: string | null
+          teacher_ids?: string[]
         }
         Update: {
           assigned_to?: string | null
@@ -3809,6 +3815,7 @@ export type Database = {
           counselling_enquiry_id?: number | null
           created_at?: string
           description?: string | null
+          escalated_institute_id?: string | null
           escalated_to?: string | null
           escalation_kind?: string | null
           faculty_raw?: string | null
@@ -3816,6 +3823,7 @@ export type Database = {
           form_row_ref?: string | null
           id?: number
           institute_id?: string | null
+          institute_ids?: string[]
           issue_other?: string | null
           issue_other_work?: string | null
           issues?: string[]
@@ -3837,6 +3845,7 @@ export type Database = {
           status?: Database["support"]["Enums"]["ticket_status"]
           student_name?: string | null
           teacher_id?: string | null
+          teacher_ids?: string[]
         }
         Relationships: [
           {
@@ -4150,18 +4159,19 @@ export type Database = {
           p_assigned_to?: string
           p_called?: boolean
           p_details: string
+          p_escalated_institute_id?: string
           p_escalated_to: string
           p_escalation_kind?: string
           p_follow_up_date: string
           p_handover?: boolean
-          p_institute_id: string
+          p_institute_ids: string[]
           p_issue_other: string
           p_issues: string[]
           p_message_channel?: string
           p_messaged?: boolean
           p_order_id_work: string
           p_outcome: Database["support"]["Enums"]["ticket_status"]
-          p_teacher_id: string
+          p_teacher_ids: string[]
           p_ticket_id: number
         }
         Returns: number

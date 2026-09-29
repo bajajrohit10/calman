@@ -294,7 +294,10 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
 
       {/* 2. Open by institute / by issue */}
       <div className="grid gap-3 lg:grid-cols-2">
-        <Section title="Open by institute" hint="Busiest first.">
+        <Section
+          title="Open by institute"
+          hint="Busiest first. Tickets with more than one institute are counted under each."
+        >
           <Table
             head={["Institute", "Open"]}
             rows={instituteRows.map((r) => [
@@ -563,7 +566,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
       {/* 5. Time to resolve */}
       <Section
         title="Average days to resolve"
-        hint="Raised to resolved, for tickets resolved in this range. The count is beside every average because an average of one is not a measurement."
+        hint="Raised to resolved, for tickets resolved in this range. The count is beside every average because an average of one is not a measurement. Tickets with more than one institute are counted under each."
       >
         {overall ? (
           <>

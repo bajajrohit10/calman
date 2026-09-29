@@ -38,6 +38,11 @@ export type TicketDetail = {
   form_row_ref: string | null;
   order_id_work: string | null;
   institute_id: string | null;
+  /** §75.1. Every institute and teacher this ticket concerns. */
+  institute_ids: string[];
+  teacher_ids: string[];
+  /** §75.1. Which institute an institute-escalation went to, where chosen. */
+  escalated_institute_id: string | null;
   teacher_id: string | null;
   issues_work: string[];
   issue_other_work: string | null;
@@ -458,8 +463,17 @@ function ActionPanel({
   // ticket has to name one. Said here as well as refused by the server, because
   // an error arriving after the save is a worse way to learn it.
   const needsInstitute = chosen.kind === "institute";
-  const [instituteId, setInstituteId] = useState<string>(ticket.institute_id ?? "");
-  const [teacherId, setTeacherId] = useState<string>(ticket.teacher_id ?? "");
+  const [instituteIds, setInstituteIds] = useState<string[]>(ticket.institute_ids ?? []);
+  const [teacherIds, setTeacherIds] = useState<string[]>(ticket.teacher_ids ?? []);
+  /**
+   * §75.1. Which house an institute escalation is going to, when the ticket
+   * names more than one. Asked rather than guessed: the Escalated tab and the
+   * reports print this, and picking the first would put a ticket on the wrong
+   * institute's desk.
+   */
+  const [escalatedInstituteId, setEscalatedInstituteId] = useState<string>(
+    ticket.escalated_institute_id ?? "",
+  );
   /**
    * §64.1. Picking a teacher fills the institute from the masters.
    *
@@ -469,10 +483,17 @@ function ActionPanel({
    * teacher again re-fills it: the teacher is the more specific statement, so it
    * wins when it moves.
    */
-  function pickTeacher(next: string) {
-    setTeacherId(next);
-    const derived = next ? teacherInstitutes[next] : null;
-    if (derived) setInstituteId(derived);
+  function addTeacher(next: string) {
+    if (!next || teacherIds.includes(next)) return;
+    setTeacherIds([...teacherIds, next]);
+    // §75.1. The house that sells them, added if it is not already there.
+    // Removing the teacher later does not remove it: somebody may have chosen
+    // the institute deliberately, and un-choosing on their behalf is worse than
+    // leaving one name too many.
+    const derived = teacherInstitutes[next];
+    if (derived && !instituteIds.includes(derived)) {
+      setInstituteIds([...instituteIds, derived]);
+    }
   }
   /** §64.1. Ticked neither Called nor WhatsApp — asked once, never blocked. */
   /**
@@ -495,7 +516,9 @@ function ActionPanel({
   const [followUpDate, setFollowUpDate] = useState<string>(
     ticket.follow_up_date ?? nextWorkingDay ?? "",
   );
-  const instituteMissing = needsInstitute && !instituteId;
+  const instituteMissing = needsInstitute && instituteIds.length === 0;
+  // §75.1. Several named and an institute escalation chosen: which one?
+  const mustChooseInstitute = needsInstitute && instituteIds.length > 1;
   /**
    * §63.1. The save the user asked for, held while the duplicate question is
    * answered. Held rather than abandoned: whichever way they answer, the outcome
@@ -510,8 +533,10 @@ function ActionPanel({
         ticketId: ticket.id,
         issues,
         issueOther: String(data.get("issueOther") ?? "").trim() || null,
-        instituteId: String(data.get("instituteId") ?? "") || null,
-        teacherId: String(data.get("teacherId") ?? "") || null,
+        instituteIds,
+        teacherIds,
+        escalatedInstituteId:
+          instituteIds.length === 1 ? instituteIds[0] : escalatedInstituteId || null,
         orderIdWork: String(data.get("orderIdWork") ?? "").trim() || null,
         details: String(data.get("details") ?? ""),
         outcome: chosen.status,
@@ -703,42 +728,27 @@ function ActionPanel({
               defaultValue={ticket.order_id_work ?? ticket.order_id ?? ""}
             />
           </label>
-          <label className="block">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-              Institute
-            </span>
-            <Select
-              name="instituteId"
-              value={instituteId}
-              onChange={(e) => setInstituteId(e.target.value)}
-              aria-label="Institute"
-            >
-              <option value="">—</option>
-              {masters.institutes.map((i) => (
-                <option key={i.id} value={i.id}>
-                  {i.name}
-                </option>
-              ))}
-            </Select>
-          </label>
-          <label className="block">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-              Teacher
-            </span>
-            <Select
-              name="teacherId"
-              value={teacherId}
-              onChange={(e) => pickTeacher(e.target.value)}
-              aria-label="Teacher"
-            >
-              <option value="">—</option>
-              {masters.teachers.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </Select>
-          </label>
+          {/* §75.1. One complaint can span two houses — a book from one and a
+              video from another — so both are lists. The picker adds, the chip
+              removes, and nothing is chosen twice. */}
+          <FacultyPicker
+            label="Institute"
+            testId="institute-chips"
+            options={masters.institutes}
+            chosen={instituteIds}
+            onAdd={(id) => {
+              if (!instituteIds.includes(id)) setInstituteIds([...instituteIds, id]);
+            }}
+            onRemove={(id) => setInstituteIds(instituteIds.filter((x) => x !== id))}
+          />
+          <FacultyPicker
+            label="Teacher"
+            testId="teacher-chips"
+            options={masters.teachers}
+            chosen={teacherIds}
+            onAdd={addTeacher}
+            onRemove={(id) => setTeacherIds(teacherIds.filter((x) => x !== id))}
+          />
         </div>
       </div>
 
@@ -774,6 +784,31 @@ Action details <span className="font-normal normal-case tracking-normal text-ink
               ))}
             </Select>
           </label>
+
+          {/* §75.1. Several houses named and an institute escalation chosen. The
+              ticket is going to one of them, and the Escalated tab and the
+              reports print whichever this says. */}
+          {mustChooseInstitute ? (
+            <label className="block" data-testid="which-institute">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+                Escalated to which institute? <span className="text-danger">*</span>
+              </span>
+              <Select
+                name="escalatedInstituteId"
+                aria-label="Escalated to which institute"
+                value={escalatedInstituteId}
+                onChange={(e) => setEscalatedInstituteId(e.target.value)}
+                required
+              >
+                <option value="">Choose one</option>
+                {instituteIds.map((id) => (
+                  <option key={id} value={id}>
+                    {masters.institutes.find((i) => i.id === id)?.name ?? "unknown"}
+                  </option>
+                ))}
+              </Select>
+            </label>
+          ) : null}
 
           {instituteMissing ? (
             <p
@@ -989,6 +1024,76 @@ Action details <span className="font-normal normal-case tracking-normal text-ink
         </span>
       </div>
     </form>
+  );
+}
+
+/**
+ * §75.1. A list of masters, as chips with a picker under them.
+ *
+ * The same shape counselling uses for teachers, so the two screens do not ask
+ * the team to learn the control twice. The picker resets to its placeholder
+ * after each add — it is an "add another", not a current value — and anything
+ * already chosen drops out of it, so the list cannot hold the same name twice.
+ */
+function FacultyPicker({
+  label,
+  testId,
+  options,
+  chosen,
+  onAdd,
+  onRemove,
+}: {
+  label: string;
+  testId: string;
+  options: Master[];
+  chosen: string[];
+  onAdd: (id: string) => void;
+  onRemove: (id: string) => void;
+}) {
+  const nameOf = (id: string) => options.find((o) => o.id === id)?.name ?? "unknown";
+  return (
+    <label className="block">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+        {label}
+      </span>
+      {chosen.length ? (
+        <div data-testid={testId} className="mb-1 flex flex-wrap gap-1">
+          {chosen.map((id) => (
+            <span
+              key={id}
+              className="inline-flex items-center gap-1 rounded-full border border-line-2 bg-surface-2 px-2 py-[1px] text-[11.5px] text-ink-2"
+            >
+              {nameOf(id)}
+              <button
+                type="button"
+                aria-label={`Remove ${nameOf(id)}`}
+                title={`Remove ${nameOf(id)}`}
+                onClick={() => onRemove(id)}
+                className="text-ink-3 hover:text-danger"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <Select
+        value=""
+        aria-label={`Add ${label.toLowerCase()}`}
+        onChange={(e) => {
+          if (e.target.value) onAdd(e.target.value);
+        }}
+      >
+        <option value="">{chosen.length ? "Add another…" : "—"}</option>
+        {options
+          .filter((o) => !chosen.includes(o.id))
+          .map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.name}
+            </option>
+          ))}
+      </Select>
+    </label>
   );
 }
 

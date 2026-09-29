@@ -98,8 +98,11 @@ export async function saveTicketAction(input: {
   ticketId: number;
   issues: string[];
   issueOther: string | null;
-  instituteId: string | null;
-  teacherId: string | null;
+  /** §75.1. Every institute and teacher this ticket concerns. */
+  instituteIds: string[];
+  teacherIds: string[];
+  /** §75.1. Which one an institute escalation is going to, where there is a choice. */
+  escalatedInstituteId?: string | null;
   orderIdWork: string | null;
   details: string;
   outcome: Status;
@@ -132,8 +135,9 @@ export async function saveTicketAction(input: {
     p_ticket_id: input.ticketId,
     p_issues: input.issues,
     p_issue_other: input.issueOther,
-    p_institute_id: input.instituteId,
-    p_teacher_id: input.teacherId,
+    p_institute_ids: input.instituteIds,
+    p_teacher_ids: input.teacherIds,
+    p_escalated_institute_id: input.escalatedInstituteId ?? null,
     p_order_id_work: input.orderIdWork,
     p_details: input.details,
     p_outcome: input.outcome,
@@ -225,7 +229,7 @@ export async function resolveDuplicateThenSave(input: {
     // click: the merge itself now works, and this was the fault behind it.
     const { data: survivor, error: readError } = await db
       .from("tickets")
-      .select("issues_work, issue_other_work, institute_id, teacher_id, order_id_work")
+      .select("issues_work, issue_other_work, institute_ids, teacher_ids, order_id_work")
       .eq("id", input.parentId)
       .single();
     if (readError) {
@@ -239,8 +243,8 @@ export async function resolveDuplicateThenSave(input: {
       ticketId: input.parentId,
       issues: survivor.issues_work ?? [],
       issueOther: survivor.issue_other_work,
-      instituteId: survivor.institute_id,
-      teacherId: survivor.teacher_id,
+      instituteIds: survivor.institute_ids ?? [],
+      teacherIds: survivor.teacher_ids ?? [],
       orderIdWork: survivor.order_id_work,
     });
     if (res.error) {
