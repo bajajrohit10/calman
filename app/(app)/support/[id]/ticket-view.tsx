@@ -132,7 +132,7 @@ const OUTCOMES = [
   // §77.2. Not an escalation: nobody was asked to act, the team is waiting. It
   // takes a follow-up date for the same reason Escalated does — something has to
   // bring it back.
-  { id: "courier", label: "Pending with our courier", status: "courier", kind: null },
+  { id: "courier", label: "Pending with courier", status: "courier", kind: null },
   { id: "future", label: "Future date", status: "future", kind: null },
   { id: "resolved", label: "Resolved", status: "resolved", kind: null },
 ] as const;

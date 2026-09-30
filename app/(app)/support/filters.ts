@@ -61,10 +61,9 @@ export const STATUS_LABELS: Record<string, string> = {
   working: "Working on it",
   counsellor: "Counsellor (working)",
   escalated: "Escalated",
-  // §77.2. The status as the reports and badges name it. The outcome control
-  // says "Pending with our courier" — the brief specifies both wordings, and the
-  // difference is deliberate there: the outcome is a thing you choose to do, the
-  // status is a state the ticket is in.
+  // §77.2. One wording, everywhere: the outcome control, the badge, the reports'
+  // card and the export all read this. A status the team says out loud to each
+  // other should not have two names depending on which screen you are looking at.
   courier: "Pending with courier",
   future: "Future date",
   resolved: "Resolved",
