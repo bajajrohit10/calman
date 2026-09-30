@@ -15,12 +15,35 @@
  * check constraint reads that one, and a value this module invents would be
  * rejected on insert rather than quietly stored.
  */
-export const ISSUE_OPTIONS = [
+/**
+ * The five the Google Form offers, in the form's own order.
+ *
+ * §77.1. Separate from ISSUE_OPTIONS on purpose. parseSupportIssues works by
+ * removing known strings from the cell and keeping the remainder, so anything in
+ * this list is text the parser will subtract from a student's own words. Only the
+ * five the form can actually produce belong here — an option Calman invents would
+ * silently eat a phrase a student happened to type.
+ */
+export const FORM_ISSUE_OPTIONS = [
   "Tracking ID Issues",
   "Courier & Delivery Issues",
   "Link / Serial Key Mail not received",
   "Technical Issue / Course Extension",
   "Received Damaged/Defective Product",
+] as const;
+
+/**
+ * Every issue a ticket can carry: the form's five, plus the ones the team added
+ * afterwards.
+ *
+ * §77.1. "Pending books / Under printing" exists only inside Calman — the form
+ * does not offer it and the intake parser does not look for it — so it is last,
+ * after the five, and the order here is the order the checkboxes and the filter
+ * print.
+ */
+export const ISSUE_OPTIONS = [
+  ...FORM_ISSUE_OPTIONS,
+  "Pending books / Under printing",
 ] as const;
 
 export type IssueOption = (typeof ISSUE_OPTIONS)[number];
@@ -147,12 +170,12 @@ export function parseSupportIssues(raw: string | null | undefined): ParsedIssues
   const text = (raw ?? "").trim();
   if (!text) return { issues: [], other: null };
 
-  const found: IssueOption[] = [];
+  const found: (typeof FORM_ISSUE_OPTIONS)[number][] = [];
   let rest = text;
 
   // Longest first, so no option can be eaten by a shorter one that is a
   // substring of it.
-  for (const option of [...ISSUE_OPTIONS].sort((a, b) => b.length - a.length)) {
+  for (const option of [...FORM_ISSUE_OPTIONS].sort((a, b) => b.length - a.length)) {
     if (rest.includes(option)) {
       found.push(option);
       rest = rest.split(option).join(" ");
@@ -170,7 +193,7 @@ export function parseSupportIssues(raw: string | null | undefined): ParsedIssues
     .join(", ");
 
   // Report the options in the form's own order rather than longest-first.
-  const issues = ISSUE_OPTIONS.filter((o) => found.includes(o));
+  const issues = FORM_ISSUE_OPTIONS.filter((o) => found.includes(o));
   return { issues, other: other || null };
 }
 

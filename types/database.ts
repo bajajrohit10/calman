@@ -819,6 +819,25 @@ export type Database = {
           surface: string
         }[]
       }
+      assignment_in_day: {
+        Args: {
+          p_assigned_at: string
+          p_date: string
+          p_enquiry_id: number
+          p_status: Database["public"]["Enums"]["enquiry_status"]
+        }
+        Returns: boolean
+      }
+      assignment_is_pending: {
+        Args: {
+          p_assigned_at: string
+          p_carried_to: string
+          p_date: string
+          p_enquiry_id: number
+          p_status: Database["public"]["Enums"]["enquiry_status"]
+        }
+        Returns: boolean
+      }
       close_if_never_that_type: {
         Args: { p_enquiry_id: number; p_opened_id: number }
         Returns: boolean
@@ -1172,6 +1191,7 @@ export type Database = {
           call_date: string
           called_at: string
           called_by: string
+          credited_to: string | null
           discussion: string | null
           enquiry_id: number
           enquiry_type: Database["public"]["Enums"]["enquiry_type"]
@@ -1191,6 +1211,7 @@ export type Database = {
           call_date?: string
           called_at?: string
           called_by: string
+          credited_to?: string | null
           discussion?: string | null
           enquiry_id: number
           enquiry_type: Database["public"]["Enums"]["enquiry_type"]
@@ -1210,6 +1231,7 @@ export type Database = {
           call_date?: string
           called_at?: string
           called_by?: string
+          credited_to?: string | null
           discussion?: string | null
           enquiry_id?: number
           enquiry_type?: Database["public"]["Enums"]["enquiry_type"]
@@ -1232,6 +1254,13 @@ export type Database = {
           {
             foreignKeyName: "calls_called_by_fkey"
             columns: ["called_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calls_credited_to_fkey"
+            columns: ["credited_to"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -4045,6 +4074,7 @@ export type Database = {
           raised: number
           resolved: number
           set_future: number
+          to_courier: number
         }[]
       }
       report_institute_escalations: {
@@ -4236,7 +4266,13 @@ export type Database = {
         | "calling_team"
         | "counselling"
         | "manual"
-      ticket_status: "new" | "working" | "escalated" | "future" | "resolved"
+      ticket_status:
+        | "new"
+        | "working"
+        | "escalated"
+        | "courier"
+        | "future"
+        | "resolved"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -4471,7 +4507,14 @@ export const Constants = {
         "counselling",
         "manual",
       ],
-      ticket_status: ["new", "working", "escalated", "future", "resolved"],
+      ticket_status: [
+        "new",
+        "working",
+        "escalated",
+        "courier",
+        "future",
+        "resolved",
+      ],
     },
   },
 } as const

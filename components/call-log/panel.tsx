@@ -49,6 +49,7 @@ import { WhatsAppButton } from "@/components/whatsapp/button";
 import { stageOf } from "@/lib/whatsapp-text";
 
 import {
+  changeSaleCredit,
   logCall,
   removeEnquiryItem,
   updateEnquiryItem,
@@ -198,6 +199,7 @@ function PanelTimeline({
   leadVerification,
   viewerId,
   viewerIsAdmin,
+  escalatees,
   onEdited,
 }: {
   calls: PanelCall[];
@@ -206,10 +208,17 @@ function PanelTimeline({
   leadVerification: LeadVerification | null;
   viewerId?: string | null;
   viewerIsAdmin?: boolean;
+  /** §77.3: everybody a sale can be credited to. */
+  escalatees: { id: string; name: string }[];
   onEdited?: () => void;
 }) {
+  const router = useRouter();
   const [showAll, setShowAll] = useState(false);
   const [editing, setEditing] = useState<number | null>(null);
+  /** §77.3: which row's credit picker is open, if any. */
+  const [crediting, setCrediting] = useState<number | null>(null);
+  const [, startTransition] = useTransition();
+  const [, setResult] = useState<{ error: string | null } | null>(null);
 
   if (!calls.length) {
     return (
@@ -250,6 +259,53 @@ function PanelTimeline({
             {c.nextFollowUpDate ? (
               <span className="text-[11.5px] tabular-nums text-ink-3">
                 next {formatDate(c.nextFollowUpDate)}
+              </span>
+            ) : null}
+            {/* §77.3. Who the sale belongs to, said on the row rather than only
+                in a report a counsellor cannot see. Shown whenever it is not the
+                caller; the change control is the admins', because they are the
+                ones reading the report that made the mistake visible. */}
+            {c.outcome === "purchased" ? (
+              <span className="text-[11.5px] text-ink-3" data-testid="sale-credit">
+                credited to{" "}
+                <span className="text-ink-2">
+                  {c.creditedToName ?? c.callerName ?? "the caller"}
+                </span>
+                {viewerIsAdmin ? (
+                  <>
+                    {" "}
+                    <button
+                      type="button"
+                      onClick={() => setCrediting(crediting === c.id ? null : c.id)}
+                      className="underline-offset-2 hover:text-ink hover:underline"
+                    >
+                      change
+                    </button>
+                    {crediting === c.id ? (
+                      <Select
+                        aria-label="Credit the sale to"
+                        value={c.creditedToId ?? ""}
+                        onChange={(e) => {
+                          const to = e.target.value || null;
+                          setCrediting(null);
+                          startTransition(async () => {
+                            const res = await changeSaleCredit({ callId: c.id, creditedTo: to });
+                            setResult(res.error ? { error: res.error } : null);
+                            if (!res.error) router.refresh();
+                          });
+                        }}
+                        className="ml-1 inline-block w-[170px]"
+                      >
+                        <option value="">{c.callerName ?? "the caller"} (caller)</option>
+                        {escalatees.map((pp) => (
+                          <option key={pp.id} value={pp.id}>
+                            {pp.name}
+                          </option>
+                        ))}
+                      </Select>
+                    ) : null}
+                  </>
+                ) : null}
               </span>
             ) : null}
             {/* §29.4. Offered only where the database would allow it, so the
@@ -636,6 +692,15 @@ export function CallLogPanel({
 
   const purchased = outcome === "purchased";
   /**
+   * §77.3. Who the sale belongs to.
+   *
+   * Empty means the caller, which is what a null credited_to means in the table —
+   * so the common case writes nothing and needs no id for the person saving. The
+   * list is every active user, because a sale can be credited to somebody who was
+   * not on the call at all.
+   */
+  const [creditedTo, setCreditedTo] = useState("");
+  /**
    * What the call will write. The defaults line stands in when nobody named a
    * teacher, so it counts everywhere a line counts: what gets saved, whether
    * this enquiry will still have no interest against it, and the prompts that
@@ -921,6 +986,8 @@ export function CallLogPanel({
         discussion,
         nextFollowUpDate: outcomeTakesDate(outcome) ? followUpDate || null : null,
         issueCategory: asAfterSale ? issueCategory : null,
+        // §77.3. Null unless somebody else was named; null means the caller.
+        creditedTo: outcome === "purchased" ? creditedTo || null : null,
         ...(asAfterSale
           ? {
               ticketOrderId: orderId.trim() || null,
@@ -1292,6 +1359,33 @@ export function CallLogPanel({
             </Select>
           </label>
 
+          {/* §77.3. Only on a purchase, because only a sale moves: the call stays
+              the caller's wherever the credit goes. The empty option is the
+              caller, which is exactly what a null credited_to means, so the
+              common case stores nothing and the default cannot drift from the
+              fallback the reports use. */}
+          {purchased ? (
+            <label className="flex min-w-[200px] flex-col gap-1" data-testid="credit-to">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+                Credit to
+              </span>
+              <Select
+                aria-label="Credit the sale to"
+                value={creditedTo}
+                onChange={(e) => setCreditedTo(e.target.value)}
+              >
+                <option value="">{counsellorName ?? "Me"} (me)</option>
+                {escalatees
+                  .filter((pp) => pp.name !== counsellorName)
+                  .map((pp) => (
+                    <option key={pp.id} value={pp.id}>
+                      {pp.name}
+                    </option>
+                  ))}
+              </Select>
+            </label>
+          ) : null}
+
           {asAfterSale ? (
             <label className="flex min-w-[180px] flex-col gap-1">
               <span
@@ -1475,6 +1569,7 @@ export function CallLogPanel({
           type={enquiry.type}
           importance={enquiry.importance}
           leadVerification={enquiry.leadVerification}
+          escalatees={escalatees}
           viewerId={enquiry.viewerId}
           viewerIsAdmin={enquiry.viewerIsAdmin}
           onEdited={onSaved}

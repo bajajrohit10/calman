@@ -18,6 +18,9 @@ export const SUPPORT_TABS = [
   // Working excludes these, so the six tabs still sum to All.
   { id: "counsellor", label: "Counsellor" },
   { id: "escalated", label: "Escalated" },
+  // §77.2. Waiting on our own courier — the team still holds it, so it sits
+  // between the handovers and the parked ones rather than inside either.
+  { id: "courier", label: "Courier" },
   { id: "future", label: "Future date" },
   { id: "resolved", label: "Resolved" },
   { id: "all", label: "All" },
@@ -58,6 +61,11 @@ export const STATUS_LABELS: Record<string, string> = {
   working: "Working on it",
   counsellor: "Counsellor (working)",
   escalated: "Escalated",
+  // §77.2. The status as the reports and badges name it. The outcome control
+  // says "Pending with our courier" — the brief specifies both wordings, and the
+  // difference is deliberate there: the outcome is a thing you choose to do, the
+  // status is a state the ticket is in.
+  courier: "Pending with courier",
   future: "Future date",
   resolved: "Resolved",
 };
@@ -105,10 +113,12 @@ const str = (get: ParamReader, key: string) => {
 };
 
 /** The five real statuses, for the `status` query param. */
-export const TICKET_STATUSES = ["new", "working", "escalated", "future", "resolved"] as const;
+export const TICKET_STATUSES = [
+  "new", "working", "escalated", "courier", "future", "resolved",
+] as const;
 
 /** Everything that is not resolved — what "open" means everywhere in Support. */
-export const OPEN_STATUSES = ["new", "working", "escalated", "future"] as const;
+export const OPEN_STATUSES = ["new", "working", "escalated", "courier", "future"] as const;
 
 export type SupportQueueArgs = {
   p_tab: SupportTab;

@@ -46,6 +46,12 @@ export type NewItem = {
 export type LogCallInput = {
   enquiryId: number;
   outcome: CallOutcome | "";
+  /**
+   * §77.3. Who the sale belongs to, when that is not the caller. Null means the
+   * caller, and the reports read coalesce(credited_to, called_by) — so the common
+   * case stores nothing and the default can never drift from the fallback.
+   */
+  creditedTo?: string | null;
   discussion: string;
   nextFollowUpDate: string | null;
   issueCategory: IssueCategory | "" | null;
@@ -139,6 +145,9 @@ export type PanelCall = {
   discussion: string | null;
   nextFollowUpDate: string | null;
   callerName: string | null;
+  /** §77.3: who the sale belongs to, when that is not the caller. */
+  creditedToId: string | null;
+  creditedToName: string | null;
   /** §29.4: who logged it, so the row knows whether you may correct it. */
   calledBy: string;
 };
@@ -297,6 +306,8 @@ export async function loadPanelEnquiry(
       `id, enquiry_id, called_at, call_date, outcome, discussion, next_follow_up_date,
        issue_category, called_by,
        caller:profiles!calls_called_by_fkey ( full_name ),
+       credited:profiles!calls_credited_to_fkey ( full_name ),
+       credited_to,
        enquiry:enquiries!calls_enquiry_id_fkey!inner ( student_id )`,
     )
     .eq("enquiry.student_id", data.student_id)
@@ -314,6 +325,8 @@ export async function loadPanelEnquiry(
     issue_category: IssueCategory | null;
     called_by: string;
     caller: { full_name: string | null } | null;
+    credited_to: string | null;
+    credited: { full_name: string | null } | null;
   }[]).map((c) => ({
     id: c.id,
     enquiryId: c.enquiry_id,
@@ -324,6 +337,8 @@ export async function loadPanelEnquiry(
     discussion: c.discussion,
     nextFollowUpDate: c.next_follow_up_date,
     callerName: c.caller?.full_name ?? null,
+    creditedToId: c.credited_to ?? null,
+    creditedToName: c.credited?.full_name ?? null,
     calledBy: c.called_by,
   }));
 
@@ -966,6 +981,8 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
     // because a reopened lead's new enquiry has no assignment yet — the claim
     // below is what creates it, a moment after this insert.
     is_offer_call: isOfferCall,
+    // §77.3. Only the sale moves: called_by above is untouched.
+    credited_to: outcome === "purchased" ? (input.creditedTo ?? null) : null,
   })
     // called_at is a column default, so the only way to know the instant the
     // database recorded is to read it back. The claim below is stamped with it.
@@ -1611,4 +1628,51 @@ export async function updateTicketFields(input: {
   revalidatePath("/my-day");
 
   return { error: null, ok: "Ticket details saved." };
+}
+
+/**
+ * §77.3. Move a sale's credit.
+ *
+ * Admins only — a super_admin or manager reading the report is the person who
+ * knows the sale landed on the wrong row. The call's own attribution never moves:
+ * called_by is untouched, so the caller keeps the call and only the sale travels.
+ *
+ * No event table of its own. public.calls carries z_audit_calls, so the before
+ * and after are in audit_log with the actor already — writing a second record
+ * beside it would be two accounts of one change, and they would eventually differ.
+ */
+export async function changeSaleCredit(input: {
+  callId: number;
+  /** Null hands the sale back to whoever made the call. */
+  creditedTo: string | null;
+}): Promise<{ error: string | null; ok?: string }> {
+  const viewer = await requireUser();
+  if (!viewer.profile) return { error: "Your account is not active." };
+  if (!["super_admin", "manager"].includes(viewer.profile.role)) {
+    return { error: "Only a Super Admin or Manager can move a sale's credit." };
+  }
+
+  const supabase = await createClient();
+  const { data: call, error: findError } = await supabase
+    .from("calls")
+    .select("id, outcome, enquiry_id")
+    .eq("id", input.callId)
+    .maybeSingle();
+  if (findError) return { error: findError.message };
+  if (!call) return { error: "That call no longer exists." };
+  // Only a sale has a credit to move; anything else would be recording a fact
+  // about a call that never made one.
+  if (call.outcome !== "purchased") {
+    return { error: "Only a purchased call carries a sale to credit." };
+  }
+
+  const { error } = await supabase
+    .from("calls")
+    .update({ credited_to: input.creditedTo })
+    .eq("id", input.callId);
+  if (error) return { error: `Could not move the credit: ${error.message}` };
+
+  revalidatePath("/reports");
+  revalidatePath("/my-day");
+  return { error: null, ok: "Credit moved." };
 }

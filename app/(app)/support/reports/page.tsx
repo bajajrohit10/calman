@@ -133,6 +133,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
     escalated_team: number;
     escalated_institute: number;
     set_future: number;
+    /** §77.2. Moved to our courier that day. Not an escalation. */
+    to_courier: number;
     /** §65.3. A counsellor gave the ticket back to the team. Not an escalation. */
     handed_over: number;
     open_at_eod: number;
@@ -267,7 +269,16 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
       {/* 1. Open by status */}
       <Section title="Open tickets by status" hint="Everything not resolved, in scope.">
         <div className="flex flex-wrap gap-2" data-testid="by-status">
-          {["new", "working", "counsellor", "escalated_team", "escalated_institute", "future"].map((b) => {
+          {[
+            "new",
+            "working",
+            "counsellor",
+            "escalated_team",
+            "escalated_institute",
+            // §77.2. Its own card, between the handovers and the parked ones.
+            "courier",
+            "future",
+          ].map((b) => {
             const n = statusRows.find((r) => r.bucket === b)?.n ?? 0;
             const href =
               b === "escalated_team"
@@ -427,6 +438,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
                 <th className="px-1.5 py-[7px] text-right">Esc · team</th>
                 <th className="px-1.5 py-[7px] text-right">Esc · institute</th>
                 <th className="px-1.5 py-[7px] text-right">Future date</th>
+                {/* §77.2. Beside the escalations, counted apart from them. */}
+                <th className="px-1.5 py-[7px] text-right">To courier</th>
                 {/* §65.3. Beside the escalations and counted apart from them. */}
                 <th className="px-1.5 py-[7px] text-right">Handed over</th>
                 <th className="px-1.5 py-[7px] text-right">Open at EOD</th>
@@ -444,6 +457,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
                     r.escalated_team,
                     r.escalated_institute,
                     r.set_future,
+                    r.to_courier,
                     r.handed_over,
                   ].map(
                     (n, i) => (
@@ -474,6 +488,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
                     "escalated_team",
                     "escalated_institute",
                     "set_future",
+                    "to_courier",
                     "handed_over",
                   ] as const).map(
                     (k) => (
@@ -487,7 +502,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
                 </tr>
               ) : (
                 <tr>
-                  <td colSpan={8} className="px-3 py-5 text-center text-ink-3">
+                  <td colSpan={9} className="px-3 py-5 text-center text-ink-3">
                     Nothing in this range.
                   </td>
                 </tr>
