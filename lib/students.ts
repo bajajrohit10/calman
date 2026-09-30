@@ -37,6 +37,9 @@ export type HistoryCall = {
   /** §29.4: who logged it, so a row knows whether you may correct it. */
   called_by: string;
   caller: { full_name: string | null } | null;
+  /** §77.3: null means the caller, which is what the reports coalesce to. */
+  credited_to: string | null;
+  credited: { full_name: string | null } | null;
 };
 
 export type HistoryItem = {
@@ -153,6 +156,16 @@ export type StudentHistory = {
   supportTickets: Record<number, { id: number; status: string; kind: string | null }[]>;
 };
 
+/**
+ * The one query behind the whole history.
+ *
+ * A PostgREST select parameter, not SQL: whitespace is stripped and the rest is
+ * sent verbatim, so it takes no comments of any kind. Notes about it go here.
+ *
+ * §77.3/§79: `credited_to` and the profile it names are what let the history say
+ * who a sale belongs to, and an admin correct it from the page where the mistake
+ * is visible rather than only inside the call panel.
+ */
 const SELECT = `
   id, mobile, name, created_at,
   enquiries (
@@ -169,7 +182,9 @@ const SELECT = `
     calls!calls_enquiry_id_fkey (
       id, called_at, call_date, outcome, discussion, next_follow_up_date,
       whatsapp_sent, issue_category, order_id, called_by,
-      caller:profiles!calls_called_by_fkey ( full_name )
+      caller:profiles!calls_called_by_fkey ( full_name ),
+      credited_to,
+      credited:profiles!calls_credited_to_fkey ( full_name )
     ),
     enquiry_items (
       id, status, is_auto, order_id, amount,

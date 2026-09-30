@@ -8,6 +8,7 @@ import { EnquiryInterests } from "@/components/enquiry-interests";
 import { UnarchiveButton } from "@/components/unarchive-button";
 import { CallEdits } from "@/components/call-edits";
 import { EditCallRow } from "@/components/call-log/edit-call-row";
+import { SaleCreditCell } from "@/components/call-log/sale-credit-cell";
 import type { ItemMasters } from "@/components/interest-lines";
 import { Collapsed } from "@/components/enquiry-glance";
 import { Badge, cx } from "@/components/ui";
@@ -94,6 +95,7 @@ export function StudentHistoryView({
   canUnarchive,
   viewerId,
   viewerIsAdmin,
+  escalatees = [],
   onEdited,
 }: {
   student: StudentHistory;
@@ -105,6 +107,8 @@ export function StudentHistoryView({
   /** §29.4: who is looking, so a call row knows whether it is theirs. */
   viewerId?: string | null;
   viewerIsAdmin?: boolean;
+  /** §79: everybody a sale can be credited to, for the Outcome cell's picker. */
+  escalatees?: { id: string; name: string }[];
   onEdited?: () => void;
 }) {
   const today = istToday();
@@ -227,6 +231,7 @@ export function StudentHistoryView({
               student={student}
               viewerId={viewerId}
               viewerIsAdmin={viewerIsAdmin}
+              escalatees={escalatees}
               compact={split}
             />
           </div>
@@ -398,6 +403,13 @@ type UnifiedRow = {
   outcome: string;
   followUp: string;
   remarks: string;
+  /** §79: set on a purchased call, so the Outcome cell can say who owns it. */
+  credit?: {
+    callId: number;
+    callerName: string | null;
+    creditedToId: string | null;
+    creditedToName: string | null;
+  };
 };
 
 /**
@@ -432,6 +444,16 @@ function callHistory(enquiries: HistoryEnquiry[]): UnifiedRow[] {
         outcome: OUTCOME_LABELS[c.outcome],
         followUp: c.next_follow_up_date ? formatDate(c.next_follow_up_date) : "—",
         remarks: c.discussion ?? "",
+        // §79. Only a sale has a credit to argue about.
+        credit:
+          c.outcome === "purchased"
+            ? {
+                callId: c.id,
+                callerName: c.caller?.full_name ?? null,
+                creditedToId: c.credited_to ?? null,
+                creditedToName: c.credited?.full_name ?? null,
+              }
+            : undefined,
         call: {
           id: c.id,
           calledBy: c.called_by,
@@ -771,6 +793,7 @@ function CallsTable({
   student,
   viewerId,
   viewerIsAdmin,
+  escalatees,
   compact,
 }: {
   title: string;
@@ -778,6 +801,7 @@ function CallsTable({
   student: StudentHistory;
   viewerId?: string | null;
   viewerIsAdmin?: boolean;
+  escalatees: { id: string; name: string }[];
   compact?: boolean;
 }) {
   return (
@@ -829,7 +853,19 @@ function CallsTable({
                     />
                   ) : null}
                 </td>
-                <td className="px-1.5 py-[5px] text-ink">{r.outcome}</td>
+                <td className="px-1.5 py-[5px] align-top text-ink">
+                  {r.outcome}
+                  {/* §79. Under the outcome rather than in a column of its own:
+                      it is a fact about this outcome and only purchases have
+                      one, so a ninth column would be empty on most rows. */}
+                  {r.credit ? (
+                    <SaleCreditCell
+                      {...r.credit}
+                      escalatees={escalatees}
+                      viewerIsAdmin={viewerIsAdmin}
+                    />
+                  ) : null}
+                </td>
                 <td className="px-1.5 py-[5px] whitespace-nowrap text-ink-3">
                   {r.followUp}
                 </td>

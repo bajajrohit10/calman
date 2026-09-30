@@ -119,6 +119,7 @@ export function QuickAdd({
             counsellorName={counsellorName}
             viewerId={viewerId}
             viewerIsAdmin={viewerIsAdmin}
+            escalatees={escalatees}
           />
         ) : null}
       </div>

@@ -812,6 +812,18 @@ export function CallLogPanel({
     escalatees,
   };
 
+  /**
+   * §77.3, corrected by §79. What the credit picker needs, grouped like the
+   * blocks above it so both layouts are handed the same thing.
+   */
+  const creditFields: CreditFields = {
+    purchased,
+    creditedTo,
+    setCreditedTo,
+    escalatees,
+    counsellorName,
+  };
+
   function focusInterests() {
     firstTeacherRef.current?.focus();
     firstTeacherRef.current?.scrollIntoView({ block: "center" });
@@ -1261,6 +1273,7 @@ export function CallLogPanel({
           needsIssue={needsIssue}
           ticketFields={ticketFields}
           purchaseBlock={purchaseBlock}
+          creditFields={creditFields}
           followUpDate={followUpDate}
           setFollowUpDate={setFollowUpDate}
           pending={pending}
@@ -1361,32 +1374,7 @@ export function CallLogPanel({
             </Select>
           </label>
 
-          {/* §77.3. Only on a purchase, because only a sale moves: the call stays
-              the caller's wherever the credit goes. The empty option is the
-              caller, which is exactly what a null credited_to means, so the
-              common case stores nothing and the default cannot drift from the
-              fallback the reports use. */}
-          {purchased ? (
-            <label className="flex min-w-[200px] flex-col gap-1" data-testid="credit-to">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-                Credit to
-              </span>
-              <Select
-                aria-label="Credit the sale to"
-                value={creditedTo}
-                onChange={(e) => setCreditedTo(e.target.value)}
-              >
-                <option value="">{counsellorName ?? "Me"} (me)</option>
-                {escalatees
-                  .filter((pp) => pp.name !== counsellorName)
-                  .map((pp) => (
-                    <option key={pp.id} value={pp.id}>
-                      {pp.name}
-                    </option>
-                  ))}
-              </Select>
-            </label>
-          ) : null}
+          <CreditToField {...creditFields} wide />
 
           {asAfterSale ? (
             <label className="flex min-w-[180px] flex-col gap-1">
@@ -1756,6 +1744,7 @@ function FirstCallFields({
   asAfterSale,
   ticketFields,
   purchaseBlock,
+  creditFields,
   issueCategory,
   setIssueCategory,
   issueRef,
@@ -1812,6 +1801,8 @@ function FirstCallFields({
   asAfterSale: boolean;
   ticketFields: TicketFieldsProps;
   purchaseBlock: PurchaseBlockProps;
+  /** §79: the same picker the compact window gets. */
+  creditFields: CreditFields;
   issueCategory: IssueCategory | "";
   setIssueCategory: (v: IssueCategory | "") => void;
   issueRef: React.RefObject<HTMLSelectElement | null>;
@@ -2190,6 +2181,9 @@ function FirstCallFields({
         </Select>
       </FirstCallField>
 
+      {/* §79. Beside Outcome, exactly as in the compact window. */}
+      <CreditToField {...creditFields} />
+
       {/* §54.2. A date the team is not working says so, rather than being
           silently moved on save. Manual picking still allows any date — a
           counsellor who means Sunday may have a reason — but they find out
@@ -2264,6 +2258,69 @@ function FirstCallField({
         ) : null}
       </span>
       {children}
+    </label>
+  );
+}
+
+/**
+ * §77.3, corrected by §79. The sale-credit picker, drawn once for both layouts.
+ *
+ * §77.3 put this control inline in the compact window only. The panel has two
+ * layouts of the same call — the compact one for a lead with history and the
+ * first-call form for a lead without — and the first-call form has its own
+ * Outcome control, so it silently had no picker. That is the layout most first
+ * sales are logged through: the comment above PurchaseBlock in the first-call
+ * form says so in as many words. A counsellor closing a sale on the call that
+ * opened the lead could not credit anybody, and nothing failed loudly enough to
+ * notice.
+ *
+ * One component, rendered by both, is what stops that recurring. `wide` is the
+ * compact window's minimum width; the first-call grid sets its own.
+ *
+ * Only on a purchase, because only a sale moves: the call stays the caller's
+ * wherever the credit goes. The empty option is the caller, which is exactly
+ * what a null credited_to means, so the common case stores nothing and the
+ * default cannot drift from the fallback the reports read.
+ */
+type CreditFields = {
+  purchased: boolean;
+  creditedTo: string;
+  setCreditedTo: (v: string) => void;
+  escalatees: { id: string; name: string }[];
+  counsellorName?: string | null;
+};
+
+function CreditToField({
+  purchased,
+  creditedTo,
+  setCreditedTo,
+  escalatees,
+  counsellorName,
+  wide,
+}: CreditFields & { wide?: boolean }) {
+  if (!purchased) return null;
+  return (
+    <label
+      className={cx("flex flex-col gap-1", wide && "min-w-[200px]")}
+      data-testid="credit-to"
+    >
+      <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+        Credit to
+      </span>
+      <Select
+        aria-label="Credit the sale to"
+        value={creditedTo}
+        onChange={(e) => setCreditedTo(e.target.value)}
+      >
+        <option value="">{counsellorName ?? "Me"} (me)</option>
+        {escalatees
+          .filter((pp) => pp.name !== counsellorName)
+          .map((pp) => (
+            <option key={pp.id} value={pp.id}>
+              {pp.name}
+            </option>
+          ))}
+      </Select>
     </label>
   );
 }

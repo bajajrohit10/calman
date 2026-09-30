@@ -6,6 +6,7 @@ import { isAdmin, requireUser } from "@/lib/auth";
 import { isValidMobile, normaliseMobile } from "@/lib/mobile";
 import { loadStudentByMobile } from "@/lib/students";
 import { loadMasters } from "@/lib/masters";
+import { loadEscalatees } from "@/lib/escalatees";
 
 export const metadata = { title: "Student · Calman" };
 
@@ -31,9 +32,13 @@ export default async function Page({
   //
   // The interests table on each card is open and editable, so this page needs
   // the same item masters the call panel does.
-  const [student, masters] = await Promise.all([
+  // §79: and the people a sale can be credited to, for the history's own credit
+  // control. Alongside the other two for the same reason they are — none of the
+  // three needs anything from the others.
+  const [student, masters, escalatees] = await Promise.all([
     loadStudentByMobile(mobile),
     loadMasters(),
+    loadEscalatees(),
   ]);
   if (!student) notFound();
 
@@ -66,6 +71,7 @@ export default async function Page({
         canUnarchive={isAdmin(viewer.profile?.role ?? "counsellor")}
         viewerId={viewer.userId ?? null}
         viewerIsAdmin={isAdmin(viewer.profile?.role ?? "counsellor")}
+        escalatees={escalatees}
       />
     </div>
   );
