@@ -42,6 +42,8 @@ export type CallReportRow = {
   out_competitor: number;
   out_closed: number;
   out_after_sale: number;
+  /** §78. Leads handed to Support from the call panel's after-sale tick. */
+  out_ticket_raised: number;
   total_outcomes: number;
   // C. results
   customers_purchased: number;
@@ -120,6 +122,10 @@ export const CALL_REPORT_GROUPS: CallReportGroup[] = [
       { key: "out_competitor", label: "Competitor" },
       { key: "out_closed", label: "Closed" },
       { key: "out_after_sale", label: "After-sale" },
+      // §78. Its own column and not folded into Closed: the lead did close, but
+      // it closed because the work moved to Support, and a counsellor looking at
+      // "Closed" wants the wrong numbers and the dead ends.
+      { key: "out_ticket_raised", label: "Ticket raised" },
       { key: "total_outcomes", label: "Total outcomes", isTotal: true },
     ],
   },
@@ -154,6 +160,7 @@ export type CallReportMetric =
   | "out_competitor"
   | "out_closed"
   | "out_after_sale"
+  | "out_ticket_raised"
   | "total_outcomes"
   | "customers_purchased"
   | "purchase_amount"

@@ -2889,6 +2889,7 @@ export type Database = {
           out_competitor: number
           out_follow_up: number
           out_purchased: number
+          out_ticket_raised: number
           pli_issued: number
           purchase_amount: number
           stage_after_sale: number
@@ -3602,6 +3603,7 @@ export type Database = {
         | "pending_institute"
         | "resolved"
         | "not_interested"
+        | "ticket_raised"
       close_reason:
         | "wrong_number"
         | "superseded"
@@ -4035,8 +4037,8 @@ export type Database = {
           p_order_id?: string
           p_outcome?: string
           p_student_id: string
-          p_supersede_lead_id?: number
           p_teacher_id?: string
+          p_write_call?: boolean
         }
         Returns: Json
       }
@@ -4428,6 +4430,7 @@ export const Constants = {
         "pending_institute",
         "resolved",
         "not_interested",
+        "ticket_raised",
       ],
       close_reason: [
         "wrong_number",

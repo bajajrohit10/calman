@@ -1041,10 +1041,10 @@ export function CallLogPanel({
         if (res.existingSupportTicketId) {
           params.set("existing", String(res.existingSupportTicketId));
         }
-        // §69.2. The lead this was raised from had no calls, so it closed behind
-        // us. Said on arrival, because a row quietly leaving New Calls is the
-        // kind of thing that gets reported as data loss.
-        if (res.supersededLeadId) params.set("leadClosed", "1");
+        // §78. The lead this was raised from closed behind us. Said on arrival,
+        // and by number, because a row quietly leaving New Calls is the kind of
+        // thing that gets reported as data loss.
+        if (res.closedLeadId) params.set("leadClosed", String(res.closedLeadId));
         router.push(`/support/${res.supportTicketId}?${params.toString()}`);
         return res;
       }
@@ -1285,11 +1285,13 @@ export function CallLogPanel({
         </label>
 
         <div className="flex flex-wrap items-end gap-3">
-          {/* §25, rewritten by §38. Above the outcome because it changes what
-              the outcomes are: a counsellor who rang about a sale and found a
-              problem flips this first and the rest of the form follows. It no
-              longer converts anything — the two conversations coexist — so the
-              sentence is now the same whatever state this enquiry is in. */}
+          {/* §25, rewritten by §38 and again by §78. Above the outcome because
+              it changes what the outcomes are: a counsellor who rang about a
+              sale and found a problem flips this first and the rest of the form
+              follows. The sentence beside it is the same whatever state this
+              enquiry is in, and it has to say what saving does — §78 closes the
+              lead, and a counsellor should know that before pressing Save
+              rather than on the ticket page afterwards. */}
           {isPurchase ? (
             <label className="flex w-full cursor-pointer items-center gap-2 rounded-md border border-line-2 bg-surface-2 px-2.5 py-1.5 text-[12.5px] text-ink-2">
               <input
@@ -1307,8 +1309,8 @@ export function CallLogPanel({
               </span>
               {toAfterSale ? (
                 <span className="text-[11.5px] text-ink-3">
-                  Saving opens a separate ticket; the purchase enquiry stays as
-                  it is.
+                  Saving raises a Support ticket and hands this lead over: it
+                  closes, and counts as today&rsquo;s call on it.
                 </span>
               ) : null}
             </label>

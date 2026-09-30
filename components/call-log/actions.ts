@@ -131,7 +131,8 @@ export type LogCallResult = {
    * from a lead nobody had called yet. Named so the ticket page can say a row
    * left New Calls, rather than letting it vanish without explanation.
    */
-  supersededLeadId?: number;
+  /** §78. The lead the hand-off closed, so the ticket page can say which. */
+  closedLeadId?: number;
 };
 
 export type PanelCall = {
@@ -486,19 +487,30 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
   let type = enquiry.type as EnquiryType;
 
   /**
-   * §62.2. "This is an after-sale call" no longer converts anything.
+   * §62.2, as corrected by §78. "This is an after-sale call" hands the lead over.
    *
    * It used to call convert_to_after_sale, which closed the purchase enquiry as
-   * superseded and opened an after-sale one in counselling. Support is where
-   * that work lives now, so the save raises a ticket and leaves the lead exactly
-   * as it was — the student is still a live lead whatever went wrong with their
-   * order, and closing the one to record the other was always a side effect
-   * nobody asked for.
+   * superseded and opened an after-sale one in counselling. Support is where that
+   * work lives now, so the save raises a ticket.
    *
-   * No counselling call is written on this path: the call *is* the ticket, and
-   * its note is the ticket's description. The ticket is filed against the
-   * enquiry the student actually bought through rather than the lead being
-   * looked at, because that is what the complaint is about.
+   * §62.2 then left the lead exactly as it was, on the reasoning that the student
+   * is still a live lead whatever went wrong with their order. That reasoning was
+   * about the student and the consequence was about the row: with no counselling
+   * call written, the lead sat in New Calls for ever and stayed permanently
+   * *pending* on the assignment desk, because "still to do" means "no call since
+   * it was handed over" (§76). §69.2 closed the ones Quick Add had created seconds
+   * earlier and could not touch the rest.
+   *
+   * §78, one rule for both: the hand-off is written down as a call — outcome
+   * ticket_raised, note naming the ticket — and the lead closes as
+   * handed_to_support whatever its history. The student being a live lead is
+   * answered by Quick Add opening a fresh enquiry on the number, not by leaving a
+   * finished one open.
+   *
+   * The ticket is therefore filed against the lead it was raised from, which is
+   * what makes the closed enquiry's badge link to it. The won enquiry still
+   * supplies the order id and the teacher — what the complaint is *about* — but it
+   * is no longer the thing the ticket is hung on.
    */
   if (input.convertToAfterSale && type === "purchase") {
     const student = enquiry.student_id as string;
@@ -523,7 +535,9 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
 
     const { error: raiseError, raised } = await raiseTicketFromCounselling(supabase, {
       studentId: student,
-      enquiryId: won?.id ?? null,
+      // §78. The lead the panel was opened on: the one that closes, the one the
+      // hand-off call is written against, and the one the badge hangs off.
+      enquiryId: input.enquiryId,
       orderId: input.ticketOrderId?.trim() || won?.orderId || null,
       discussion: input.discussion,
       issueCategory: input.issueCategory || null,
@@ -535,15 +549,11 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
       // after-sale door below.
       escalatedTo: input.escalatedTo ?? null,
       teacherId: input.ticketTeacherId ?? won?.teacherId ?? null,
-      // The won enquiry is the student's purchase history and stays open to
-      // being read; only the old after-sale pipeline gets closed out.
-      closeEnquiry: false,
-      // §69.2. The lead this panel was opened on. Quick Add creates one just to
-      // get here, and since this path writes no counselling call it was being
-      // left in New Calls with no name, no product and nobody to ring it. The
-      // function closes it as superseded only when it has no calls and no
-      // interest lines, so a lead with real work on it stays open.
-      supersedeLeadId: input.enquiryId,
+      // §78. The two halves of the hand-off, in the ticket's own transaction: one
+      // counselling call so the lead is done for today, and the close so it stops
+      // being live counselling work.
+      closeEnquiry: true,
+      writeCall: true,
     });
     if (raiseError) return { error: `Could not raise the support ticket: ${raiseError}` };
 
@@ -557,9 +567,9 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
       ok: `Support ticket #${raised!.ticketId} created.`,
       supportTicketId: raised!.ticketId,
       existingSupportTicketId: raised!.existingOpenTicket ?? undefined,
-      // §69.2. Travels to the ticket page in the URL, like the rest of this
+      // §78. Travels to the ticket page in the URL, like the rest of this
       // message: the redirect unmounts the panel before a toast could render.
-      supersededLeadId: raised!.supersededLead ?? undefined,
+      closedLeadId: raised!.closedLead ?? undefined,
     };
   }
 

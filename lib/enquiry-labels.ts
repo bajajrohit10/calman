@@ -153,6 +153,11 @@ export const OUTCOME_LABELS: Record<CallOutcome, string> = {
   escalated: "Escalated — to somebody",
   pending_institute: "Pending with the institute",
   resolved: "Resolved",
+  // §78. Never offered in a dropdown — PURCHASE_OUTCOMES and AFTER_SALE_OUTCOMES
+  // are what a counsellor picks from, and this one is written by the after-sale
+  // hand-off itself. It needs a name because the history, the reports and the
+  // exports all read a call's outcome.
+  ticket_raised: "Handed to Support",
 };
 
 /** Short form for the history timeline, where the note carries the detail. */
@@ -168,6 +173,9 @@ export const OUTCOME_SHORT: Record<CallOutcome, string> = {
   escalated: "Escalated",
   pending_institute: "With institute",
   resolved: "Resolved",
+  // §78. The call's own note names the ticket, so the pill only has to say what
+  // happened. Same words as the report column.
+  ticket_raised: "Ticket raised",
 };
 
 export function outcomesFor(type: EnquiryType): readonly CallOutcome[] {
@@ -202,7 +210,10 @@ export function outcomeTone(
 ): "ok" | "danger" | "neutral" | "info" | "accent" | "warn" {
   if (outcome === "purchased" || outcome === "resolved") return "ok";
   if (outcome === "competitor" || outcome === "not_interested") return "danger";
-  if (outcome === "closed") return "neutral";
+  // §78. A hand-off to Support is finished work rather than a lost lead: the
+  // complaint is somebody else's now and the student may well buy later. Grey
+  // with the other close that is nobody's fault.
+  if (outcome === "closed" || outcome === "ticket_raised") return "neutral";
   if (outcome === "call_back") return "warn";
   if (outcome === "escalated") return "accent";
   return "info";

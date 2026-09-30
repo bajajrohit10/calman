@@ -112,9 +112,10 @@ export default async function Page({
           {one(sp.existing)
             ? ` This number already had open ticket #${one(sp.existing)} — they have not been merged.`
             : ""}
-          {/* §69.2. */}
-          {one(sp.leadClosed) === "1"
-            ? " The lead it was raised from had no calls, so it was closed — it is not left waiting in New Calls."
+          {/* §78. */}
+          {one(sp.leadClosed)
+            ? ` Enquiry #${one(sp.leadClosed)} is now handed to Support — closed,`
+              + " and counted as done for today. It is not left waiting in New Calls."
             : ""}
         </p>
       ) : null}

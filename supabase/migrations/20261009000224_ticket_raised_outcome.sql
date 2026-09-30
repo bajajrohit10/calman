@@ -1,0 +1,13 @@
+-- §78. A counselling outcome that means "this went to Support".
+--
+-- Alone in its own migration because a new enum value cannot be *used* in the
+-- transaction that adds it — the check constraint, the recompute branch and the
+-- report column that all name it are in 225.
+--
+-- Why an outcome at all, rather than reading the close reason: the desk grid and
+-- My Day both answer "is this lead still to do today" by asking whether a call
+-- was logged on it since it was handed over (§76). Ticking "this is an after-sale
+-- call" wrote no call, so the lead was never done — §69.2 closed the empty ones
+-- to get them off the grid, and the ones with a history stayed pending for ever.
+-- The hand-off *is* the day's work on that lead, so it is written down as a call.
+alter type public.call_outcome add value if not exists 'ticket_raised';
