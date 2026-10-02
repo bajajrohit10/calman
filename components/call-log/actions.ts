@@ -22,7 +22,7 @@ import {
   raiseTicketFromCounselling,
   wonEnquiryFor,
 } from "@/lib/support/from-counselling";
-import { upcomingDates, type WorkingDayInfo } from "@/lib/working-days-shape";
+import { type WorkingDayInfo } from "@/lib/working-days-shape";
 
 export type ItemDecision = {
   id: string;
@@ -245,21 +245,24 @@ export async function loadPanelEnquiry(
    * awaited before anything is *returned*, so an inactive account gets the
    * same refusal it always did.
    */
-  const nextDayPromise = supabase.rpc("next_working_day", {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any);
   /**
-   * §54.2. The picker's chips, and which of the next few weeks' dates are
-   * closed — computed where the arithmetic lives.
+   * §54.2, anchored by §79. The picker's chips, the default date, and which of
+   * the next few weeks' dates are closed — computed where the arithmetic lives.
    *
    * "+3 days" used to be Date + 3, so a Thursday offered a Sunday, and the
    * trigger on calls then silently stored the Monday. The chip and the record
-   * disagreed about what the counsellor had just promised the student. Same
-   * round trip as the working-day default above, so it costs nothing.
+   * disagreed about what the counsellor had just promised the student.
+   *
+   * §79 folded the separate next_working_day call into this one. The default is
+   * the first offset — one answer rather than two that could disagree — and the
+   * anchor is the later of today and the day this lead was already due, which is
+   * why the enquiry id goes in. It still runs beside the enquiry read rather than
+   * after it: the id is this function's own argument, so nothing has to come back
+   * before the question can be asked.
    */
-  const calendarPromise = supabase.rpc("working_day_info", {
+  const calendarPromise = supabase.rpc("follow_up_calendar", {
+    p_enquiry_id: enquiryId,
     p_offsets: [1, 3, 7],
-    p_dates: upcomingDates(istToday(), 45),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
   const viewerPromise = requireUser();
@@ -345,8 +348,8 @@ export async function loadPanelEnquiry(
 
   // Both in flight since before the enquiry came back; this is where the
   // answer is finally needed.
-  const nextDay = await nextDayPromise;
   const calendar = await calendarPromise;
+  const cal = (calendar.data as unknown as WorkingDayInfo | null) ?? null;
 
   const sourceNames = [
     ...new Set(
@@ -373,8 +376,9 @@ export async function loadPanelEnquiry(
       sourceId: data.source_id,
       importance: data.importance as Importance | null,
       leadVerification: data.lead_verification as LeadVerification | null,
-      defaultFollowUpDate: (nextDay.data as string | null) ?? null,
-      calendar: (calendar.data as unknown as WorkingDayInfo | null) ?? null,
+      // §79. The first chip and the default are the same date by construction.
+      defaultFollowUpDate: cal?.nextWorkingDay ?? null,
+      calendar: cal,
       status: data.status as EnquiryStatus,
       sourceNames,
       nextFollowUpDate: data.next_follow_up_date,

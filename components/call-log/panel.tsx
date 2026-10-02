@@ -40,7 +40,7 @@ import {
   istNextMonday,
   istToday,
 } from "@/lib/format";
-import { closedLabel, type WorkingDayInfo } from "@/lib/working-days-shape";
+import { closedLabel, earlyLabel, type WorkingDayInfo } from "@/lib/working-days-shape";
 import { interestShape } from "@/lib/interest-shape";
 import { parseProductText } from "@/lib/product-parser";
 import { formatMobile } from "@/lib/mobile";
@@ -1485,6 +1485,7 @@ export function CallLogPanel({
                   </button>
                 ))}
               </div>
+              <EarlyHint calendar={enquiry.calendar} />
             </div>
           ) : null}
 
@@ -2222,6 +2223,7 @@ function FirstCallFields({
             </button>
           ))}
         </div>
+        <EarlyHint calendar={calendar} />
       </FirstCallField>
 
       <div className="flex items-end gap-2">
@@ -2282,6 +2284,23 @@ function FirstCallField({
  * what a null credited_to means, so the common case stores nothing and the
  * default cannot drift from the fallback the reports read.
  */
+/**
+ * §79. "Called early — counted from 3 Oct", under the date in both layouts.
+ *
+ * Drawn once and rendered from each, the same way §79 had to fix the credit
+ * picker: the panel has two layouts of one call, and a hint added to only one of
+ * them is a hint most of the time absent.
+ */
+function EarlyHint({ calendar }: { calendar: WorkingDayInfo | null | undefined }) {
+  const label = earlyLabel(calendar);
+  if (!label) return null;
+  return (
+    <span className="text-[11px] text-ink-3" data-testid="called-early">
+      {label}
+    </span>
+  );
+}
+
 type CreditFields = {
   purchased: boolean;
   creditedTo: string;

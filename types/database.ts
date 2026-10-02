@@ -1158,18 +1158,21 @@ export type Database = {
           answered_at: string
           answered_by: string
           date: string
+          kind: string
           working: boolean
         }
         Insert: {
           answered_at?: string
           answered_by: string
           date: string
+          kind?: string
           working: boolean
         }
         Update: {
           answered_at?: string
           answered_by?: string
           date?: string
+          kind?: string
           working?: boolean
         }
         Relationships: [
@@ -3067,6 +3070,10 @@ export type Database = {
           term_name: string
           type: Database["public"]["Enums"]["enquiry_type"]
         }[]
+      }
+      follow_up_calendar: {
+        Args: { p_enquiry_id?: number; p_offsets?: number[] }
+        Returns: Json
       }
       held_checkouts_count: { Args: never; Returns: number }
       import_add_warning: {
