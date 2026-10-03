@@ -795,6 +795,25 @@ export type Database = {
           label: string
         }[]
       }
+      analytics_leads: {
+        Args: {
+          p_counsellor_id?: string
+          p_course_id?: string
+          p_from: string
+          p_source_id?: string
+          p_subject_id?: string
+          p_to: string
+        }
+        Returns: {
+          called: boolean
+          close_reason: Database["public"]["Enums"]["close_reason"]
+          enquiry_id: number
+          lost_reason: Database["public"]["Enums"]["lost_reason"]
+          product_text: string
+          status: Database["public"]["Enums"]["enquiry_status"]
+          term_id: string
+        }[]
+      }
       archive_enquiries: {
         Args: { p_filter: Json; p_ids: number[] }
         Returns: string
@@ -2811,6 +2830,111 @@ export type Database = {
           enquiry_id: number
           label: string
         }[]
+      }
+      analytics_by_institute: {
+        Args: {
+          p_counsellor_id?: string
+          p_course_id?: string
+          p_from: string
+          p_source_id?: string
+          p_subject_id?: string
+          p_to: string
+        }
+        Returns: {
+          amount: number
+          enquiries: number
+          in_progress: number
+          institute_id: string
+          institute_name: string
+          items_lost_competitor: number
+          lost_competitor: number
+          lost_no_response: number
+          lost_not_interested: number
+          lost_wrong_number: number
+          prev_enquiries: number
+          purchased: number
+          tickets: number
+        }[]
+      }
+      analytics_by_teacher: {
+        Args: {
+          p_counsellor_id?: string
+          p_course_id?: string
+          p_from: string
+          p_source_id?: string
+          p_subject_id?: string
+          p_to: string
+        }
+        Returns: {
+          amount: number
+          enquiries: number
+          in_progress: number
+          institute_id: string
+          institute_name: string
+          items_lost_competitor: number
+          lost_competitor: number
+          lost_no_response: number
+          lost_not_interested: number
+          lost_wrong_number: number
+          prev_enquiries: number
+          purchased: number
+          teacher_id: string
+          teacher_name: string
+          tickets: number
+        }[]
+      }
+      analytics_pivot: {
+        Args: {
+          p_counsellor_id?: string
+          p_course_id?: string
+          p_from: string
+          p_source_id?: string
+          p_subject_id?: string
+          p_to: string
+        }
+        Returns: {
+          course_id: string
+          course_name: string
+          course_sort: number
+          enquiries: number
+          prev_enquiries: number
+          purchased: number
+          revenue: number
+          subject_id: string
+          subject_name: string
+          subject_sort: number
+          term_id: string
+          term_name: string
+          term_sort: number
+        }[]
+      }
+      analytics_products: {
+        Args: {
+          p_counsellor_id?: string
+          p_course_id?: string
+          p_from: string
+          p_limit?: number
+          p_source_id?: string
+          p_subject_id?: string
+          p_to: string
+        }
+        Returns: {
+          enquiries: number
+          product: string
+          purchased: number
+          revenue: number
+        }[]
+      }
+      analytics_scope: {
+        Args: {
+          p_counsellor_id?: string
+          p_course_id?: string
+          p_from: string
+          p_source_id?: string
+          p_subject_id?: string
+          p_to: string
+        }
+        Returns: Json
       }
       archive_enquiries: {
         Args: { p_filter: Json; p_ids: number[] }
