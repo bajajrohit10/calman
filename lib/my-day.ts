@@ -72,6 +72,11 @@ export type MyDayRow = {
    * and this says the work has moved on, so it stops counting as not called.
    */
   carried_to: string | null;
+  /**
+   * §80.3. The source the lead came in by, for the New Calls AC/Fresh split.
+   * Null where no source was recorded, which counts as Fresh.
+   */
+  source_name: string | null;
 };
 
 /** One offer sub-tab: the offer, and what it is aimed at (§24.2). */

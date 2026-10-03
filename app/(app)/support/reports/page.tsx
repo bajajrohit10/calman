@@ -52,13 +52,31 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
   const teacherId = one(sp.teacher);
   const assignedTo = one(sp.assignedTo);
 
-  const args = {
-    p_from: from || null,
-    p_to: to || null,
+  /**
+   * §80.1. Two scopes, because there are two kinds of figure on this page.
+   *
+   * "How many are open" is a position: it is true as on now, and a ticket raised
+   * in August that is still open is part of today's queue whatever window the
+   * filter names. Asking it inside a raised-between range answered a different
+   * question — "of the tickets raised this week, how many are still open" — and
+   * the card then disagreed with the queue tab it linked to: 14 New in the queue,
+   * 4 on the card, with the range set to one day.
+   *
+   * "How many were raised, resolved, escalated" is an activity, and is only
+   * meaningful inside a period.
+   *
+   * Institute, teacher and assigned narrow both: they say *which* tickets are
+   * being counted, not *when*.
+   */
+  const who = {
     p_institute_id: instituteId || null,
     p_teacher_id: teacherId || null,
     p_assigned_to: assignedTo ? [assignedTo] : null,
   };
+  /** As on now: no date bound at all. in_report_scope reads null as "any". */
+  const asOn = { p_from: null, p_to: null, ...who };
+  /** In the period the filter bar names. */
+  const period = { p_from: from || null, p_to: to || null, ...who };
 
   const supabase = await createClient();
   const db = supabase.schema("support");
@@ -72,33 +90,24 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
         .eq("is_active", true)
         .order("full_name"),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      db.rpc("report_open_by_status", args as any),
+      db.rpc("report_open_by_status", asOn as any),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      db.rpc("report_ageing", args as any),
+      db.rpc("report_ageing", asOn as any),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      db.rpc("report_open_by_institute", args as any),
+      db.rpc("report_open_by_institute", asOn as any),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      db.rpc("report_open_by_issue", args as any),
+      db.rpc("report_open_by_issue", asOn as any),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      db.rpc("report_resolved_per_person", args as any),
+      db.rpc("report_resolved_per_person", period as any),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      db.rpc("report_time_to_resolve", args as any),
+      db.rpc("report_time_to_resolve", period as any),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      db.rpc("report_open_by_due", args as any),
-      db.rpc("report_daily", {
-        p_from: from || null,
-        p_to: to || null,
-        p_institute_id: args.p_institute_id,
-        p_teacher_id: args.p_teacher_id,
-        p_assigned_to: args.p_assigned_to,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any),
-      db.rpc("report_institute_escalations", {
-        p_institute_id: args.p_institute_id,
-        p_teacher_id: args.p_teacher_id,
-        p_assigned_to: args.p_assigned_to,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any),
+      db.rpc("report_open_by_due", asOn as any),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      db.rpc("report_daily", period as any),
+      // Already as-on-now: it lists the open escalations, not a period's worth.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      db.rpc("report_institute_escalations", who as any),
     ]);
 
   const statusRows = (status.data ?? []) as unknown as { bucket: string; n: number }[];
@@ -161,11 +170,18 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
    */
   const OPEN_SCOPE = { tab: "all", status: [...OPEN_STATUSES].join(",") };
 
-  /** A queue link carrying this report's own scope, so the two agree. */
+  /**
+   * A queue link carrying this report's own scope, so the two agree.
+   *
+   * §80.1. Deliberately no raised-between bound. Every card that links here is
+   * an as-on-now count, so carrying the period into the link is exactly how the
+   * card and the queue came to show different numbers: the card said 14 and its
+   * own link opened a queue filtered to 4. The institute, teacher and assigned
+   * filters do travel, because those narrow both the card and the queue the same
+   * way.
+   */
   const queueLink = (extra: Record<string, string>) => {
     const p = new URLSearchParams();
-    if (from) p.set("raisedFrom", from);
-    if (to) p.set("raisedTo", to);
     if (instituteId) p.set("institute", instituteId);
     if (teacherId) p.set("teacher", teacherId);
     if (assignedTo) p.set("assignedTo", assignedTo);
@@ -192,14 +208,14 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
     <div className="flex flex-col gap-5">
       <PageHeader
         title="Support reports"
-        description="Open work, ageing, and what was resolved. Raised dates are the form's own, in IST calendar days."
+        description="Open work is as on now, whatever period is set. The period applies to the raised, resolved and per-day figures. Raised dates are the form's own, in IST calendar days."
       />
 
       <form method="GET" className="rounded-lg border border-line bg-surface shadow-card">
         <div className="flex flex-wrap items-end gap-2 p-2.5">
           <label className="block">
             <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-              Raised between
+              Period (for raised / resolved figures)
             </span>
             <div className="flex items-center gap-1.5">
               <Input type="date" name="from" defaultValue={from} aria-label="From" />
@@ -267,7 +283,10 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
       ) : null}
 
       {/* 1. Open by status */}
-      <Section title="Open tickets by status" hint="Everything not resolved, in scope.">
+      <Section
+        title="Open tickets by status"
+        hint="Everything not resolved, as on now — the period above does not apply. These sum to the queue's open total."
+      >
         <div className="flex flex-wrap gap-2" data-testid="by-status">
           {[
             "new",
@@ -307,7 +326,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
       <div className="grid gap-3 lg:grid-cols-2">
         <Section
           title="Open by institute"
-          hint="Busiest first. Tickets with more than one institute are counted under each."
+          hint="As on now, busiest first. Tickets with more than one institute are counted under each."
         >
           <Table
             head={["Institute", "Open"]}
@@ -334,7 +353,10 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
           />
         </Section>
 
-        <Section title="Open by issue" hint="A ticket with two issues counts in both.">
+        <Section
+          title="Open by issue"
+          hint="As on now. A ticket with two issues counts in both."
+        >
           <Table
             head={["Issue", "Open"]}
             rows={issueRows.map((r) => [
@@ -364,7 +386,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
       {/* 3. Ageing */}
       <Section
         title="Ageing of open tickets"
-        hint="Calendar days since the form was submitted. The four bands are exclusive and sum to the open total; “over 3 days” is the roll-up beside them, so it deliberately overlaps."
+        hint="As on now. Calendar days since the form was submitted. The four bands are exclusive and sum to the open total; “over 3 days” is the roll-up beside them, so it deliberately overlaps."
       >
         <div className="flex flex-wrap gap-2" data-testid="ageing">
           {[

@@ -77,7 +77,16 @@ export function myDayTabSlug(key: MyDayTabKey): string {
 export type MyDaySubTab =
   | { kind: "all" }
   | { kind: "slot"; slot: number }
-  | { kind: "offer"; offerId: string };
+  | { kind: "offer"; offerId: string }
+  /**
+   * §80.3. Which door the lead came in by.
+   *
+   * Note the word "fresh" does double duty and the two meanings are unrelated:
+   * the *bucket* `fresh` is "handed out as a fresh call", which is what the New
+   * Calls tab is; this origin `fresh` is "not from the abandoned-checkout
+   * import". The labels are the team's own words, so they stay.
+   */
+  | { kind: "origin"; origin: "ac" | "fresh" };
 
 export const ALL_SUB_TAB: MyDaySubTab = { kind: "all" };
 
@@ -87,10 +96,30 @@ export const SLOT_SUB_TABS = [0, 1, 2, 3] as const;
 /** Which tabs carry slot sub-tabs: the ones whose leads climb the ladder. */
 export const SLOT_TABS: MyDayTabKey[] = ["assigned", "custom"];
 
+/**
+ * §80.3. The source the abandoned-checkout import files its leads under.
+ *
+ * Compared case-insensitively because that is how the import itself finds the
+ * row — `ilike("name", "AC")` in the import action — and a rule that matched
+ * more strictly here than there would split the pile it is meant to name.
+ */
+export const AC_SOURCE_NAME = "ac";
+
+export const ORIGIN_SUB_TABS = ["ac", "fresh"] as const;
+
+/** Which tabs carry origin sub-tabs: only the one that mixes the two piles. */
+export const ORIGIN_TABS: MyDayTabKey[] = ["new"];
+
+export const ORIGIN_LABELS: Record<(typeof ORIGIN_SUB_TABS)[number], string> = {
+  ac: "AC",
+  fresh: "Fresh",
+};
+
 /** Round-trips through a query string and a server action argument. */
 export function formatSubTab(sub: MyDaySubTab): string {
   if (sub.kind === "slot") return `slot:${sub.slot}`;
   if (sub.kind === "offer") return `offer:${sub.offerId}`;
+  if (sub.kind === "origin") return `origin:${sub.origin}`;
   return "all";
 }
 
@@ -106,6 +135,12 @@ export function parseSubTab(value: string | null | undefined): MyDaySubTab {
     const offerId = value.slice(6);
     return offerId ? { kind: "offer", offerId } : ALL_SUB_TAB;
   }
+  if (value.startsWith("origin:")) {
+    const origin = value.slice(7);
+    return origin === "ac" || origin === "fresh"
+      ? { kind: "origin", origin }
+      : ALL_SUB_TAB;
+  }
   return ALL_SUB_TAB;
 }
 
@@ -118,10 +153,24 @@ export function parseSubTab(value: string | null | undefined): MyDaySubTab {
  * add up.
  */
 export function matchesSubTab(
-  row: { slots_at_open: number; offer_ids: string[] | null },
+  row: {
+    slots_at_open: number;
+    offer_ids: string[] | null;
+    source_name?: string | null;
+  },
   sub: MyDaySubTab,
 ): boolean {
   if (sub.kind === "all") return true;
+  /**
+   * §80.3. AC is a positive test and Fresh is its complement, so the two always
+   * partition the tab and cannot both miss a row — including a lead with no
+   * source recorded at all, which is Fresh because it did not come from the
+   * import.
+   */
+  if (sub.kind === "origin") {
+    const isAc = (row.source_name ?? "").trim().toLowerCase() === AC_SOURCE_NAME;
+    return sub.origin === "ac" ? isAc : !isAc;
+  }
   // slots_at_open, not follow_up_slots_used: the rung is where the lead stood
   // when the day started, so calling it moves the row from Pending to Done
   // rather than out from under the counsellor working that rung (§24.1).
@@ -132,6 +181,7 @@ export function matchesSubTab(
 /** For the export filename: "assigned-calls-slot-2", "offer-calls-diwali". */
 export function subTabSlug(sub: MyDaySubTab, offerName?: string | null): string {
   if (sub.kind === "slot") return `slot-${sub.slot}`;
+  if (sub.kind === "origin") return sub.origin;
   if (sub.kind === "offer") {
     const stem = (offerName ?? "offer").toLowerCase().replace(/[^a-z0-9]+/g, "-");
     return stem.replace(/^-|-$/g, "") || "offer";

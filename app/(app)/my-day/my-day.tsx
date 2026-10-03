@@ -35,6 +35,9 @@ import { formatMobile } from "@/lib/mobile";
 import type { MyDayData, MyDayRow } from "@/lib/my-day";
 import {
   ALL_SUB_TAB,
+  ORIGIN_LABELS,
+  ORIGIN_SUB_TABS,
+  ORIGIN_TABS,
   formatSubTab,
   matchesSubTab,
   SLOT_SUB_TABS,
@@ -228,6 +231,26 @@ export function MyDay({
           label: nextFollowUpLabel(slot),
           sub: { kind: "slot" as const, slot },
           ...count({ kind: "slot", slot }),
+        })),
+      ];
+    }
+
+    /**
+     * §80.3. New Calls is two piles of work with one name.
+     *
+     * The abandoned-checkout import and everything else are called differently —
+     * the AC student has already put something in a basket — and the tab mixed
+     * them. AC and Fresh are complementary, so unlike the offer tabs these two
+     * do add up to All, and the chips say so by being counted the same way.
+     */
+    if (ORIGIN_TABS.includes(tab)) {
+      return [
+        all,
+        ...ORIGIN_SUB_TABS.map((origin) => ({
+          key: `origin:${origin}`,
+          label: ORIGIN_LABELS[origin],
+          sub: { kind: "origin" as const, origin },
+          ...count({ kind: "origin", origin }),
         })),
       ];
     }
@@ -732,7 +755,10 @@ export function MyDay({
           <span className="text-[11.5px] text-ink-3">
             {tab === "offer"
               ? "pending / total per offer"
-              : "pending / total, by the follow-up each lead was due at the start of the day"}
+              : ORIGIN_TABS.includes(tab)
+                // §80.3. And these two do add up to All, unlike the offer chips.
+                ? "pending / total — AC is the abandoned-checkout import, Fresh is everything else"
+                : "pending / total, by the follow-up each lead was due at the start of the day"}
           </span>
         </div>
       ) : null}

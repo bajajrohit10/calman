@@ -60,6 +60,15 @@ type Row = {
    */
   pipeline: "ticket" | "purchase" | null;
   checking: boolean;
+  /**
+   * §80.2. The lookup was asked and did not answer.
+   *
+   * Distinct from `status: null`, which means "asked, and this number is new".
+   * Conflating the two is how a dropped request became "New number · New
+   * enquiry into New Calls" and invited a second enquiry on a number that
+   * already had one.
+   */
+  lookupError: string | null;
 };
 
 /** How many rows the grid opens with, and how many more it grows by (§30.1). */
@@ -157,6 +166,7 @@ const blank = (arrivedAt = "", sourceId = ""): Row => ({
   decision: null,
   pipeline: null,
   checking: false,
+  lookupError: null,
 });
 
 /**
@@ -324,18 +334,40 @@ export function QuickAddGrid({
    * re-read to find out what it did.
    */
   const unchosen = filled.filter((r) => r.status && bothOpen(r.status) && !r.pipeline);
+  /**
+   * §80.2. A row whose lookup failed holds the grid too.
+   *
+   * Without this the save would read `status: null` as "new number" and open a
+   * second enquiry on a number that may already have one — the duplicate the
+   * whole lookup exists to prevent. Held rather than guessed, and the row says
+   * what to do about it.
+   */
+  const unknown = filled.filter((r) => r.lookupError);
   const saveable = filled.filter((r) => isValidMobile(normaliseMobile(r.mobile)));
   const blocked =
     invalid.length > 0 || undecided.length > 0 || unchosen.length > 0 ||
-    noteWithoutNumber.length > 0;
+    noteWithoutNumber.length > 0 || unknown.length > 0;
   /**
-   * §32.1. "Log call now" belongs to the single-number case — the phone is
-   * ringing and this row is the call. With a list on screen it is the wrong
-   * offer: it saves every row and then opens one of them, which is not what
-   * anybody means by a button on row four. So it appears only while exactly
-   * one row has a number in it, and comes back if the others are cleared.
+   * §32.1, corrected by §80.2. "Log call now" belongs to the single-number case
+   * — the phone is ringing and this row is the call. With a list on screen it is
+   * the wrong offer: it saves every row and then opens one of them, which is not
+   * what anybody means by a button on row four. So it appears only while exactly
+   * one number is on screen, and comes back if the others are cleared.
+   *
+   * §80.2: counted on rows carrying a *valid* number, not on any row with
+   * something in the mobile box. One stray digit in row two — the kind of typo
+   * you make reaching for Tab — made `filled.length` two and silently withdrew
+   * the button from row one, which was the whole call the counsellor was on.
+   * That read as the button never appearing, and a reload "fixed" it only
+   * because reloading cleared the typo.
+   *
+   * A half-typed number still blocks the *save* (`invalid` feeds `blocked`), so
+   * the button renders disabled with its reason rather than vanishing. A control
+   * that disappears tells you nothing; a disabled one tells you there is
+   * something to fix.
    */
-  const lone = filled.length === 1 ? filled[0] : null;
+  const numbered = filled.filter((r) => isValidMobile(normaliseMobile(r.mobile)));
+  const lone = numbered.length === 1 ? numbered[0] : null;
 
   useUnsavedClaim({
     isDirty: () => filled.length > 0 && !result,
@@ -394,9 +426,33 @@ export function QuickAddGrid({
   async function lookupRow(key: string, mobile: string): Promise<NumberStatus | null | undefined> {
     cancelLookup(key);
     asked.current.set(key, mobile);
-    patch(key, { checking: true });
-    const res = await lookupNumbers([mobile]);
+    patch(key, { checking: true, lookupError: null });
+
+    /**
+     * §80.2. Every path out of here clears `checking`.
+     *
+     * It used to await the lookup bare. A rejected request — a dropped
+     * connection, a 500, a session that expired — threw straight out of this
+     * function with `checking` still true, and the row sat on "checking…" with
+     * no Action and no explanation for as long as the tab stayed open. Typing
+     * elsewhere did not heal it and neither did the network coming back,
+     * because nothing reschedules a lookup that never returned.
+     */
+    let res: Awaited<ReturnType<typeof lookupNumbers>>;
+    try {
+      res = await lookupNumbers([mobile]);
+    } catch {
+      if (asked.current.get(key) !== mobile) return undefined;
+      patch(key, { checking: false, status: null, lookupError: "Lookup failed" });
+      return undefined;
+    }
     if (asked.current.get(key) !== mobile) return undefined;
+    // A returned error is the same fact as a thrown one: we do not know what
+    // this number is, and must not imply that we do.
+    if (res.error) {
+      patch(key, { checking: false, status: null, lookupError: res.error });
+      return undefined;
+    }
     const status = res.statuses?.[0] ?? null;
     /**
      * §42. Case 5 arrives with an answer already chosen.
@@ -411,7 +467,7 @@ export function QuickAddGrid({
       status && describeNumber(status, "purchase").case === 5
         ? ("log_call" as const)
         : null;
-    patch(key, { checking: false, status, decision: preset });
+    patch(key, { checking: false, status, decision: preset, lookupError: null });
     return status;
   }
 
@@ -427,6 +483,7 @@ export function QuickAddGrid({
       status: null,
       decision: null,
       pipeline: null,
+      lookupError: null,
       // A cleared status is not a verdict. Without this the row would read
       // "New number" for the 300 ms before anybody had asked — which is the
       // same wrong answer this brief is about, just briefer.
@@ -450,7 +507,7 @@ export function QuickAddGrid({
     // Typing already asked about this exact number; asking again on the way
     // out would only replace an answer with the same answer.
     if (asked.current.get(key) === mobile) return;
-    patch(key, { mobile, status: null, decision: null, pipeline: null });
+    patch(key, { mobile, status: null, decision: null, pipeline: null, lookupError: null });
     asked.current.set(key, mobile);
     if (!isValidMobile(mobile)) return;
     void lookupRow(key, mobile);
@@ -711,7 +768,9 @@ export function QuickAddGrid({
               // save around it.
               const needsNumber = Boolean(r.discussion.trim()) && !r.mobile.trim();
               const ready =
-                Boolean(mobile) && !bad && !r.checking && !waiting && !unpicked;
+                Boolean(mobile) && !bad && !r.checking && !waiting && !unpicked &&
+                // §80.2. Not knowing what the number is, is not a green light.
+                !r.lookupError;
 
               return (
                 <tr
@@ -1020,7 +1079,33 @@ function StatusCell({
   if (bad) {
     return <span className="text-[12px] font-medium text-danger">Not a valid number</span>;
   }
-  if (row.checking) return <span className="text-[12px] text-ink-3">checking…</span>;
+  // §80.2. Said out loud, and with the same spinner the save uses: this is the
+  // state the Action waits on, so a row sitting in it should look busy rather
+  // than look finished-and-empty.
+  if (row.checking) {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 text-[12px] text-ink-3"
+        data-testid="looking-up"
+      >
+        <Spinner /> Looking up…
+      </span>
+    );
+  }
+  /**
+   * §80.2. The lookup was asked and did not answer.
+   *
+   * Before the verdict, and never silently: "we do not know" has to read
+   * differently from "this number is new", because the two lead to opposite
+   * actions on a number that already has a lead.
+   */
+  if (row.lookupError) {
+    return (
+      <span className="text-[12px] font-medium text-warn" data-testid="lookup-failed">
+        {row.lookupError} — change a digit and back to retry
+      </span>
+    );
+  }
   if (!row.mobile.trim()) return <span className="text-[12px] text-ink-3">—</span>;
 
   const both = Boolean(row.status && bothOpen(row.status));
