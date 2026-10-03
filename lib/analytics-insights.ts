@@ -1,9 +1,10 @@
 import {
+  BEST_PRODUCT_MIN_ENQUIRIES,
+  BEST_PRODUCT_MIN_SALES,
   COMPETITOR_SHARE,
   DATA_GAP_SHARE,
   FALLING_DROP,
   FALLING_TOP_N,
-  FAST_MOVER_MIN_ENQUIRIES,
   LOW_CONVERSION_FRACTION_OF_TEAM,
   MAX_CARDS_PER_KIND,
   MAX_INSIGHT_CARDS,
@@ -12,35 +13,34 @@ import {
   NO_RESPONSE_SHARE,
   RISING_GROWTH,
   RISING_MIN_ENQUIRIES,
-  SUPPORT_DRAG_MIN_SALES,
-  SUPPORT_DRAG_PER_10_SALES,
+  SILENT_MIN_ENQUIRIES,
 } from "@/lib/analytics-thresholds";
 import {
   change,
   conversion,
   decided,
-  ticketsPer10,
   type AnalyticsScope,
-  type DemandRow,
-  type PivotRow,
+  type CourseRow,
+  type ProductRow,
+  type TeacherRow,
 } from "@/lib/analytics-shape";
 
 /**
- * §81.3. The insight panel: nine rules, at most eight cards.
+ * §81.3, trimmed by §82.4. Nine rules, at most five cards.
  *
- * Each card is one sentence carrying the numbers that produced it and the action
- * it suggests, and each links to the row it came from — a card you cannot open
- * is an assertion you have to take on trust, which is the opposite of what a
- * report on a working queue is for.
+ * Each card is one sentence carrying the numbers that produced it and a second
+ * line saying what to do, and each links to the row it came from — a card you
+ * cannot open is an assertion you have to take on trust, which is the opposite
+ * of what a report on a working queue is for.
  *
  * Pure: it takes the rows the page already has and returns cards. No reads, no
  * thresholds of its own (they all live in analytics-thresholds.ts), and nothing
  * that needs a clock — so the panel is testable by handing it rows.
  *
- * Ordered by how much a manager can do about it, not by size. A sale with no
- * amount is a two-minute fix that is wrong in the ledger right now; a falling
- * teacher is a conversation next week. When more than eight fire, the ones at
- * the bottom of this list are the ones that wait.
+ * §82.4 changed the ordering. §81 ranked by how actionable the rule was, which
+ * sounded right and meant a two-sale problem could outrank a two-hundred-lead
+ * one. Cards now carry the size of the thing they are about and the biggest
+ * wins, so the panel is about the business rather than about the rule set.
  */
 
 export type Insight = {
@@ -50,62 +50,66 @@ export type Insight = {
     | "missing-amount"
     | "low-conversion"
     | "competitor"
-    | "support-drag"
     | "no-response"
     | "rising"
     | "falling"
     | "data-gap"
-    | "fast-mover";
+    | "best-product"
+    | "silent";
   tone: "danger" | "warn" | "info" | "ok";
   /** One sentence, with the numbers in it. */
   text: string;
-  /** What to do about it. */
+  /** What to do about it, on its own line. */
   action: string;
-  /** Where the number came from. */
+  /**
+   * How big the thing is, in leads or sales. What the panel sorts on, so a card
+   * about 83 losses comes before one about 4.
+   */
+  magnitude: number;
   href: string;
 };
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 const money = (v: number) => `₹${Math.round(v).toLocaleString("en-IN")}`;
 
-/** The teacher/institute rows minus the Untagged pseudo-row, which no rule judges. */
-const real = (rows: DemandRow[]) => rows.filter((r) => r.institute_id || r.teacher_id);
-
 export function buildInsights(input: {
   scope: AnalyticsScope;
-  teachers: DemandRow[];
-  institutes: DemandRow[];
-  pivot: PivotRow[];
+  teachers: TeacherRow[];
+  courses: CourseRow[];
+  products: ProductRow[];
   /** The query string that reproduces the current filters, for the links. */
   query: string;
 }): Insight[] {
-  const { scope, pivot, query } = input;
-  const teachers = real(input.teachers);
-  const institutes = real(input.institutes);
+  const { scope, query } = input;
+  const now = scope.now;
+  // The Untagged pseudo-row is the measure of what cannot be attributed, not a
+  // dimension, so no rule judges it.
+  const teachers = input.teachers.filter((r) => r.teacher_id);
+  const courses = input.courses.filter((r) => r.course_id);
   const out: Insight[] = [];
   const link = (tab: string, anchor?: string) =>
     `/analytics?${query}&tab=${tab}${anchor ? `#${anchor}` : ""}`;
 
-  // 1. Sales with no amount. A ledger error, not a trend: first because it is
-  //    the only card here that is wrong rather than merely worth knowing.
-  if (scope.wonItemsNoAmount >= MISSING_AMOUNT_MIN) {
+  // Sales recorded with no amount. Understates revenue now, in the ledger.
+  if (now.wonItemsNoAmount >= MISSING_AMOUNT_MIN) {
     out.push({
       id: "missing-amount",
       kind: "missing-amount",
       tone: "danger",
       text:
-        `${scope.wonItemsNoAmount} of ${scope.wonItems} sales in this period have no amount, ` +
-        `so the ${money(scope.revenue)} revenue above is understated.`,
+        `${now.wonItemsNoAmount} of ${now.wonItems} sales have no amount, so the ` +
+        `${money(Number(now.revenue))} above is understated.`,
       action: "Enter the amounts on those enquiry pages.",
-      href: `/enquiries?status=won&from=${scope.from}&to=${scope.to}`,
+      magnitude: now.wonItemsNoAmount,
+      href: `/enquiries?status=won&createdFrom=${scope.from}&createdTo=${scope.to}`,
     });
   }
 
-  // 2. Demand that is not converting. Compared with the team's own average, so
-  //    the bar moves with the business.
-  const floor = scope.teamConversion * LOW_CONVERSION_FRACTION_OF_TEAM;
+  // Demand that is not converting, against the team's own average so the bar
+  // moves with the business.
+  const teamConv = conversion(now.purchased, now.leads) ?? 0;
+  const floor = teamConv * LOW_CONVERSION_FRACTION_OF_TEAM;
   for (const r of teachers) {
-    const name = r.teacher_name ?? "";
     const conv = conversion(r.purchased, r.enquiries);
     if (r.enquiries < MIN_ENQUIRIES_FOR_RATE || conv === null) continue;
     if (conv >= floor) continue;
@@ -114,15 +118,16 @@ export function buildInsights(input: {
       kind: "low-conversion",
       tone: "warn",
       text:
-        `${name} had ${r.enquiries} enquiries but converted ${pct(conv)} — under half the ` +
-        `team's ${pct(scope.teamConversion)}.`,
+        `${r.teacher_name}: ${r.enquiries} enquiries but ${pct(conv)} conversion, ` +
+        `under half the team's ${pct(teamConv)}.`,
       action: "Check price, availability and the counsellor pitch.",
-      href: link("teachers", `teacher-${r.teacher_id}`),
+      magnitude: r.enquiries,
+      href: link("teachers", `row-${r.teacher_id}`),
     });
   }
 
-  // 3. Competitor pressure, as a share of outcomes that have actually been
-  //    decided rather than of everything including work still in progress.
+  // Competitor pressure, as a share of outcomes that have actually been decided
+  // rather than of everything including work still in progress.
   for (const r of teachers) {
     const d = decided(r);
     if (d === 0 || r.enquiries < MIN_ENQUIRIES_FOR_RATE) continue;
@@ -133,67 +138,108 @@ export function buildInsights(input: {
       kind: "competitor",
       tone: "warn",
       text:
-        `${r.teacher_name} lost ${r.lost_competitor} of ${d} decided leads to a competitor ` +
-        `(${pct(share)})${r.items_lost_competitor ? `, ${r.items_lost_competitor} of them on their own lines` : ""}.`,
+        `${r.teacher_name} lost ${r.lost_competitor} of ${d} decided leads to a ` +
+        `competitor (${pct(share)}).`,
       action: "Competitor pressure — review the offer.",
-      href: link("teachers", `teacher-${r.teacher_id}`),
+      magnitude: r.lost_competitor,
+      href: link("teachers", `row-${r.teacher_id}`),
     });
   }
 
-  // 4. After-sale work eating the institute's own repeat business.
-  for (const r of institutes) {
-    const rate = ticketsPer10(r.tickets, r.purchased);
-    if (rate === null || rate < SUPPORT_DRAG_PER_10_SALES) continue;
-    if (r.purchased < SUPPORT_DRAG_MIN_SALES) continue;
-    out.push({
-      id: `support-drag:${r.institute_id}`,
-      kind: "support-drag",
-      tone: "warn",
-      text:
-        `${r.institute_name} raised ${r.tickets} support tickets against ${r.purchased} sales ` +
-        `— ${rate.toFixed(1)} per 10.`,
-      action: "Quality issue hurting repeat sales.",
-      href: link("institutes", `institute-${r.institute_id}`),
-    });
-  }
-
-  // 5. Students going quiet. The biggest loss bucket in this data and the one
-  //    the team can act on by changing when it calls.
-  if (scope.lostTotal > 0) {
-    const share = scope.lostNoResponse / scope.lostTotal;
+  // Students going quiet across the whole period.
+  if (now.lostTotal > 0) {
+    const share = now.lostNoResponse / now.lostTotal;
     if (share >= NO_RESPONSE_SHARE) {
       out.push({
         id: "no-response",
         kind: "no-response",
         tone: "warn",
         text:
-          `${scope.lostNoResponse} of ${scope.lostTotal} losses (${pct(share)}) were students ` +
-          `going silent after their follow-ups ran out.`,
+          `${now.lostNoResponse} of ${now.lostTotal} losses (${pct(share)}) were ` +
+          `students going silent after their follow-ups ran out.`,
         action: "Review follow-up timing and script.",
-        href: `/enquiries?status=lost&lostReason=max_followups&from=${scope.from}&to=${scope.to}`,
+        magnitude: now.lostNoResponse,
+        href: `/enquiries?status=lost&lostReason=max_followups&createdFrom=${scope.from}&createdTo=${scope.to}`,
       });
     }
   }
 
-  // 6. A course and term pulling ahead of the same length of time before it.
-  for (const c of pivot) {
-    const g = change(c.enquiries, c.prev_enquiries);
-    if (g === null || g < RISING_GROWTH) continue;
-    if (c.enquiries < RISING_MIN_ENQUIRIES) continue;
+  /**
+   * §82.4. Where leads go silent, by subject.
+   *
+   * The same fact as the card above, cut by course and subject, which is what
+   * makes it actionable: "review the follow-up script" is advice you can only
+   * take if you know which conversation to review.
+   */
+  const silent = courses
+    .filter((r) => r.enquiries >= SILENT_MIN_ENQUIRIES && r.lost_no_response > 0)
+    .map((r) => ({ r, share: r.lost_no_response / r.enquiries }))
+    .sort((a, b) => b.share - a.share);
+  if (silent.length) {
+    const { r, share } = silent[0];
     out.push({
-      id: `rising:${c.course_id}:${c.subject_id ?? "none"}:${c.term_id ?? "none"}`,
-      kind: "rising",
-      tone: "ok",
+      id: `silent:${r.course_id}:${r.subject_id ?? "none"}`,
+      kind: "silent",
+      tone: "warn",
       text:
-        `${c.course_name} · ${c.subject_name} for ${c.term_name} is up ${pct(g)} ` +
-        `(${c.prev_enquiries} → ${c.enquiries}).`,
-      action: "Demand rising — campaign now.",
+        `${r.course_name} · ${r.subject_name}: ${r.lost_no_response} of ${r.enquiries} ` +
+        `leads (${pct(share)}) went silent — the highest share of any subject.`,
+      action: "Review the follow-up script for this subject.",
+      magnitude: r.lost_no_response,
       href: link("products"),
     });
   }
 
-  // 7. A big teacher losing ground. Only among the ones big enough that a drop
-  //    is a trend rather than a quiet week.
+  /**
+   * §82.4. The product line that converts best.
+   *
+   * Read off what students typed rather than off the tags, because the tags say
+   * which teacher and the text says which *offer* — "Audit Full Course" and
+   * "Audit Fast Track" tag identically and sell at different rates.
+   */
+  const best = input.products
+    .filter(
+      (p) =>
+        p.enquiries >= BEST_PRODUCT_MIN_ENQUIRIES && p.purchased >= BEST_PRODUCT_MIN_SALES,
+    )
+    .map((p) => ({ p, conv: p.purchased / p.enquiries }))
+    .sort((a, b) => b.conv - a.conv);
+  if (best.length) {
+    const { p, conv } = best[0];
+    out.push({
+      id: "best-product",
+      kind: "best-product",
+      tone: "ok",
+      text:
+        `"${p.product}" converts at ${pct(conv)} on ${p.enquiries} enquiries — the ` +
+        `best of anything students asked for by name.`,
+      action: "Lead with this in campaigns.",
+      magnitude: p.enquiries,
+      href: link("products"),
+    });
+  }
+
+  // A course and subject pulling ahead of the same length of time before it.
+  // Dormant until there are two populated windows; see `change`.
+  for (const r of courses) {
+    const g = change(r.enquiries, r.prev_enquiries);
+    if (g === null || g < RISING_GROWTH) continue;
+    if (r.enquiries < RISING_MIN_ENQUIRIES) continue;
+    out.push({
+      id: `rising:${r.course_id}:${r.subject_id ?? "none"}`,
+      kind: "rising",
+      tone: "ok",
+      text:
+        `${r.course_name} · ${r.subject_name} is up ${pct(g)} ` +
+        `(${r.prev_enquiries} to ${r.enquiries}).`,
+      action: "Demand rising — campaign now.",
+      magnitude: r.enquiries,
+      href: link("products"),
+    });
+  }
+
+  // A big teacher losing ground, among the ones big enough that a drop is a
+  // trend rather than a quiet week. Dormant for the same reason.
   const topTeachers = [...teachers]
     .sort((a, b) => b.enquiries - a.enquiries)
     .slice(0, FALLING_TOP_N);
@@ -205,74 +251,41 @@ export function buildInsights(input: {
       kind: "falling",
       tone: "warn",
       text:
-        `${r.teacher_name} fell ${pct(Math.abs(g))} against the previous ${scope.days} days ` +
-        `(${r.prev_enquiries} → ${r.enquiries}).`,
+        `${r.teacher_name} fell ${pct(Math.abs(g))} against the previous ` +
+        `${scope.days} days (${r.prev_enquiries} to ${r.enquiries}).`,
       action: "Falling demand — worth asking why.",
-      href: link("teachers", `teacher-${r.teacher_id}`),
+      magnitude: r.prev_enquiries - r.enquiries,
+      href: link("teachers", `row-${r.teacher_id}`),
     });
   }
 
-  // 8. Tagging. Every rate on this page is computed over tagged leads, so a
-  //    large untagged share is a statement about the page's own reliability.
-  const teacherGap = scope.leads > 0 ? scope.untagged / scope.leads : 0;
-  if (teacherGap > DATA_GAP_SHARE) {
+  // Tagging. Every rate on this page is computed over tagged leads, so a large
+  // untagged share is a statement about the page's own reliability.
+  const gap = now.leads > 0 ? scope.untagged / now.leads : 0;
+  if (gap > DATA_GAP_SHARE) {
     out.push({
       id: "data-gap:teacher",
       kind: "data-gap",
       tone: "info",
       text:
-        `${scope.untagged} of ${scope.leads} leads (${pct(teacherGap)}) name no teacher, ` +
-        `so every rate here is computed on the other ${scope.taggedLeads}.`,
+        `${scope.untagged} of ${now.leads} leads (${pct(gap)}) name no teacher, so ` +
+        `every rate here is computed on the other ${scope.taggedLeads}.`,
       action: "Tighten tagging at Quick Add.",
-      href: link("teachers", "untagged"),
-    });
-  }
-  const termGap =
-    scope.leads > 0
-      ? pivot.filter((c) => c.term_name === "Unknown").reduce((n, c) => n + c.enquiries, 0) /
-        Math.max(scope.pivotCells, 1)
-      : 0;
-  if (termGap > DATA_GAP_SHARE) {
-    out.push({
-      id: "data-gap:term",
-      kind: "data-gap",
-      tone: "info",
-      text: `${pct(termGap)} of pivot cells carry no term, so the Unknown column is the largest.`,
-      action: "Tighten tagging at Quick Add.",
-      href: link("products"),
-    });
-  }
-
-  // 9. The one to repeat. Last because it is the only card that is good news,
-  //    and a panel that leads with good news buries the rest.
-  const movers = pivot
-    .filter((c) => c.enquiries >= FAST_MOVER_MIN_ENQUIRIES && c.purchased > 0)
-    .map((c) => ({ c, conv: c.purchased / c.enquiries }))
-    .sort((a, b) => b.conv - a.conv);
-  if (movers.length) {
-    const { c, conv } = movers[0];
-    out.push({
-      id: `fast-mover:${c.course_id}:${c.subject_id ?? "none"}:${c.term_id ?? "none"}`,
-      kind: "fast-mover",
-      tone: "ok",
-      text:
-        `${c.course_name} · ${c.subject_name} for ${c.term_name} converts best at ${pct(conv)} ` +
-        `(${c.purchased} of ${c.enquiries}).`,
-      action: "Push this in marketing.",
-      href: link("products"),
+      magnitude: scope.untagged,
+      href: link("teachers", "row-untagged"),
     });
   }
 
   /**
-   * Two per rule, then the first eight.
+   * Biggest first, then two per rule, then five.
    *
-   * `out` is already in rule order — most actionable first — and each rule
-   * pushes its own rows in the order the table gave them, which for the demand
-   * rules is enquiries descending. So taking the first two of each kind keeps the
-   * biggest instance of each problem rather than an arbitrary one.
+   * The per-kind cap survives from §81, where one rule fired on five rows at
+   * once and filled the whole panel. With five cards it matters more, not less:
+   * one rule having a bad day should not cost the other eight their voice.
    */
+  const ranked = [...out].sort((a, b) => b.magnitude - a.magnitude);
   const perKind = new Map<Insight["kind"], number>();
-  const spread = out.filter((i) => {
+  const spread = ranked.filter((i) => {
     const n = (perKind.get(i.kind) ?? 0) + 1;
     perKind.set(i.kind, n);
     return n <= MAX_CARDS_PER_KIND;

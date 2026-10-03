@@ -5,9 +5,10 @@ import { createClient } from "@/lib/supabase/server";
 import type {
   AnalyticsFilters,
   AnalyticsScope,
-  DemandRow,
-  PivotRow,
+  CourseRow,
+  InstituteRow,
   ProductRow,
+  TeacherRow,
 } from "@/lib/analytics-shape";
 
 /**
@@ -35,15 +36,16 @@ function args(f: AnalyticsFilters) {
     p_subject_id: f.subjectId || null,
     p_source_id: f.sourceId || null,
     p_counsellor_id: f.counsellorId || null,
+    p_term_id: f.termId || null,
   };
 }
 
 export async function loadAnalytics(f: AnalyticsFilters): Promise<{
   error: string | null;
   scope?: AnalyticsScope;
-  teachers: DemandRow[];
-  institutes: DemandRow[];
-  pivot: PivotRow[];
+  teachers: TeacherRow[];
+  institutes: InstituteRow[];
+  courses: CourseRow[];
   products: ProductRow[];
   /** Wall time in ms for the whole batch, for the timing note the brief asks for. */
   timings: Record<string, number>;
@@ -64,7 +66,7 @@ export async function loadAnalytics(f: AnalyticsFilters): Promise<{
   const started = Date.now();
 
   // Together: they read the same window and none of them needs another's answer.
-  const [scope, teachers, institutes, pivot, products] = await Promise.all([
+  const [scope, teachers, institutes, courses, products] = await Promise.all([
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     supabase.rpc("analytics_scope", a as any),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -72,7 +74,7 @@ export async function loadAnalytics(f: AnalyticsFilters): Promise<{
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     supabase.rpc("analytics_by_institute", a as any),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    supabase.rpc("analytics_pivot", a as any),
+    supabase.rpc("analytics_by_course", a as any),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     supabase.rpc("analytics_products", { ...a, p_limit: 20 } as any),
   ]);
@@ -82,16 +84,16 @@ export async function loadAnalytics(f: AnalyticsFilters): Promise<{
     scope.error?.message ??
     teachers.error?.message ??
     institutes.error?.message ??
-    pivot.error?.message ??
+    courses.error?.message ??
     products.error?.message ??
     null;
 
   return {
     error: firstError,
     scope: (scope.data as unknown as AnalyticsScope) ?? undefined,
-    teachers: (teachers.data ?? []) as unknown as DemandRow[],
-    institutes: (institutes.data ?? []) as unknown as DemandRow[],
-    pivot: (pivot.data ?? []) as unknown as PivotRow[],
+    teachers: (teachers.data ?? []) as unknown as TeacherRow[],
+    institutes: (institutes.data ?? []) as unknown as InstituteRow[],
+    courses: (courses.data ?? []) as unknown as CourseRow[],
     products: (products.data ?? []) as unknown as ProductRow[],
     timings,
   };

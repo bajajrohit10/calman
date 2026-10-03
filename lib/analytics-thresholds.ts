@@ -40,24 +40,12 @@ export const RISING_MIN_ENQUIRIES = 15;
 export const FALLING_DROP = 0.3;
 export const FALLING_TOP_N = 10;
 
-/**
- * Tickets per ten sales. Three is the point where after-sale work stops looking
- * like the ordinary cost of selling: at 30 days the worst institute sat at 4.4
- * and the median was under one, so this separates them without flagging the
- * whole list.
+/*
+ * §82.3. Two thresholds stood here, for a support-drag rule that read ticket
+ * counts beside conversion rates. Both are gone with the rule: a ticket count in
+ * a conversion report invited a causal reading nothing here supports, and the
+ * Support reports answer the question with the context it needs.
  */
-export const SUPPORT_DRAG_PER_10_SALES = 3;
-
-/**
- * …and only where there were enough sales for a per-ten rate to mean anything.
- *
- * Without a floor the rule fires hardest on the smallest institutes: one sale
- * and one ticket is "10 per 10 sales", which read as a crisis and was a
- * rounding error. Five sales is the point where the ratio stops being an
- * artefact of the denominator. Measured: without this, five institutes fired and
- * three of them had two sales or fewer.
- */
-export const SUPPORT_DRAG_MIN_SALES = 5;
 
 /**
  * Tagging gap. Teacher tags were missing on 19.7% of leads and terms on ~27%, so
@@ -65,8 +53,29 @@ export const SUPPORT_DRAG_MIN_SALES = 5;
  */
 export const DATA_GAP_SHARE = 0.2;
 
-/** Fast movers: the best conversion among rows with enough leads to trust it. */
-export const FAST_MOVER_MIN_ENQUIRIES = 10;
+/**
+ * §82.4. The best-converting product line, on two floors rather than one.
+ *
+ * "Product" here is the product_text a counsellor transcribes, because that is
+ * the only place the *offer* survives — "Audit Full Course" and "Audit Fast
+ * Track" tag to the same teacher and the same subject and sell at different
+ * rates, which is the whole point of the card.
+ *
+ * Set at twenty first, which was wrong: the busiest single string carries eight
+ * enquiries over thirty days, so the rule could never fire. Five enquiries *and*
+ * two sales instead — the second floor is what stops one lucky sale on a string
+ * nobody else typed becoming a campaign recommendation. Both want raising as
+ * these strings accumulate; the comment is here so the next person knows the
+ * numbers are provisional rather than considered.
+ */
+export const BEST_PRODUCT_MIN_ENQUIRIES = 5;
+export const BEST_PRODUCT_MIN_SALES = 2;
+
+/**
+ * §82.4. Where leads go silent: a course and subject needs this many enquiries
+ * before its no-response share means anything. Fifteen, as the brief set it.
+ */
+export const SILENT_MIN_ENQUIRIES = 15;
 
 /**
  * §81 decision. Any sale with no amount understates revenue, so the floor is one
@@ -82,8 +91,12 @@ export const MISSING_AMOUNT_MIN = 1;
  */
 export const NO_RESPONSE_SHARE = 0.35;
 
-/** At most this many cards, so the panel stays a summary rather than a list. */
-export const MAX_INSIGHT_CARDS = 8;
+/**
+ * At most this many cards. §82.4 cut it from eight to five: eight filled the
+ * screen above the numbers they were about, and the sixth to eighth were never
+ * the ones anybody acted on.
+ */
+export const MAX_INSIGHT_CARDS = 5;
 
 /**
  * …and at most this many from any one rule.

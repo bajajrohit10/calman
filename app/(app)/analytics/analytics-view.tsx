@@ -5,101 +5,380 @@ import { useMemo, useState } from "react";
 
 import { Button, Input, PageHeader, Select, cx } from "@/components/ui";
 import {
+  avgSale,
   change,
   conversion,
-  ticketsPer10,
   type AnalyticsScope,
-  type DemandRow,
-  type PivotRow,
+  type CourseRow,
+  type InstituteRow,
   type ProductRow,
+  type Row,
+  type TeacherRow,
+  type Totals,
 } from "@/lib/analytics-shape";
 import type { Insight } from "@/lib/analytics-insights";
-
-type Metric = "enquiries" | "purchased" | "revenue" | "conversion";
 
 const LABEL = "text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3";
 const money = (v: number) => (v ? `₹${Math.round(v).toLocaleString("en-IN")}` : "—");
 const num = (v: number) => (v ? String(v) : "—");
 const pct = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}%`);
 
-/** ▲12% / ▼30% / — when the previous window had nothing to compare with. */
-function Delta({ now, before }: { now: number; before: number }) {
+/** §82.4. How many rows before the list is folded behind "Show all". */
+const COLLAPSED_ROWS = 10;
+
+/** ▲12% / ▼30% / nothing when the previous window had no basis for a comparison. */
+function Delta({ now, before, invert }: { now: number; before: number; invert?: boolean }) {
   const c = change(now, before);
-  if (c === null) {
-    return (
-      <span className="text-[11.5px] text-ink-3" title="No leads in the previous period">
-        —
-      </span>
-    );
-  }
-  if (Math.abs(c) < 0.005) return <span className="text-[11.5px] text-ink-3">0%</span>;
+  if (c === null) return <span className="text-[11px] text-ink-3">—</span>;
+  if (Math.abs(c) < 0.005) return <span className="text-[11px] text-ink-3">0%</span>;
   const up = c > 0;
+  // §82.1. On a Lost column a rise is bad news, so the colour follows the
+  // meaning rather than the arithmetic. The arrow still follows the number.
+  const good = invert ? !up : up;
   return (
-    <span className={cx("text-[11.5px] tabular-nums", up ? "text-ok" : "text-danger")}>
+    <span className={cx("text-[11px] tabular-nums", good ? "text-ok" : "text-danger")}>
       {up ? "▲" : "▼"}
       {Math.abs(Math.round(c * 100))}%
     </span>
   );
 }
 
-/** The demand table's columns, in screen order. Shared with the CSV export. */
-const DEMAND_COLUMNS: {
+/**
+ * §82.1. The metrics strip.
+ *
+ * Nine figures for the period with the change in each beneath, from one SQL
+ * function called twice — so the strip cannot drift from the tables about what
+ * "purchased" counts. It sits above the insights because it is the thing a
+ * manager came to read; the cards are what they would not have thought to look
+ * for.
+ */
+function MetricStrip({ now, prev, days }: { now: Totals; prev: Totals; days: number }) {
+  const cards: {
+    label: string;
+    value: string;
+    now: number;
+    before: number;
+    invert?: boolean;
+    hint?: string;
+  }[] = [
+    { label: "Leads", value: String(now.leads), now: now.leads, before: prev.leads },
+    {
+      label: "Called",
+      value: pct(conversion(now.called, now.leads)),
+      now: now.called,
+      before: prev.called,
+      hint: `${now.called} of ${now.leads}`,
+    },
+    { label: "Purchased", value: String(now.purchased), now: now.purchased, before: prev.purchased },
+    {
+      label: "Revenue",
+      value: money(Number(now.revenue)),
+      now: Number(now.revenue),
+      before: Number(prev.revenue),
+    },
+    {
+      label: "Conversion",
+      value: pct(conversion(now.purchased, now.leads)),
+      now: now.purchased,
+      before: prev.purchased,
+    },
+    {
+      label: "Avg sale",
+      value: money(avgSale(Number(now.revenue), now.wonItems) ?? 0),
+      now: Number(now.revenue),
+      before: Number(prev.revenue),
+      hint: `over ${now.wonItems} sold lines`,
+    },
+    {
+      label: "Lost · competitor",
+      value: String(now.lostCompetitor),
+      now: now.lostCompetitor,
+      before: prev.lostCompetitor,
+      invert: true,
+    },
+    {
+      label: "Lost · not interested",
+      value: String(now.lostNotInterested),
+      now: now.lostNotInterested,
+      before: prev.lostNotInterested,
+      invert: true,
+    },
+    {
+      label: "Lost · no response",
+      value: String(now.lostNoResponse),
+      now: now.lostNoResponse,
+      before: prev.lostNoResponse,
+      invert: true,
+    },
+    {
+      label: "Open follow-ups",
+      value: String(now.openFollowUps),
+      now: now.openFollowUps,
+      before: prev.openFollowUps,
+    },
+  ];
+
+  return (
+    <section
+      className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5"
+      data-testid="metric-strip"
+    >
+      {cards.map((c) => (
+        <div
+          key={c.label}
+          className="flex flex-col gap-0.5 rounded-lg border border-line-2 bg-surface px-3 py-2 shadow-card"
+          data-testid={`metric-${c.label.toLowerCase().replace(/[^a-z]+/g, "-")}`}
+        >
+          <span className={LABEL}>{c.label}</span>
+          <span className="text-[19px] font-semibold leading-tight tabular-nums text-ink">
+            {c.value}
+          </span>
+          <span className="flex items-baseline gap-1.5">
+            <Delta now={c.now} before={c.before} invert={c.invert} />
+            <span className="text-[10.5px] text-ink-3">
+              {c.hint ?? `vs prev ${days}d`}
+            </span>
+          </span>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+/**
+ * §82.4. The columns, split into the ones worth the width and the rest.
+ *
+ * Seven core columns is what fits without scrolling on a laptop, and the four
+ * behind the toggle are the ones that answered a question somebody asked once.
+ * Hidden rather than removed: "items lost to competitor" is the only place the
+ * teacher-level competitor signal lives, and dropping it would lose the answer
+ * rather than tidy the table.
+ */
+type Col = {
   key: string;
+  /** Marks the one column the body renders itself. */
+  key_is_name?: boolean;
   label: string;
-  /** Right-aligned numerics, which is all of them except the name. */
-  num?: boolean;
-  pick: (r: DemandRow) => string | number;
-  sort?: (r: DemandRow) => number;
-}[] = [
+  more?: boolean;
+  /** Right-aligned, which is everything except the name. */
+  cell: (r: Row) => React.ReactNode;
+  /** CSV value, and the sort key. */
+  value: (r: Row) => string;
+  sort?: (r: Row) => number;
+};
+
+const COLUMNS: Col[] = [
   {
     key: "name",
+    // The name cell carries a link and an institute sub-label, so the table body
+    // renders it directly; this entry exists for the header, the sort and the CSV.
+    key_is_name: true,
     label: "Name",
-    pick: (r) => r.teacher_name ?? r.institute_name ?? "—",
+    cell: () => null,
+    value: (r) => r.label,
   },
-  { key: "enquiries", label: "Enquiries", num: true, pick: (r) => r.enquiries, sort: (r) => r.enquiries },
   {
-    key: "prev",
-    label: "vs prev",
-    num: true,
-    pick: (r) => r.prev_enquiries,
-    sort: (r) => change(r.enquiries, r.prev_enquiries) ?? -Infinity,
+    key: "enquiries",
+    label: "Enquiries",
+    cell: (r) => <span className="font-semibold text-ink">{r.enquiries}</span>,
+    value: (r) => String(r.enquiries),
+    sort: (r) => r.enquiries,
   },
-  { key: "in_progress", label: "Follow-ups in progress", num: true, pick: (r) => r.in_progress, sort: (r) => r.in_progress },
-  { key: "purchased", label: "Purchased", num: true, pick: (r) => r.purchased, sort: (r) => r.purchased },
-  { key: "amount", label: "Amount", num: true, pick: (r) => r.amount, sort: (r) => Number(r.amount) },
+  {
+    key: "purchased",
+    label: "Purchased",
+    cell: (r) => <span className="text-ink">{num(r.purchased)}</span>,
+    value: (r) => String(r.purchased),
+    sort: (r) => r.purchased,
+  },
+  {
+    key: "amount",
+    label: "Revenue",
+    cell: (r) => <span className="text-ink-2">{money(Number(r.amount))}</span>,
+    value: (r) => String(Number(r.amount)),
+    sort: (r) => Number(r.amount),
+  },
   {
     key: "conversion",
     label: "Conversion %",
-    num: true,
-    pick: (r) => {
+    cell: (r) => <span className="text-ink">{pct(conversion(r.purchased, r.enquiries))}</span>,
+    value: (r) => {
       const c = conversion(r.purchased, r.enquiries);
       return c === null ? "" : `${Math.round(c * 100)}%`;
     },
     sort: (r) => conversion(r.purchased, r.enquiries) ?? -1,
   },
-  { key: "lost_competitor", label: "Competitor", num: true, pick: (r) => r.lost_competitor, sort: (r) => r.lost_competitor },
-  { key: "lost_not_interested", label: "Not interested", num: true, pick: (r) => r.lost_not_interested, sort: (r) => r.lost_not_interested },
-  { key: "lost_no_response", label: "No response", num: true, pick: (r) => r.lost_no_response, sort: (r) => r.lost_no_response },
-  { key: "lost_wrong_number", label: "Wrong number", num: true, pick: (r) => r.lost_wrong_number, sort: (r) => r.lost_wrong_number },
+  {
+    key: "lost_competitor",
+    label: "Competitor",
+    cell: (r) => <span className="text-ink-2">{num(r.lost_competitor)}</span>,
+    value: (r) => String(r.lost_competitor),
+    sort: (r) => r.lost_competitor,
+  },
+  {
+    key: "lost_no_response",
+    label: "No response",
+    cell: (r) => <span className="text-ink-2">{num(r.lost_no_response)}</span>,
+    value: (r) => String(r.lost_no_response),
+    sort: (r) => r.lost_no_response,
+  },
+  {
+    key: "prev",
+    label: "vs prev",
+    cell: (r) => <Delta now={r.enquiries} before={r.prev_enquiries} />,
+    value: (r) => String(r.prev_enquiries),
+    sort: (r) => change(r.enquiries, r.prev_enquiries) ?? -Infinity,
+  },
+  {
+    key: "lost_not_interested",
+    label: "Not interested",
+    more: true,
+    cell: (r) => <span className="text-ink-2">{num(r.lost_not_interested)}</span>,
+    value: (r) => String(r.lost_not_interested),
+    sort: (r) => r.lost_not_interested,
+  },
+  {
+    key: "lost_wrong_number",
+    label: "Wrong number",
+    more: true,
+    cell: (r) => <span className="text-ink-3">{num(r.lost_wrong_number)}</span>,
+    value: (r) => String(r.lost_wrong_number),
+    sort: (r) => r.lost_wrong_number,
+  },
   {
     key: "items_lost_competitor",
     label: "Items lost to competitor",
-    num: true,
-    pick: (r) => r.items_lost_competitor,
+    more: true,
+    cell: (r) => <span className="text-ink-3">{num(r.items_lost_competitor)}</span>,
+    value: (r) => String(r.items_lost_competitor),
     sort: (r) => r.items_lost_competitor,
   },
-  { key: "tickets", label: "Support tickets", num: true, pick: (r) => r.tickets, sort: (r) => r.tickets },
   {
-    key: "per10",
-    label: "Tickets / 10 sales",
-    num: true,
-    pick: (r) => {
-      const v = ticketsPer10(r.tickets, r.purchased);
-      return v === null ? "" : v.toFixed(1);
-    },
-    sort: (r) => ticketsPer10(r.tickets, r.purchased) ?? -1,
+    key: "in_progress",
+    label: "Open follow-ups",
+    more: true,
+    cell: (r) => <span className="text-ink-2">{num(r.in_progress)}</span>,
+    value: (r) => String(r.in_progress),
+    sort: (r) => r.in_progress,
   },
 ];
+
+/**
+ * One table for all three grains.
+ *
+ * §82.2 made Products a table with the teacher table's columns, so there is one
+ * component rather than three — which is also what stops the three drifting
+ * apart the way the panel's two layouts did in §79.
+ */
+function DemandTable({
+  rows,
+  sort,
+  onSort,
+  showMore,
+  expanded,
+  onExpand,
+  nameHeader,
+}: {
+  rows: Row[];
+  sort: { key: string; desc: boolean };
+  onSort: (key: string) => void;
+  showMore: boolean;
+  expanded: boolean;
+  onExpand: () => void;
+  nameHeader: string;
+}) {
+  const cols = COLUMNS.filter((c) => showMore || !c.more);
+  // Untagged is pinned last whatever the sort: it is the measure of how much of
+  // the page cannot be attributed, not a competitor for "busiest".
+  const real = rows.filter((r) => r.id);
+  const untagged = rows.filter((r) => !r.id);
+  const col = COLUMNS.find((c) => c.key === sort.key);
+  const sorted = [...real].sort((a, b) => {
+    if (!col?.sort) {
+      return sort.desc ? b.label.localeCompare(a.label) : a.label.localeCompare(b.label);
+    }
+    const d = col.sort(a) - col.sort(b);
+    return sort.desc ? -d : d;
+  });
+  const shown = expanded ? sorted : sorted.slice(0, COLLAPSED_ROWS);
+  const hidden = sorted.length - shown.length;
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
+        <table className="w-full border-collapse text-[12.5px]" data-testid="demand-table">
+          <thead>
+            <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+              {cols.map((c) => (
+                <th
+                  key={c.key}
+                  className={cx("px-1.5 py-[7px]", c.key === "name" ? "text-left" : "text-right")}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onSort(c.key)}
+                    className={cx("hover:text-ink", sort.key === c.key && "text-ink")}
+                  >
+                    {c.key === "name" ? nameHeader : c.label}
+                    {sort.key === c.key ? (sort.desc ? " ▾" : " ▴") : ""}
+                  </button>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {[...shown, ...untagged].map((r) => (
+              <tr
+                key={r.id ?? "untagged"}
+                id={r.id ? `row-${r.id}` : "row-untagged"}
+                data-testid={r.id ? "row-demand" : "row-untagged"}
+                className={cx(
+                  "border-b border-line last:border-b-0",
+                  !r.id && "bg-warn-soft/25 italic",
+                )}
+              >
+                <td className="px-1.5 py-[5px] text-ink">
+                  {r.href ? (
+                    <Link href={r.href} prefetch={false} className="hover:underline">
+                      {r.label}
+                    </Link>
+                  ) : (
+                    r.label
+                  )}
+                  {r.sub ? (
+                    <span className="ml-1.5 text-[11px] text-ink-3">{r.sub}</span>
+                  ) : null}
+                </td>
+                {cols.slice(1).map((c) => (
+                  <td key={c.key} className="px-1.5 py-[5px] text-right tabular-nums">
+                    {c.cell(r)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={cols.length} className="px-3 py-8 text-center text-ink-3">
+                  No leads in this period with these filters.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+      {hidden > 0 ? (
+        <button
+          type="button"
+          onClick={onExpand}
+          data-testid="show-all"
+          className="self-start text-[12px] text-ink-2 underline-offset-2 hover:text-ink hover:underline"
+        >
+          Show all ({sorted.length})
+        </button>
+      ) : null}
+    </div>
+  );
+}
 
 export function AnalyticsView(props: {
   filters: {
@@ -109,17 +388,16 @@ export function AnalyticsView(props: {
     subjectId: string | null;
     sourceId: string | null;
     counsellorId: string | null;
+    termId: string | null;
   };
   query: string;
   tab: "teachers" | "products";
   by: "teacher" | "institute";
-  metric: Metric;
-  institute: string | null;
   error: string | null;
   scope: AnalyticsScope | null;
-  teachers: DemandRow[];
-  institutes: DemandRow[];
-  pivot: PivotRow[];
+  teachers: TeacherRow[];
+  institutes: InstituteRow[];
+  courses: CourseRow[];
   products: ProductRow[];
   insights: Insight[];
   timings: Record<string, number>;
@@ -127,14 +405,17 @@ export function AnalyticsView(props: {
     courses: { id: string; name: string }[];
     subjects: { id: string; name: string; course_id: string | null }[];
     sources: { id: string; name: string }[];
+    terms: { id: string; name: string }[];
   };
   staff: { id: string; full_name: string | null }[];
 }) {
-  const { scope, filters, query, tab, by, metric, institute } = props;
+  const { scope, filters, query, tab, by } = props;
   const [sort, setSort] = useState<{ key: string; desc: boolean }>({
     key: "enquiries",
     desc: true,
   });
+  const [showMore, setShowMore] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const href = (extra: Record<string, string>) => {
     const p = new URLSearchParams(query);
@@ -145,126 +426,67 @@ export function AnalyticsView(props: {
     return `/analytics?${p.toString()}`;
   };
 
-  /**
-   * Untagged always last, whatever the sort.
-   *
-   * It is not a competitor for "busiest teacher" — it is the measure of how much
-   * of the page cannot be attributed — so letting it sort into second place
-   * would read as a teacher called Untagged.
-   */
-  const demandRows = useMemo(() => {
-    const all = by === "teacher" ? props.teachers : props.institutes;
-    const scoped =
-      by === "teacher" && institute
-        ? all.filter((r) => r.institute_id === institute || !r.teacher_id)
-        : all;
-    const col = DEMAND_COLUMNS.find((c) => c.key === sort.key);
-    const real = scoped.filter((r) => r.teacher_id || r.institute_id);
-    const untagged = scoped.filter((r) => !r.teacher_id && !r.institute_id);
-    const sorted = [...real].sort((a, b) => {
-      if (!col?.sort) {
-        const an = a.teacher_name ?? a.institute_name ?? "";
-        const bn = b.teacher_name ?? b.institute_name ?? "";
-        return sort.desc ? bn.localeCompare(an) : an.localeCompare(bn);
-      }
-      const d = col.sort(a) - col.sort(b);
-      return sort.desc ? -d : d;
-    });
-    return [...sorted, ...untagged];
-  }, [by, institute, props.teachers, props.institutes, sort]);
+  const period = `createdFrom=${filters.from}&createdTo=${filters.to}`;
 
-  /** The pivot's columns: only the terms that actually appear, in master order. */
-  const terms = useMemo(() => {
-    const seen = new Map<string, { name: string; sort: number }>();
-    for (const c of props.pivot) {
-      seen.set(c.term_name, { name: c.term_name, sort: c.term_sort });
+  /** The three grains, flattened into the one row shape the table takes. */
+  const rows: Row[] = useMemo(() => {
+    if (tab === "products") {
+      return props.courses.map((r) => ({
+        ...r,
+        /**
+         * Composite, because the course alone is not the row.
+         *
+         * A course has one row per subject, so keying on course_id gave React
+         * duplicate keys — it was omitting and re-using rows, and the anchors
+         * the insight links point at collided too. The subject is part of the
+         * identity here in a way it is not on the teacher table.
+         */
+        id: r.course_id ? `${r.course_id}:${r.subject_id ?? "none"}` : null,
+        label: r.course_id ? `${r.course_name} · ${r.subject_name}` : "Untagged",
+        href: r.course_id
+          ? `/enquiries?course=${r.course_id}${r.subject_id ? `&subject=${r.subject_id}` : ""}&${period}`
+          : null,
+      }));
     }
-    return [...seen.values()].sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name));
-  }, [props.pivot]);
-
-  /** The pivot's rows: course × subject, busiest first. */
-  const pivotRows = useMemo(() => {
-    const byRow = new Map<
-      string,
-      { label: string; courseSort: number; subjectSort: number; cells: Map<string, PivotRow> }
-    >();
-    for (const c of props.pivot) {
-      const key = `${c.course_id}|${c.subject_id ?? "none"}`;
-      const row =
-        byRow.get(key) ??
-        {
-          label: `${c.course_name} · ${c.subject_name}`,
-          courseSort: c.course_sort,
-          subjectSort: c.subject_sort,
-          cells: new Map<string, PivotRow>(),
-        };
-      row.cells.set(c.term_name, c);
-      byRow.set(key, row);
+    if (by === "institute") {
+      return props.institutes.map((r) => ({
+        ...r,
+        id: r.institute_id,
+        label: r.institute_name,
+        // The Enquiries list has no institute filter, so an institute row has no
+        // list of its own to open. Its teachers each do.
+        href: null,
+      }));
     }
-    const total = (r: { cells: Map<string, PivotRow> }) =>
-      [...r.cells.values()].reduce((n, c) => n + c.enquiries, 0);
-    return [...byRow.values()].sort((a, b) => total(b) - total(a));
-  }, [props.pivot]);
+    return props.teachers.map((r) => ({
+      ...r,
+      id: r.teacher_id,
+      label: r.teacher_name,
+      sub: r.institute_name,
+      href: r.teacher_id ? `/enquiries?teacher=${r.teacher_id}&${period}` : null,
+    }));
+  }, [tab, by, props.teachers, props.institutes, props.courses, period]);
 
-  const cellValue = (c: PivotRow | undefined): string => {
-    if (!c) return "";
-    if (metric === "enquiries") return String(c.enquiries);
-    if (metric === "purchased") return String(c.purchased);
-    if (metric === "revenue") return money(Number(c.revenue));
-    const v = conversion(c.purchased, c.enquiries);
-    return v === null ? "—" : `${Math.round(v * 100)}%`;
-  };
-
-  /** Column and row totals, summed from the same cells the grid prints. */
-  const colTotal = (termName: string) =>
-    props.pivot
-      .filter((c) => c.term_name === termName)
-      .reduce(
-        (acc, c) => ({
-          enquiries: acc.enquiries + c.enquiries,
-          purchased: acc.purchased + c.purchased,
-          revenue: acc.revenue + Number(c.revenue),
-        }),
-        { enquiries: 0, purchased: 0, revenue: 0 },
-      );
-  const grand = props.pivot.reduce(
-    (acc, c) => ({
-      enquiries: acc.enquiries + c.enquiries,
-      purchased: acc.purchased + c.purchased,
-      revenue: acc.revenue + Number(c.revenue),
-    }),
-    { enquiries: 0, purchased: 0, revenue: 0 },
-  );
-
-  /** The current tab, as CSV with a BOM — the convention everywhere else here. */
+  /** The current tab as CSV, with a BOM — the convention everywhere else here. */
   function exportCsv() {
-    const rows: string[][] = [];
-    if (tab === "teachers") {
-      rows.push(DEMAND_COLUMNS.map((c) => c.label));
-      for (const r of demandRows) rows.push(DEMAND_COLUMNS.map((c) => String(c.pick(r))));
-    } else {
-      rows.push(["Course · Subject", ...terms.map((t) => t.name), "Total"]);
-      for (const r of pivotRows) {
-        const cells = terms.map((t) => cellValue(r.cells.get(t.name)));
-        const total = [...r.cells.values()].reduce((n, c) => n + c.enquiries, 0);
-        rows.push([r.label, ...cells, String(total)]);
-      }
-      rows.push([]);
-      rows.push(["Product text", "Enquiries", "Purchased", "Conversion %", "Revenue"]);
+    const cols = COLUMNS.filter((c) => showMore || !c.more);
+    const out: string[][] = [cols.map((c) => c.label)];
+    for (const r of rows) out.push(cols.map((c) => c.value(r)));
+    if (tab === "products") {
+      out.push([]);
+      out.push(["Product text", "Enquiries", "Purchased", "Conversion %"]);
       for (const p of props.products) {
         const c = conversion(p.purchased, p.enquiries);
-        rows.push([
+        out.push([
           p.product,
           String(p.enquiries),
           String(p.purchased),
           c === null ? "" : `${Math.round(c * 100)}%`,
-          String(Number(p.revenue)),
         ]);
       }
     }
-    const esc = (v: string) =>
-      /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
-    const csv = `﻿${rows.map((r) => r.map(esc).join(",")).join("\r\n")}\r\n`;
+    const esc = (v: string) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+    const csv = `﻿${out.map((r) => r.map(esc).join(",")).join("\r\n")}\r\n`;
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
     a.download = `calman-analytics-${tab}-${filters.from}-to-${filters.to}.csv`;
@@ -275,7 +497,6 @@ export function AnalyticsView(props: {
   const subjects = filters.courseId
     ? props.masters.subjects.filter((s) => s.course_id === filters.courseId)
     : props.masters.subjects;
-
   const slowest = Math.max(0, ...Object.values(props.timings));
 
   return (
@@ -298,7 +519,7 @@ export function AnalyticsView(props: {
             </div>
           </label>
           <label className="block">
-            <span className={LABEL}>Course (level)</span>
+            <span className={LABEL}>Course</span>
             <Select name="course" defaultValue={filters.courseId ?? ""} aria-label="Course filter">
               <option value="">All</option>
               {props.masters.courses.map((c) => (
@@ -312,6 +533,16 @@ export function AnalyticsView(props: {
               <option value="">All</option>
               {subjects.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </Select>
+          </label>
+          {/* §82.2. Term's only home now: a filter, not a dimension. */}
+          <label className="block">
+            <span className={LABEL}>Term</span>
+            <Select name="term" defaultValue={filters.termId ?? ""} aria-label="Term filter">
+              <option value="">All</option>
+              {props.masters.terms.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
               ))}
             </Select>
           </label>
@@ -338,7 +569,7 @@ export function AnalyticsView(props: {
             </Select>
           </label>
           <Button type="submit" variant="primary" size="sm">Show</Button>
-          <span className="ml-auto flex items-center gap-2">
+          <span className="ml-auto">
             <Button type="button" size="sm" variant="secondary" onClick={exportCsv}>
               Export CSV
             </Button>
@@ -352,18 +583,7 @@ export function AnalyticsView(props: {
         </p>
       ) : null}
 
-      {scope ? (
-        <p className="text-[12px] text-ink-2" data-testid="scope-line">
-          <strong className="text-ink">{scope.leads}</strong> leads arrived{" "}
-          {scope.from} → {scope.to}, {scope.purchasedLeads} bought (
-          {pct(scope.teamConversion)} team conversion), {money(Number(scope.revenue))} recorded.
-          {" "}Uncalled: {scope.uncalled}
-          {scope.uncalled > 0 && scope.uncalled === scope.uncalledUntagged
-            ? " (all untagged)"
-            : ""}
-          .
-        </p>
-      ) : null}
+      {scope ? <MetricStrip now={scope.now} prev={scope.prev} days={scope.days} /> : null}
 
       {props.insights.length ? (
         <section className="flex flex-col gap-1.5" data-testid="insights">
@@ -371,7 +591,7 @@ export function AnalyticsView(props: {
             What stands out{" "}
             <span className="font-normal text-ink-3">({props.insights.length})</span>
           </h2>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {props.insights.map((i) => (
               <Link
                 key={i.id}
@@ -422,7 +642,7 @@ export function AnalyticsView(props: {
             ] as const).map((o) => (
               <Link
                 key={o.key}
-                href={href({ by: o.key, institute: "" })}
+                href={href({ by: o.key })}
                 prefetch={false}
                 aria-current={by === o.key ? "page" : undefined}
                 className={cx(
@@ -436,67 +656,30 @@ export function AnalyticsView(props: {
               </Link>
             ))}
           </span>
-        ) : (
-          <span className="ml-3 flex items-center gap-1.5">
-            {([
-              { key: "enquiries", label: "Enquiries" },
-              { key: "purchased", label: "Purchased" },
-              { key: "revenue", label: "Revenue" },
-              { key: "conversion", label: "Conversion %" },
-            ] as const).map((m) => (
-              <Link
-                key={m.key}
-                href={href({ metric: m.key })}
-                prefetch={false}
-                aria-current={metric === m.key ? "page" : undefined}
-                className={cx(
-                  "rounded-full border px-2.5 py-[3px] text-[11.5px]",
-                  metric === m.key
-                    ? "border-accent bg-accent-soft text-accent"
-                    : "border-line-2 bg-surface text-ink-2 hover:text-ink",
-                )}
-              >
-                {m.label}
-              </Link>
-            ))}
-          </span>
-        )}
+        ) : null}
+        <button
+          type="button"
+          onClick={() => setShowMore((v) => !v)}
+          data-testid="more-columns"
+          className="ml-auto text-[12px] text-ink-2 underline-offset-2 hover:text-ink hover:underline"
+        >
+          {showMore ? "Fewer columns" : "More columns"}
+        </button>
       </div>
 
-      {institute && by === "teacher" ? (
-        <p className="text-[12px] text-ink-2">
-          Teachers of one institute.{" "}
-          <Link href={href({ institute: "" })} className="underline underline-offset-2">
-            Show all
-          </Link>
-        </p>
-      ) : null}
+      <DemandTable
+        rows={rows}
+        sort={sort}
+        onSort={(key) =>
+          setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: true }))
+        }
+        showMore={showMore}
+        expanded={expanded}
+        onExpand={() => setExpanded(true)}
+        nameHeader={tab === "products" ? "Course · Subject" : by === "institute" ? "Institute" : "Teacher"}
+      />
 
-      {tab === "teachers" ? (
-        <DemandTable
-          rows={demandRows}
-          by={by}
-          sort={sort}
-          onSort={(key) =>
-            setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: true }))
-          }
-          from={filters.from}
-          to={filters.to}
-          instituteHref={(id) => href({ by: "teacher", institute: id })}
-        />
-      ) : (
-        <>
-          <PivotTable
-            terms={terms}
-            rows={pivotRows}
-            metric={metric}
-            cellValue={cellValue}
-            colTotal={colTotal}
-            grand={grand}
-          />
-          <ProductsTable rows={props.products} />
-        </>
-      )}
+      {tab === "products" ? <ProductsTable rows={props.products} /> : null}
 
       {scope ? (
         <footer
@@ -504,30 +687,28 @@ export function AnalyticsView(props: {
           data-testid="reconciliation"
         >
           <span>
-            <strong className="text-ink">{scope.taggedLeads} leads, {scope.teacherRows} teacher
-            rows</strong>{" "}
-            — a lead naming two teachers counts under both. Untagged{" "}
-            {scope.untagged}; {scope.untagged} + {scope.taggedLeads} = {scope.leads}.
+            <strong className="text-ink">
+              {scope.taggedLeads} leads, {scope.teacherRows} teacher rows
+            </strong>{" "}
+            — a lead naming two teachers counts under both. Untagged {scope.untagged};{" "}
+            {scope.untagged} + {scope.taggedLeads} = {scope.now.leads}.
           </span>
           <span>
-            The pivot is the same shape: {scope.courseLeads} leads across {scope.pivotCells} cells,
+            Products is the same shape: {scope.courseLeads} leads across {scope.courseRows} rows,
             with {scope.untaggedCourse} naming no course.
           </span>
-          {/* The whole chain, because the first line alone does not tie: the
-              Enquiries list has no reason to exclude bookkeeping and does not,
-              so the two screens differ by exactly these rows and the footer has
-              to say so or it is a reconciliation that does not reconcile. */}
           <span>
             Excluded from every figure above: {scope.bookkeeping.handedToSupport} handed to Support
             and {scope.bookkeeping.superseded} superseded — bookkeeping rather than demand. So{" "}
-            {scope.leads} + {scope.bookkeeping.handedToSupport + scope.bookkeeping.superseded} ={" "}
-            {scope.leads + scope.bookkeeping.handedToSupport + scope.bookkeeping.superseded}, which
-            is the Enquiries list for the same window.
+            {scope.now.leads} + {scope.bookkeeping.handedToSupport + scope.bookkeeping.superseded} ={" "}
+            {scope.now.leads + scope.bookkeeping.handedToSupport + scope.bookkeeping.superseded},
+            which is the Enquiries list for the same window.
           </span>
           <span className="text-ink-3">
-            &ldquo;Competitor&rdquo; counts leads the enquiry recorded as lost to one; &ldquo;Items
-            lost to competitor&rdquo; counts the teacher&rsquo;s own lines. The two will not tie.
-            Purchased and Conversion % are counted in leads; Amount sums the won lines.
+            &ldquo;Competitor&rdquo; counts leads the enquiry recorded as lost to one;
+            &ldquo;Items lost to competitor&rdquo; counts the dimension&rsquo;s own lines. The two
+            will not tie. Purchased and Conversion % are counted in leads; Revenue and Avg sale sum
+            the won lines.
           </span>
           <span className="text-ink-3">
             Read in {Object.entries(props.timings).map(([k, v]) => `${v}ms (${k})`).join(" · ")}
@@ -541,247 +722,7 @@ export function AnalyticsView(props: {
   );
 }
 
-function SortHead({
-  col,
-  sort,
-  onSort,
-}: {
-  col: (typeof DEMAND_COLUMNS)[number];
-  sort: { key: string; desc: boolean };
-  onSort: (key: string) => void;
-}) {
-  const active = sort.key === col.key;
-  return (
-    <th className={cx("px-1.5 py-[7px]", col.num ? "text-right" : "text-left")}>
-      <button
-        type="button"
-        onClick={() => onSort(col.key)}
-        className={cx("hover:text-ink", active && "text-ink")}
-      >
-        {col.label}
-        {active ? (sort.desc ? " ▾" : " ▴") : ""}
-      </button>
-    </th>
-  );
-}
-
-function DemandTable({
-  rows,
-  by,
-  sort,
-  onSort,
-  from,
-  to,
-  instituteHref,
-}: {
-  rows: DemandRow[];
-  by: "teacher" | "institute";
-  sort: { key: string; desc: boolean };
-  onSort: (key: string) => void;
-  from: string;
-  to: string;
-  instituteHref: (id: string) => string;
-}) {
-  // Both tables carry the same columns; only the name column's meaning differs.
-  const cols = DEMAND_COLUMNS;
-  return (
-    <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
-      <table className="w-full min-w-[1180px] border-collapse text-[12.5px]">
-        <thead>
-          <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-            {cols.map((c) => (
-              <SortHead key={c.key} col={c} sort={sort} onSort={onSort} />
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => {
-            const untagged = !r.teacher_id && !r.institute_id;
-            const name = r.teacher_name ?? r.institute_name ?? "—";
-            /**
-             * A teacher row opens the Enquiries list for that teacher and
-             * period. An institute row cannot: the Enquiries list has no
-             * institute filter, so it narrows this table to that institute's
-             * teachers instead, each of which does open the list.
-             */
-            const to_ =
-              by === "teacher" && r.teacher_id
-                ? `/enquiries?teacher=${r.teacher_id}&createdFrom=${from}&createdTo=${to}`
-                : r.institute_id
-                  ? instituteHref(r.institute_id)
-                  : null;
-            const per10 = ticketsPer10(r.tickets, r.purchased);
-            return (
-              <tr
-                key={r.teacher_id ?? r.institute_id ?? "untagged"}
-                id={
-                  untagged
-                    ? "untagged"
-                    : by === "teacher"
-                      ? `teacher-${r.teacher_id}`
-                      : `institute-${r.institute_id}`
-                }
-                data-testid={untagged ? "row-untagged" : "row-demand"}
-                className={cx(
-                  "border-b border-line last:border-b-0",
-                  untagged && "bg-warn-soft/25 italic",
-                )}
-              >
-                <td className="px-1.5 py-[5px] text-ink">
-                  {to_ ? (
-                    <Link href={to_} prefetch={false} className="hover:underline">
-                      {name}
-                    </Link>
-                  ) : (
-                    name
-                  )}
-                  {by === "teacher" && r.institute_name ? (
-                    <span className="ml-1.5 text-[11px] text-ink-3">{r.institute_name}</span>
-                  ) : null}
-                </td>
-                <td className="px-1.5 py-[5px] text-right font-semibold tabular-nums text-ink">
-                  {r.enquiries}
-                </td>
-                <td className="px-1.5 py-[5px] text-right">
-                  <Delta now={r.enquiries} before={r.prev_enquiries} />
-                </td>
-                <td className="px-1.5 py-[5px] text-right tabular-nums text-ink-2">{num(r.in_progress)}</td>
-                <td className="px-1.5 py-[5px] text-right tabular-nums text-ink">{num(r.purchased)}</td>
-                <td className="px-1.5 py-[5px] text-right tabular-nums text-ink-2">{money(Number(r.amount))}</td>
-                <td className="px-1.5 py-[5px] text-right tabular-nums text-ink">
-                  {pct(conversion(r.purchased, r.enquiries))}
-                </td>
-                <td className="px-1.5 py-[5px] text-right tabular-nums text-ink-2">{num(r.lost_competitor)}</td>
-                <td className="px-1.5 py-[5px] text-right tabular-nums text-ink-2">{num(r.lost_not_interested)}</td>
-                <td className="px-1.5 py-[5px] text-right tabular-nums text-ink-2">{num(r.lost_no_response)}</td>
-                <td className="px-1.5 py-[5px] text-right tabular-nums text-ink-3">{num(r.lost_wrong_number)}</td>
-                <td className="px-1.5 py-[5px] text-right tabular-nums text-ink-3">{num(r.items_lost_competitor)}</td>
-                <td className="px-1.5 py-[5px] text-right tabular-nums text-ink-2">{num(r.tickets)}</td>
-                <td className="px-1.5 py-[5px] text-right tabular-nums">
-                  {per10 === null ? (
-                    <span className="text-ink-3">—</span>
-                  ) : (
-                    <span className={per10 >= 3 ? "font-medium text-warn" : "text-ink-2"}>
-                      {per10.toFixed(1)}
-                    </span>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-          {rows.length === 0 ? (
-            <tr>
-              <td colSpan={cols.length} className="px-3 py-8 text-center text-ink-3">
-                No leads in this period with these filters.
-              </td>
-            </tr>
-          ) : null}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function PivotTable({
-  terms,
-  rows,
-  metric,
-  cellValue,
-  colTotal,
-  grand,
-}: {
-  terms: { name: string; sort: number }[];
-  rows: { label: string; cells: Map<string, PivotRow> }[];
-  metric: Metric;
-  cellValue: (c: PivotRow | undefined) => string;
-  colTotal: (t: string) => { enquiries: number; purchased: number; revenue: number };
-  grand: { enquiries: number; purchased: number; revenue: number };
-}) {
-  const totalOf = (t: { enquiries: number; purchased: number; revenue: number }) =>
-    metric === "revenue"
-      ? money(t.revenue)
-      : metric === "purchased"
-        ? String(t.purchased)
-        : metric === "conversion"
-          ? pct(conversion(t.purchased, t.enquiries))
-          : String(t.enquiries);
-
-  return (
-    <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
-      <table className="w-full border-collapse text-[12.5px]" data-testid="pivot">
-        <thead>
-          <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
-            <th className="sticky left-0 bg-surface-2 px-1.5 py-[7px]">Course · Subject</th>
-            {terms.map((t) => (
-              <th key={t.name} className="px-1.5 py-[7px] text-right">{t.name}</th>
-            ))}
-            <th className="px-1.5 py-[7px] text-right">Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => {
-            const rowTotals = [...r.cells.values()].reduce(
-              (acc, c) => ({
-                enquiries: acc.enquiries + c.enquiries,
-                purchased: acc.purchased + c.purchased,
-                revenue: acc.revenue + Number(c.revenue),
-              }),
-              { enquiries: 0, purchased: 0, revenue: 0 },
-            );
-            return (
-              <tr key={r.label} className="border-b border-line last:border-b-0">
-                <td className="sticky left-0 bg-surface px-1.5 py-[5px] text-ink">{r.label}</td>
-                {terms.map((t) => {
-                  const c = r.cells.get(t.name);
-                  return (
-                    <td key={t.name} className="px-1.5 py-[5px] text-right tabular-nums">
-                      {c ? (
-                        <>
-                          <span className="text-ink">{cellValue(c)}</span>
-                          {/* §81.2. The purchased count under the headline
-                              number, which is what "48 / 6" means. */}
-                          {metric === "enquiries" ? (
-                            <span className="block text-[10.5px] text-ink-3">/ {c.purchased}</span>
-                          ) : null}
-                        </>
-                      ) : (
-                        <span className="text-ink-3">—</span>
-                      )}
-                    </td>
-                  );
-                })}
-                <td className="px-1.5 py-[5px] text-right font-semibold tabular-nums text-ink">
-                  {totalOf(rowTotals)}
-                </td>
-              </tr>
-            );
-          })}
-          {rows.length === 0 ? (
-            <tr>
-              <td colSpan={terms.length + 2} className="px-3 py-8 text-center text-ink-3">
-                No tagged leads in this period with these filters.
-              </td>
-            </tr>
-          ) : null}
-        </tbody>
-        {rows.length ? (
-          <tfoot>
-            <tr className="border-t border-line-2 bg-surface-2 font-semibold">
-              <td className="sticky left-0 bg-surface-2 px-1.5 py-[6px] text-ink">Total</td>
-              {terms.map((t) => (
-                <td key={t.name} className="px-1.5 py-[6px] text-right tabular-nums text-ink">
-                  {totalOf(colTotal(t.name))}
-                </td>
-              ))}
-              <td className="px-1.5 py-[6px] text-right tabular-nums text-ink">{totalOf(grand)}</td>
-            </tr>
-          </tfoot>
-        ) : null}
-      </table>
-    </div>
-  );
-}
-
+/** §82.2. Trimmed to the three things this block is read for. */
 function ProductsTable({ rows }: { rows: ProductRow[] }) {
   return (
     <section className="flex flex-col gap-1.5">
@@ -792,14 +733,13 @@ function ProductsTable({ rows }: { rows: ProductRow[] }) {
         </span>
       </h2>
       <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
-        <table className="w-full min-w-[640px] border-collapse text-[12.5px]" data-testid="products">
+        <table className="w-full min-w-[560px] border-collapse text-[12.5px]" data-testid="products">
           <thead>
             <tr className="border-b border-line-2 bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
               <th className="px-1.5 py-[7px]">Product text</th>
               <th className="w-[90px] px-1.5 py-[7px] text-right">Enquiries</th>
               <th className="w-[90px] px-1.5 py-[7px] text-right">Purchased</th>
-              <th className="w-[100px] px-1.5 py-[7px] text-right">Conversion %</th>
-              <th className="w-[110px] px-1.5 py-[7px] text-right">Revenue</th>
+              <th className="w-[110px] px-1.5 py-[7px] text-right">Conversion %</th>
             </tr>
           </thead>
           <tbody>
@@ -809,18 +749,17 @@ function ProductsTable({ rows }: { rows: ProductRow[] }) {
                 <td className="px-1.5 py-[5px] text-right font-semibold tabular-nums text-ink">
                   {p.enquiries}
                 </td>
-                <td className="px-1.5 py-[5px] text-right tabular-nums text-ink">{num(p.purchased)}</td>
+                <td className="px-1.5 py-[5px] text-right tabular-nums text-ink">
+                  {num(p.purchased)}
+                </td>
                 <td className="px-1.5 py-[5px] text-right tabular-nums text-ink">
                   {pct(conversion(p.purchased, p.enquiries))}
-                </td>
-                <td className="px-1.5 py-[5px] text-right tabular-nums text-ink-2">
-                  {money(Number(p.revenue))}
                 </td>
               </tr>
             ))}
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-ink-3">
+                <td colSpan={4} className="px-3 py-8 text-center text-ink-3">
                   Nobody typed a product line in this period.
                 </td>
               </tr>

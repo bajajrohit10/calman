@@ -1,5 +1,5 @@
 /**
- * §81. The analytics shapes, and the pure arithmetic over them.
+ * §81, simplified by §82. The analytics shapes, and the pure arithmetic over them.
  *
  * Plain module, not server-only: the view is a client component and these types
  * and helpers reach it. The same split lib/working-days-shape.ts needed, for the
@@ -14,40 +14,59 @@ export type AnalyticsFilters = {
   subjectId: string | null;
   sourceId: string | null;
   counsellorId: string | null;
+  /** §82.2: term left the Products grid and became a filter. */
+  termId: string | null;
 };
 
-/** The page's own totals: the header line, the footer, and what the rules compare against. */
+/**
+ * §82.1. Every headline figure for one window.
+ *
+ * The metrics strip shows these for the period and again for the one before it,
+ * from one SQL function called twice, so the strip cannot drift from the tables
+ * about what "purchased" counts.
+ */
+export type Totals = {
+  leads: number;
+  called: number;
+  uncalled: number;
+  purchased: number;
+  revenue: number;
+  wonItems: number;
+  wonItemsNoAmount: number;
+  openFollowUps: number;
+  lostCompetitor: number;
+  lostNotInterested: number;
+  lostNoResponse: number;
+  lostWrongNumber: number;
+  lostTotal: number;
+};
+
 export type AnalyticsScope = {
   from: string;
   to: string;
   days: number;
   prevFrom: string;
   prevTo: string;
-  leads: number;
+  now: Totals;
+  prev: Totals;
+  /** The reconciliation footer's own numbers. */
   taggedLeads: number;
   teacherRows: number;
   untagged: number;
   courseLeads: number;
-  pivotCells: number;
+  courseRows: number;
   untaggedCourse: number;
-  uncalled: number;
-  uncalledUntagged: number;
   bookkeeping: { handedToSupport: number; superseded: number };
-  purchasedLeads: number;
-  teamConversion: number;
-  revenue: number;
-  wonItems: number;
-  wonItemsNoAmount: number;
-  lostTotal: number;
-  lostNoResponse: number;
 };
 
-/** One row of the teacher or institute table. `teacherId` is null on the Untagged row. */
-export type DemandRow = {
-  teacher_id?: string | null;
-  teacher_name?: string;
-  institute_id: string | null;
-  institute_name: string | null;
+/**
+ * The columns every demand table carries.
+ *
+ * §82.2 made the Products tab a table rather than a pivot, so teacher, institute
+ * and course are now one table at three grains — same columns, same units — and
+ * this is the type that says so.
+ */
+export type DemandMetrics = {
   enquiries: number;
   prev_enquiries: number;
   in_progress: number;
@@ -58,30 +77,47 @@ export type DemandRow = {
   lost_no_response: number;
   lost_wrong_number: number;
   items_lost_competitor: number;
-  tickets: number;
 };
 
-export type PivotRow = {
-  course_id: string;
+export type TeacherRow = DemandMetrics & {
+  teacher_id: string | null;
+  teacher_name: string;
+  institute_id: string | null;
+  institute_name: string | null;
+};
+
+export type InstituteRow = DemandMetrics & {
+  institute_id: string | null;
+  institute_name: string;
+};
+
+export type CourseRow = DemandMetrics & {
+  course_id: string | null;
   course_name: string;
-  course_sort: number;
   subject_id: string | null;
-  subject_name: string;
-  subject_sort: number;
-  term_id: string | null;
-  term_name: string;
-  term_sort: number;
-  enquiries: number;
-  prev_enquiries: number;
-  purchased: number;
-  revenue: number;
+  subject_name: string | null;
 };
 
+/** §82.2: text, enquiries, purchased — the three things this block is read for. */
 export type ProductRow = {
   product: string;
   enquiries: number;
   purchased: number;
-  revenue: number;
+};
+
+/**
+ * One table row, whatever grain produced it.
+ *
+ * `id` is null on the Untagged row, which is how every consumer tells the
+ * measure-of-what-we-cannot-attribute apart from a real dimension.
+ */
+export type Row = DemandMetrics & {
+  id: string | null;
+  label: string;
+  /** The institute under a teacher's name, or nothing. */
+  sub?: string | null;
+  /** Where this row's own enquiry list lives, when it has one. */
+  href?: string | null;
 };
 
 /** Conversion as a fraction, with the "no leads" case answered rather than NaN. */
@@ -89,19 +125,13 @@ export function conversion(purchased: number, enquiries: number): number | null 
   return enquiries > 0 ? purchased / enquiries : null;
 }
 
-/**
- * Tickets per ten sales, or null when there were no sales.
- *
- * Null rather than Infinity: "three tickets and nothing sold" is a real and
- * worrying state, but it is not a *rate*, and printing ∞ in a column somebody
- * sorts on is how a table becomes unsortable.
- */
-export function ticketsPer10(tickets: number, purchased: number): number | null {
-  return purchased > 0 ? (tickets / purchased) * 10 : null;
+/** §82.1. Revenue per won line — the unit money is actually recorded in. */
+export function avgSale(revenue: number, wonItems: number): number | null {
+  return wonItems > 0 ? revenue / wonItems : null;
 }
 
 /** The four Lost columns plus Purchased: the outcomes that have actually been decided. */
-export function decided(r: DemandRow): number {
+export function decided(r: DemandMetrics): number {
   return (
     r.purchased +
     r.lost_competitor +
@@ -118,7 +148,7 @@ export function decided(r: DemandRow): number {
  * infinite, and "▲∞%" on a teacher who is simply new tells a manager less than
  * a dash does. All of this project's lead data begins on 26 Sep 2026, so on any
  * window reaching back further than that this is the common case rather than the
- * edge one.
+ * edge one — which is also why the rising and falling insight rules are dormant.
  */
 export function change(now: number, before: number): number | null {
   return before > 0 ? (now - before) / before : null;

@@ -52,6 +52,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
     subjectId: one(sp.subject) || null,
     sourceId: one(sp.source) || null,
     counsellorId: one(sp.counsellor) || null,
+    // §82.2: term is a filter now, not a dimension of the Products table.
+    termId: one(sp.term) || null,
   };
 
   const supabase = await createClient();
@@ -75,13 +77,14 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
   if (filters.subjectId) query.set("subject", filters.subjectId);
   if (filters.sourceId) query.set("source", filters.sourceId);
   if (filters.counsellorId) query.set("counsellor", filters.counsellorId);
+  if (filters.termId) query.set("term", filters.termId);
 
   const insights = data.scope
     ? buildInsights({
         scope: data.scope,
         teachers: data.teachers,
-        institutes: data.institutes,
-        pivot: data.pivot,
+        courses: data.courses,
+        products: data.products,
         query: query.toString(),
       })
     : [];
@@ -94,17 +97,11 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
       query={query.toString()}
       tab={one(sp.tab) === "products" ? "products" : "teachers"}
       by={one(sp.by) === "institute" ? "institute" : "teacher"}
-      metric={
-        (["enquiries", "purchased", "revenue", "conversion"] as const).find(
-          (m) => m === one(sp.metric),
-        ) ?? "enquiries"
-      }
-      institute={one(sp.institute) || null}
       error={data.error}
       scope={data.scope ?? null}
       teachers={data.teachers}
       institutes={data.institutes}
-      pivot={data.pivot}
+      courses={data.courses}
       products={data.products}
       insights={insights}
       timings={data.timings}
@@ -112,6 +109,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
         courses: masters.courses,
         subjects: masters.subjects,
         sources: masters.sources,
+        terms: masters.terms,
       }}
       staff={(staff.data ?? []) as { id: string; full_name: string | null }[]}
     />
