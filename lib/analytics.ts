@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 
 import type {
   AnalyticsEvent,
+  Experiment,
+  ExperimentResult,
   AnalyticsFilters,
   AnalyticsScope,
   CourseRow,
@@ -42,6 +44,9 @@ function args(f: AnalyticsFilters) {
     // tables can never be comparing against different periods.
     p_cmp_from: f.cmpFrom || null,
     p_cmp_to: f.cmpTo || null,
+    // §84.4. The scope is a filter on the same basis, so it travels with the rest.
+    p_scope_type: f.scopeType ?? "all",
+    p_scope_id: f.scopeId || null,
   };
 }
 
@@ -53,6 +58,7 @@ export async function loadAnalytics(f: AnalyticsFilters): Promise<{
   courses: CourseRow[];
   products: ProductRow[];
   events: AnalyticsEvent[];
+  experiments: Experiment[];
   /** Wall time in ms for the whole batch, for the timing note the brief asks for. */
   timings: Record<string, number>;
 }> {
@@ -72,7 +78,8 @@ export async function loadAnalytics(f: AnalyticsFilters): Promise<{
   const started = Date.now();
 
   // Together: they read the same window and none of them needs another's answer.
-  const [scope, teachers, institutes, courses, products, events] = await Promise.all([
+  const [scope, teachers, institutes, courses, products, events, experiments] =
+    await Promise.all([
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     supabase.rpc("analytics_scope", a as any),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -88,6 +95,7 @@ export async function loadAnalytics(f: AnalyticsFilters): Promise<{
       ...a,
       p_cmp_from: undefined,
       p_cmp_to: undefined,
+      p_scope_invert: undefined,
       p_limit: 20,
     } as never),
     supabase.rpc("analytics_events_in_range", {
@@ -97,6 +105,8 @@ export async function loadAnalytics(f: AnalyticsFilters): Promise<{
       p_cmp_to: f.cmpTo || null,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    supabase.rpc("analytics_experiments", {} as any),
   ]);
   const timings: Record<string, number> = { "all five": Date.now() - started };
 
@@ -107,6 +117,7 @@ export async function loadAnalytics(f: AnalyticsFilters): Promise<{
     courses.error?.message ??
     products.error?.message ??
     events.error?.message ??
+    experiments.error?.message ??
     null;
 
   return {
@@ -117,7 +128,32 @@ export async function loadAnalytics(f: AnalyticsFilters): Promise<{
     courses: (courses.data ?? []) as unknown as CourseRow[],
     products: (products.data ?? []) as unknown as ProductRow[],
     events: (events.data ?? []) as unknown as AnalyticsEvent[],
+    experiments: (experiments.data ?? []) as unknown as Experiment[],
     timings,
   };
 }
 
+
+/**
+ * §84.3. One experiment's result, for the Experiments tab.
+ *
+ * Loaded per card rather than in the page's main batch: the tab is one of three and
+ * the other two have no use for it, so a reader on Teachers pays nothing for it.
+ */
+export async function loadExperimentResults(
+  ids: string[],
+): Promise<{ error: string | null; results: ExperimentResult[] }> {
+  if (!ids.length) return { error: null, results: [] };
+  const supabase = await createClient();
+  const out = await Promise.all(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ids.map((id) => supabase.rpc("analytics_experiment_result", { p_id: id } as any)),
+  );
+  const firstError = out.find((r) => r.error)?.error?.message ?? null;
+  return {
+    error: firstError,
+    results: out
+      .map((r) => r.data as unknown as ExperimentResult | null)
+      .filter((r): r is ExperimentResult => Boolean(r?.id)),
+  };
+}

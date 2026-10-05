@@ -12,19 +12,24 @@ import {
   pointsChange,
   PRESET_LABELS,
   RANGE_PRESETS,
+  SCOPE_LABELS,
   type AnalyticsEvent,
   type AnalyticsScope,
   type Basis,
   type CompareMode,
   type RangePreset,
   type CourseRow,
+  type Experiment,
+  type ExperimentResult,
   type InstituteRow,
   type ProductRow,
   type Row,
+  type ScopeType,
   type TeacherRow,
   type Totals,
 } from "@/lib/analytics-shape";
-import type { Insight } from "@/lib/analytics-insights";
+import { SMALL_SAMPLE_CLOSED } from "@/lib/analytics-thresholds";
+import type { Bullet, Heads as HeadsType } from "@/lib/analytics-insights";
 import { formatDate } from "@/lib/format";
 
 const LABEL = "text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3";
@@ -32,6 +37,7 @@ const money = (v: number) => (v ? `₹${Math.round(v).toLocaleString("en-IN")}` 
 const num = (v: number) => (v ? String(v) : "—");
 const pct = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}%`);
 const COLLAPSED_ROWS = 10;
+const pts = (v: number) => `${v > 0 ? "▲" : "▼"}${Math.abs(Math.round(v))} pts`;
 
 /**
  * §83.3. A count's movement in %, a rate's movement in percentage points.
@@ -547,11 +553,13 @@ export function AnalyticsView(props: {
     sourceId: string | null;
     counsellorId: string | null;
     termId: string | null;
+    scopeType: ScopeType;
+    scopeId: string | null;
   };
   preset: RangePreset;
   compareMode: CompareMode;
   query: string;
-  tab: "teachers" | "products";
+  tab: "teachers" | "products" | "experiments";
   by: "teacher" | "institute";
   basis: Basis;
   error: string | null;
@@ -561,13 +569,17 @@ export function AnalyticsView(props: {
   courses: CourseRow[];
   products: ProductRow[];
   events: AnalyticsEvent[];
-  insights: Insight[];
+  experiments: Experiment[];
+  results: ExperimentResult[];
+  heads: HeadsType | null;
   timings: Record<string, number>;
   masters: {
     courses: { id: string; name: string }[];
     subjects: { id: string; name: string; course_id: string | null }[];
     sources: { id: string; name: string }[];
     terms: { id: string; name: string }[];
+    teachers: { id: string; name: string }[];
+    institutes: { id: string; name: string }[];
   };
   staff: { id: string; full_name: string | null }[];
 }) {
@@ -760,6 +772,44 @@ export function AnalyticsView(props: {
               ))}
             </Select>
           </label>
+          {/* §84.4. The scope as a filter, which is what makes an experiment's
+              numbers checkable against these tables. */}
+          <label className="block">
+            <span className={LABEL}>Scope</span>
+            <Select
+              name="scopeType"
+              defaultValue={filters.scopeType}
+              aria-label="Scope type"
+            >
+              {(Object.keys(SCOPE_LABELS) as ScopeType[]).map((k) => (
+                <option key={k} value={k}>{SCOPE_LABELS[k]}</option>
+              ))}
+            </Select>
+          </label>
+          {filters.scopeType !== "all" ? (
+            <label className="block">
+              <span className={LABEL}>Which</span>
+              <Select
+                name="scopeId"
+                defaultValue={filters.scopeId ?? ""}
+                aria-label="Scope which"
+                className="max-w-[200px]"
+              >
+                <option value="">Choose…</option>
+                {(filters.scopeType === "teacher"
+                  ? props.masters.teachers.map((t) => ({ id: t.id, label: t.name }))
+                  : filters.scopeType === "institute"
+                    ? props.masters.institutes.map((i) => ({ id: i.id, label: i.name }))
+                    : props.masters.subjects.map((sj) => ({
+                        id: sj.id,
+                        label: `${props.masters.courses.find((c) => c.id === sj.course_id)?.name ?? "?"} · ${sj.name}`,
+                      }))
+                ).map((o) => (
+                  <option key={o.id} value={o.id}>{o.label}</option>
+                ))}
+              </Select>
+            </label>
+          ) : null}
           <label className="block">
             <span className={LABEL}>Source</span>
             <Select name="source" defaultValue={filters.sourceId ?? ""} aria-label="Source filter">
@@ -820,39 +870,13 @@ export function AnalyticsView(props: {
         <MetricStrip now={scope.now} prev={scope.prev} cmpLabel={cmpLabel} />
       ) : null}
 
-      {props.insights.length ? (
-        <section className="flex flex-col gap-1.5" data-testid="insights">
-          <h2 className="text-[13px] font-semibold text-ink">
-            What stands out{" "}
-            <span className="font-normal text-ink-3">({props.insights.length})</span>
-          </h2>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-            {props.insights.map((i) => (
-              <Link
-                key={i.id}
-                href={i.href}
-                prefetch={false}
-                data-testid={`insight-${i.kind}`}
-                className={cx(
-                  "flex flex-col gap-1 rounded-lg border px-3 py-2 shadow-card hover:border-accent",
-                  i.tone === "danger" && "border-danger/45 bg-danger-soft/30",
-                  i.tone === "warn" && "border-warn/45 bg-warn-soft/30",
-                  i.tone === "ok" && "border-ok/45 bg-ok-soft/30",
-                  i.tone === "info" && "border-line-2 bg-surface-2",
-                )}
-              >
-                <span className="text-[12.5px] leading-relaxed text-ink">{i.text}</span>
-                <span className="text-[11.5px] text-ink-2">{i.action}</span>
-              </Link>
-            ))}
-          </div>
-        </section>
-      ) : null}
+      {props.heads ? <Heads heads={props.heads} /> : null}
 
       <div className="flex flex-wrap items-center gap-1.5" role="tablist">
         {([
           { key: "teachers", label: "Teachers" },
           { key: "products", label: "Products" },
+          { key: "experiments", label: "Experiments" },
         ] as const).map((t) => (
           <Link
             key={t.key}
@@ -892,8 +916,9 @@ export function AnalyticsView(props: {
             ))}
           </span>
         ) : null}
-        {/* §83.2. The basis toggle: which question the columns answer. */}
-        <span className="ml-3 flex items-center gap-1.5">
+        {/* §83.2. The basis toggle: which question the columns answer. Not on the
+            Experiments tab, whose cards carry their own windows. */}
+        <span className={cx("ml-3 flex items-center gap-1.5", tab === "experiments" && "hidden")}>
           {([
             { key: "closed", label: "Closed calls" },
             { key: "open", label: "Open calls" },
@@ -920,28 +945,56 @@ export function AnalyticsView(props: {
           type="button"
           onClick={() => setShowMore((v) => !v)}
           data-testid="more-columns"
-          className="ml-auto text-[12px] text-ink-2 underline-offset-2 hover:text-ink hover:underline"
+          className={cx(
+            "ml-auto text-[12px] text-ink-2 underline-offset-2 hover:text-ink hover:underline",
+            tab === "experiments" && "hidden",
+          )}
         >
           {showMore ? "Fewer columns" : "More columns"}
         </button>
       </div>
 
-      <DemandTable
-        rows={rows}
-        basis={basis}
-        sort={sort}
-        onSort={(key) =>
-          setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: true }))
-        }
-        showMore={showMore}
-        expanded={expanded}
-        onExpand={() => setExpanded(true)}
-        nameHeader={
-          tab === "products" ? "Course · Subject" : by === "institute" ? "Institute" : "Teacher"
-        }
-      />
-
-      {tab === "products" ? <ProductsTable rows={props.products} /> : null}
+      {tab === "experiments" ? (
+        <div className="flex flex-col gap-3">
+          {props.results.length ? (
+            props.results.map((r) => (
+              <ExperimentCard
+                key={r.id}
+                r={r}
+                scopeLabel={
+                  props.experiments.find((e) => e.id === r.id)?.scope_label ?? "Everyone"
+                }
+                /* §84.3. Opens the full tables on the experiment's own slice: its
+                   scope as the filter, its window as the range, and the Before
+                   window as the comparison. */
+                onOpen={`/analytics?tab=teachers&basis=closed&preset=custom&from=${r.duringFrom}&to=${r.duringTo}&compare=custom&cmpFrom=${r.beforeFrom}&cmpTo=${r.beforeTo}&scopeType=${r.scopeType}${r.scopeId ? `&scopeId=${r.scopeId}` : ""}`}
+              />
+            ))
+          ) : (
+            <p className="rounded-lg border border-line bg-surface px-3 py-8 text-center text-[12.5px] text-ink-3 shadow-card">
+              No experiments recorded. Add one in Settings → Analytics events.
+            </p>
+          )}
+        </div>
+      ) : (
+        <>
+          <DemandTable
+            rows={rows}
+            basis={basis}
+            sort={sort}
+            onSort={(key) =>
+              setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: true }))
+            }
+            showMore={showMore}
+            expanded={expanded}
+            onExpand={() => setExpanded(true)}
+            nameHeader={
+              tab === "products" ? "Course · Subject" : by === "institute" ? "Institute" : "Teacher"
+            }
+          />
+          {tab === "products" ? <ProductsTable rows={props.products} /> : null}
+        </>
+      )}
 
       {scope ? (
         <footer
@@ -1035,6 +1088,372 @@ function ProductsTable({ rows }: { rows: ProductRow[] }) {
           </tbody>
         </table>
       </div>
+    </section>
+  );
+}
+
+/**
+ * §84.1. "What stands out", in three heads.
+ *
+ * Headed lists rather than a grid of cards. A card grid made every finding compete
+ * with every other for five slots, so a tagging note could displace a teacher losing
+ * half their business to a competitor. Three heads, each one question, each bullet
+ * ordered by effect size — which is the only ordering that means anything inside a
+ * single question.
+ */
+/**
+ * One head: a title, its bullets, an empty note, and the team line beneath.
+ *
+ * At module scope rather than inside Heads. A component declared during render is a
+ * new component type on every render — React remounts the subtree and the lint rule
+ * says so — and this one takes everything it needs as props anyway.
+ */
+function Head({
+  title,
+  bullets,
+  note,
+  teamLine,
+  testid,
+}: {
+  title: string;
+  bullets: Bullet[];
+  note?: string | null;
+  teamLine?: string | null;
+  testid: string;
+}) {
+  return (
+    <section className="flex flex-col gap-1 rounded-lg border border-line bg-surface px-3 py-2.5 shadow-card">
+      <h3 className="text-[12px] font-semibold text-ink">{title}</h3>
+      {bullets.length ? (
+        <ul className="flex flex-col gap-0.5" data-testid={testid}>
+          {bullets.map((b) => (
+            <li key={b.id}>
+              <Link
+                href={b.href}
+                prefetch={false}
+                data-testid={`bullet-${testid}`}
+                className={cx(
+                  "text-[12.5px] leading-relaxed underline-offset-2 hover:underline",
+                  b.tone === "ok" && "text-ok",
+                  b.tone === "warn" && "text-warn",
+                  b.tone === "danger" && "text-danger",
+                  b.tone === "neutral" && "text-ink-2",
+                )}
+              >
+                {b.text}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-[12px] italic text-ink-3" data-testid={`${testid}-empty`}>
+          {note ?? "Nothing stands out."}
+        </p>
+      )}
+      {teamLine ? (
+        <p className="mt-0.5 border-t border-line pt-1 text-[11.5px] text-ink-3">{teamLine}</p>
+      ) : null}
+    </section>
+  );
+}
+
+function Heads({ heads }: { heads: HeadsType }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <h2 className="text-[13px] font-semibold text-ink">What stands out</h2>
+      <div className="grid gap-2 lg:grid-cols-3">
+        <Head
+          title="Demand — rising and falling"
+          bullets={heads.demand.bullets}
+          note={heads.demand.note}
+          testid="head-demand"
+        />
+        <Head
+          title="Competitor losses by teacher"
+          bullets={heads.competitor.bullets}
+          teamLine={heads.competitor.teamLine}
+          testid="head-competitor"
+        />
+        <section className="flex flex-col gap-1 rounded-lg border border-line bg-surface px-3 py-2.5 shadow-card">
+          <h3 className="text-[12px] font-semibold text-ink">Conversion by teacher</h3>
+          {heads.conversion.best.length || heads.conversion.weakest.length ? (
+            <div className="flex flex-col gap-1.5" data-testid="head-conversion">
+              {heads.conversion.best.length ? (
+                <div>
+                  <span className={LABEL}>Best</span>
+                  <ul className="flex flex-col gap-0.5">
+                    {heads.conversion.best.map((b) => (
+                      <li key={b.id}>
+                        <Link
+                          href={b.href}
+                          prefetch={false}
+                          data-testid="bullet-head-conversion"
+                          className="text-[12.5px] leading-relaxed text-ok underline-offset-2 hover:underline"
+                        >
+                          {b.text}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {heads.conversion.weakest.length ? (
+                <div>
+                  <span className={LABEL}>Weakest</span>
+                  <ul className="flex flex-col gap-0.5">
+                    {heads.conversion.weakest.map((b) => (
+                      <li key={b.id}>
+                        <Link
+                          href={b.href}
+                          prefetch={false}
+                          data-testid="bullet-head-conversion"
+                          className="text-[12.5px] leading-relaxed text-warn underline-offset-2 hover:underline"
+                        >
+                          {b.text}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <p className="text-[12px] italic text-ink-3">
+              No teacher has enough closed calls to rank yet.
+            </p>
+          )}
+          {heads.conversion.teamLine ? (
+            <p className="mt-0.5 border-t border-line pt-1 text-[11.5px] text-ink-3">
+              {heads.conversion.teamLine}
+            </p>
+          ) : null}
+        </section>
+      </div>
+      {/* §84.1. Housekeeping below the three, and only when it fires: it is about
+          the page's own reliability rather than about the business. */}
+      {heads.housekeeping.length ? (
+        <p className="text-[11.5px] text-ink-3" data-testid="housekeeping">
+          {heads.housekeeping.map((h, i) => (
+            <span key={h.id}>
+              {i ? " · " : ""}
+              <Link href={h.href} prefetch={false} className="underline-offset-2 hover:underline">
+                {h.text}
+              </Link>
+            </span>
+          ))}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * §84.3. One experiment, read as Before / During / Change / Rest of team.
+ *
+ * The fourth column is the point of the card. A conversion rise during a discount
+ * is not evidence the discount worked if everybody else rose too, so the verdict
+ * sentence beneath sets the scope's move against everyone else's over the same days.
+ */
+function ExperimentCard({
+  r,
+  scopeLabel,
+  onOpen,
+}: {
+  r: ExperimentResult;
+  scopeLabel: string;
+  onOpen: string;
+}) {
+  const conv = (t: Totals) => conversion(t.purchased, t.closed);
+  const rate = (n: number, t: Totals) => (t.closed > 0 ? n / t.closed : null);
+
+  const rows: {
+    label: string;
+    before: string;
+    during: string;
+    change: React.ReactNode;
+    rest: string;
+  }[] = [
+    {
+      label: "Leads",
+      before: String(r.before.leads),
+      during: String(r.during.leads),
+      change: <Delta now={r.during.leads} before={r.before.leads} />,
+      rest: r.rest ? String(r.rest.leads) : "—",
+    },
+    {
+      label: "Closed",
+      before: String(r.before.closed),
+      during: String(r.during.closed),
+      change: <Delta now={r.during.closed} before={r.before.closed} />,
+      rest: r.rest ? String(r.rest.closed) : "—",
+    },
+    {
+      label: "Purchased",
+      before: `${r.before.purchased} · ${pct(rate(r.before.purchased, r.before))}`,
+      during: `${r.during.purchased} · ${pct(rate(r.during.purchased, r.during))}`,
+      change: <Delta now={conv(r.during)} before={conv(r.before)} rate />,
+      rest: r.rest ? `${r.rest.purchased} · ${pct(rate(r.rest.purchased, r.rest))}` : "—",
+    },
+    {
+      label: "Lost · competitor",
+      before: `${r.before.lostCompetitor} · ${pct(rate(r.before.lostCompetitor, r.before))}`,
+      during: `${r.during.lostCompetitor} · ${pct(rate(r.during.lostCompetitor, r.during))}`,
+      change: (
+        <Delta
+          now={rate(r.during.lostCompetitor, r.during)}
+          before={rate(r.before.lostCompetitor, r.before)}
+          rate
+          invert
+        />
+      ),
+      rest: r.rest ? `${r.rest.lostCompetitor} · ${pct(rate(r.rest.lostCompetitor, r.rest))}` : "—",
+    },
+    {
+      label: "Lost · not interested",
+      before: `${r.before.lostNotInterested} · ${pct(rate(r.before.lostNotInterested, r.before))}`,
+      during: `${r.during.lostNotInterested} · ${pct(rate(r.during.lostNotInterested, r.during))}`,
+      change: (
+        <Delta
+          now={rate(r.during.lostNotInterested, r.during)}
+          before={rate(r.before.lostNotInterested, r.before)}
+          rate
+          invert
+        />
+      ),
+      rest: r.rest
+        ? `${r.rest.lostNotInterested} · ${pct(rate(r.rest.lostNotInterested, r.rest))}`
+        : "—",
+    },
+    {
+      label: "Lost · no response",
+      before: `${r.before.lostNoResponse} · ${pct(rate(r.before.lostNoResponse, r.before))}`,
+      during: `${r.during.lostNoResponse} · ${pct(rate(r.during.lostNoResponse, r.during))}`,
+      change: (
+        <Delta
+          now={rate(r.during.lostNoResponse, r.during)}
+          before={rate(r.before.lostNoResponse, r.before)}
+          rate
+          invert
+        />
+      ),
+      rest: r.rest
+        ? `${r.rest.lostNoResponse} · ${pct(rate(r.rest.lostNoResponse, r.rest))}`
+        : "—",
+    },
+    {
+      label: "Revenue",
+      before: money(Number(r.before.revenue)),
+      during: money(Number(r.during.revenue)),
+      change: <Delta now={Number(r.during.revenue)} before={Number(r.before.revenue)} />,
+      rest: r.rest ? money(Number(r.rest.revenue)) : "—",
+    },
+    {
+      label: "Avg sale",
+      before: money(avgSale(Number(r.before.revenue), r.before.wonItems) ?? 0),
+      during: money(avgSale(Number(r.during.revenue), r.during.wonItems) ?? 0),
+      change: (
+        <Delta
+          now={avgSale(Number(r.during.revenue), r.during.wonItems)}
+          before={avgSale(Number(r.before.revenue), r.before.wonItems)}
+        />
+      ),
+      rest: r.rest ? money(avgSale(Number(r.rest.revenue), r.rest.wonItems) ?? 0) : "—",
+    },
+  ];
+
+  const scopeMove = pointsChange(conv(r.during), conv(r.before));
+  const restMove =
+    r.rest && r.restBefore ? pointsChange(conv(r.rest), conv(r.restBefore)) : null;
+  const thin = r.before.closed < SMALL_SAMPLE_CLOSED || r.during.closed < SMALL_SAMPLE_CLOSED;
+
+  return (
+    <section
+      className="flex flex-col gap-2 rounded-lg border border-line bg-surface px-3 py-2.5 shadow-card"
+      data-testid="experiment-card"
+    >
+      <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <h3 className="text-[13px] font-semibold text-ink">{r.note}</h3>
+        <span className="text-[11.5px] text-ink-2">{scopeLabel}</span>
+        <span className="text-[11.5px] tabular-nums text-ink-3">
+          {formatDate(r.startDate)} →{" "}
+          {r.endDate ? formatDate(r.endDate) : formatDate(r.duringTo)}
+        </span>
+        {r.live ? (
+          <span
+            className="rounded-full border border-ok/50 bg-ok-soft/40 px-1.5 text-[10.5px] font-medium text-ok"
+            data-testid="experiment-live"
+          >
+            {r.dayM ? `day ${r.dayN} of ${r.dayM}` : `live · day ${r.dayN}`}
+          </span>
+        ) : null}
+        {r.metricNote ? (
+          <span className="text-[11px] text-ink-3">watching {r.metricNote}</span>
+        ) : null}
+        <Link
+          href={onOpen}
+          prefetch={false}
+          data-testid="experiment-open"
+          className="ml-auto text-[11.5px] text-ink-2 underline-offset-2 hover:text-ink hover:underline"
+        >
+          Read the tables on this slice →
+        </Link>
+      </header>
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[620px] border-collapse text-[12.5px]">
+          <thead>
+            <tr className="border-b border-line-2 text-left text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+              <th className="py-[5px] pr-2" />
+              <th className="py-[5px] pr-2 text-right">
+                Before
+                <span className="block font-normal normal-case text-ink-3">
+                  {formatDate(r.beforeFrom)} – {formatDate(r.beforeTo)}
+                </span>
+              </th>
+              <th className="py-[5px] pr-2 text-right">
+                During
+                <span className="block font-normal normal-case text-ink-3">
+                  {formatDate(r.duringFrom)} – {formatDate(r.duringTo)}
+                </span>
+              </th>
+              <th className="py-[5px] pr-2 text-right">Change</th>
+              <th className="py-[5px] text-right">
+                Rest of team
+                <span className="block font-normal normal-case text-ink-3">during</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.label} className="border-b border-line last:border-b-0">
+                <td className="py-[4px] pr-2 text-ink-2">{row.label}</td>
+                <td className="py-[4px] pr-2 text-right tabular-nums text-ink-2">{row.before}</td>
+                <td className="py-[4px] pr-2 text-right tabular-nums text-ink">{row.during}</td>
+                <td className="py-[4px] pr-2 text-right tabular-nums">{row.change}</td>
+                <td className="py-[4px] text-right tabular-nums text-ink-3">{row.rest}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* The verdict. One sentence, and the only one on the card that draws a
+          conclusion — which is why it sets the scope against everyone else rather
+          than reporting the scope alone. */}
+      <p className="text-[12.5px] text-ink" data-testid="experiment-verdict">
+        {scopeMove === null
+          ? "No closed business before this started, so there is nothing to compare against yet."
+          : `Conversion moved ${pts(scopeMove)} for ${scopeLabel}` +
+            (restMove === null
+              ? " — and there is no comparison for the rest of the team."
+              : ` vs ${pts(restMove)} for everyone else.`)}
+      </p>
+      {thin ? (
+        <p className="text-[11.5px] text-warn" data-testid="experiment-thin">
+          Too few closed calls to read a trend yet — {r.before.closed} before,{" "}
+          {r.during.closed} during.
+        </p>
+      ) : null}
     </section>
   );
 }

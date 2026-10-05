@@ -1,110 +1,100 @@
 /**
- * §81.3. Every number an insight rule turns on, in one place.
+ * §81.3, rewritten by §84.1. Every number an insight rule turns on, in one place.
  *
- * These are judgements, not facts: each one is the line between "worth a
- * manager's attention this week" and "noise". They live together so the set can
- * be re-tuned as one decision — a threshold buried in the rule that uses it is a
- * threshold nobody revisits — and each carries why it is where it is, measured
- * against the data that existed when it was set (30 days to 3 Oct 2026: 476
- * leads, 21.2% team conversion, 382 of them teacher-tagged).
+ * These are judgements, not facts: each is the line between "worth a manager's
+ * attention this week" and "noise". They live together so the set can be re-tuned
+ * as one decision, and each carries why it is where it is, measured against the
+ * data that existed when it was set (30 days to 5 Oct 2026: 563 leads, 350 closed,
+ * 32% team conversion, 11% of closed lost to a competitor).
  *
- * A rule that cannot fire is worse than no rule, so where a threshold would have
- * excluded every row on real data it is said so below.
+ * §84.1 replaced nine rules with three heads. The thresholds that went with the
+ * dropped rules — product-text, went-silent, support-drag, the old rising/falling
+ * pair — went with them rather than being left here unused.
  */
 
-/** A row needs this many enquiries before any rule will judge its rate. */
-export const MIN_ENQUIRIES_FOR_RATE = 20;
+/** At most this many bullets under each head, so a head stays readable. */
+export const HEAD_MAX = 5;
+
+// ---------------------------------------------------------------------------
+// Head 1: demand, rising and falling.
+// ---------------------------------------------------------------------------
 
 /**
- * "Low conversion" means below half the team's own average, not below a fixed
- * percentage. The team sat at 21.2%, so the line was 10.6% — a figure that moves
- * with the business rather than needing an edit every quarter.
+ * A quarter up or down is the point where a change stops looking like a quiet
+ * week. Measured on leads, which is the only figure that exists for both windows
+ * regardless of how much has closed yet.
  */
-export const LOW_CONVERSION_FRACTION_OF_TEAM = 0.5;
+export const DEMAND_CHANGE = 0.25;
 
 /**
- * Competitor pressure: a quarter of the decided outcomes went elsewhere.
- *
- * Measured against *decided* outcomes (won + the four lost columns) rather than
- * all enquiries, because a teacher with eighty leads still in progress has not
- * lost them — counting those in the denominator would hide real pressure behind
- * a pile of open work.
+ * …and only where one side of the comparison has ten leads. Below that a 25%
+ * swing is two enquiries, and the list would fill with teachers nobody asked
+ * about. "Either period" rather than both, so a teacher who went from twelve to
+ * two still appears — that is exactly the fall worth seeing.
  */
-export const COMPETITOR_SHARE = 0.25;
+export const DEMAND_MIN_ENQUIRIES = 10;
 
-/** A term is "rising" on both a proportion and a floor, so one extra lead on a base of one is not news. */
-export const RISING_GROWTH = 0.5;
-export const RISING_MIN_ENQUIRIES = 15;
-
-/** A fall worth saying out loud, among the teachers big enough to matter. */
-export const FALLING_DROP = 0.3;
-export const FALLING_TOP_N = 10;
-
-/*
- * §82.3. Two thresholds stood here, for a support-drag rule that read ticket
- * counts beside conversion rates. Both are gone with the rule: a ticket count in
- * a conversion report invited a causal reading nothing here supports, and the
- * Support reports answer the question with the context it needs.
- */
+// ---------------------------------------------------------------------------
+// Head 2: competitor losses by teacher.
+// ---------------------------------------------------------------------------
 
 /**
- * Tagging gap. Teacher tags were missing on 19.7% of leads and terms on ~27%, so
- * 20% catches the term problem now and the teacher one the moment it slips.
+ * Relative to the team rather than absolute: 11% of closed business goes to a
+ * competitor across the whole team, so "high" means high *for here*. Half again
+ * is the point where a teacher is visibly worse than the average rather than
+ * noisily around it.
  */
-export const DATA_GAP_SHARE = 0.2;
+export const COMPETITOR_VS_TEAM = 1.5;
 
 /**
- * §82.4. The best-converting product line, on two floors rather than one.
- *
- * "Product" here is the product_text a counsellor transcribes, because that is
- * the only place the *offer* survives — "Audit Full Course" and "Audit Fast
- * Track" tag to the same teacher and the same subject and sell at different
- * rates, which is the whole point of the card.
- *
- * Set at twenty first, which was wrong: the busiest single string carries eight
- * enquiries over thirty days, so the rule could never fire. Five enquiries *and*
- * two sales instead — the second floor is what stops one lucky sale on a string
- * nobody else typed becoming a campaign recommendation. Both want raising as
- * these strings accumulate; the comment is here so the next person knows the
- * numbers are provisional rather than considered.
+ * Five closed calls before the share is allowed to mean anything. One of two
+ * closed is 50% and tells you nothing; this is the smallest denominator that is
+ * not actively misleading, and it is low on purpose because a teacher losing
+ * three of five is worth hearing about early.
  */
-export const BEST_PRODUCT_MIN_ENQUIRIES = 5;
-export const BEST_PRODUCT_MIN_SALES = 2;
+export const COMPETITOR_MIN_CLOSED = 5;
+
+// ---------------------------------------------------------------------------
+// Head 3: conversion by teacher.
+// ---------------------------------------------------------------------------
 
 /**
- * §82.4. Where leads go silent: a course and subject needs this many enquiries
- * before its no-response share means anything. Fifteen, as the brief set it.
+ * Eight closed calls to be ranked at all. Higher than the competitor floor
+ * because this head ranks — a best-three list built on four-call denominators
+ * would be a list of lucky weeks.
  */
-export const SILENT_MIN_ENQUIRIES = 15;
+export const CONVERSION_MIN_CLOSED = 8;
+
+/** Three each way. Five would be most of the teachers who clear the floor. */
+export const CONVERSION_TOP_N = 3;
+
+// ---------------------------------------------------------------------------
+// The housekeeping line.
+// ---------------------------------------------------------------------------
 
 /**
- * §81 decision. Any sale with no amount understates revenue, so the floor is one
- * — this is a data-entry fix, not a trend. Sixteen of 123 won items in the last
- * 30 days carry no amount.
+ * Any sale with no amount understates revenue, so the floor is one: this is a
+ * data-entry fix, not a trend.
  */
 export const MISSING_AMOUNT_MIN = 1;
 
 /**
- * §81 decision. Students going quiet after follow-ups: max_followups was 83 of
- * 204 losses (40.7%) over 30 days, so 35% fires on today's data and would stop
- * firing if follow-up timing improved — which is the point of the card.
+ * Tagging gap. Teacher tags were missing on about a fifth of leads when this was
+ * set, so 20% catches it the moment it slips rather than describing the status quo.
  */
-export const NO_RESPONSE_SHARE = 0.35;
+export const DATA_GAP_SHARE = 0.2;
+
+// ---------------------------------------------------------------------------
+// §84.3. The experiment card's small-sample guard.
+// ---------------------------------------------------------------------------
 
 /**
- * At most this many cards. §82.4 cut it from eight to five: eight filled the
- * screen above the numbers they were about, and the sixth to eighth were never
- * the ones anybody acted on.
- */
-export const MAX_INSIGHT_CARDS = 5;
-
-/**
- * …and at most this many from any one rule.
+ * Fewer closed calls than this on either side and the card shows its numbers with
+ * a line saying not to read a trend into them.
  *
- * Found by building it: support drag fired on five institutes at once and filled
- * the whole panel, pushing out the four other rules that had something to say.
- * A panel of eight cards all making the same point is a list, and the thing it
- * displaced is the thing the manager had not already noticed. Two keeps the
- * worst offenders visible and leaves room for everything else.
+ * Ten, which is the point where one more sale stops moving the rate by ten points.
+ * The numbers are still shown rather than hidden: a manager who started an
+ * experiment yesterday wants to see it ticking over, and "too few to read yet" is
+ * a more useful thing to say than an empty card.
  */
-export const MAX_CARDS_PER_KIND = 2;
+export const SMALL_SAMPLE_CLOSED = 10;

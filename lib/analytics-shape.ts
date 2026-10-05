@@ -45,6 +45,60 @@ export type AnalyticsFilters = {
   counsellorId: string | null;
   /** §82.2: term left the Products grid and became a filter. */
   termId: string | null;
+  /**
+   * §84.4. The scope, as a filter on the one basis.
+   *
+   * The filter bar gains Teacher and Institute so that "the strip filtered to one
+   * teacher" is a view somebody can open — which is what makes an experiment card's
+   * numbers checkable against the tables below it.
+   */
+  scopeType: ScopeType;
+  scopeId: string | null;
+};
+
+/** §84.2. What an experiment can apply to. */
+export type ScopeType = "all" | "teacher" | "institute" | "course_subject";
+
+export const SCOPE_LABELS: Record<ScopeType, string> = {
+  all: "Everyone",
+  teacher: "Teacher",
+  institute: "Institute",
+  course_subject: "Course · Subject",
+};
+
+/** §84.2. One experiment, as the list and the picker read it. */
+export type Experiment = {
+  id: string;
+  note: string;
+  metric_note: string | null;
+  scope_type: ScopeType;
+  scope_id: string | null;
+  scope_label: string;
+  start_date: string;
+  end_date: string | null;
+  author: string | null;
+};
+
+/** §84.3. One experiment's four windows. `rest` is null on an 'all' scope. */
+export type ExperimentResult = {
+  id: string;
+  note: string;
+  metricNote: string | null;
+  scopeType: ScopeType;
+  scopeId: string | null;
+  startDate: string;
+  endDate: string | null;
+  live: boolean;
+  dayN: number;
+  dayM: number | null;
+  beforeFrom: string;
+  beforeTo: string;
+  duringFrom: string;
+  duringTo: string;
+  before: Totals;
+  during: Totals;
+  rest: Totals | null;
+  restBefore: Totals | null;
 };
 
 /**
@@ -118,6 +172,16 @@ export type AnalyticsScope = {
 export type DemandMetrics = {
   leads: number;
   prev_leads: number;
+  /**
+   * §84.1. The comparison window's own outcomes, per row.
+   *
+   * The Competitor and Conversion heads report a points move on each teacher, and a
+   * rate needs both its numerator and its denominator from the other window — a
+   * lead count alone cannot produce one.
+   */
+  prev_closed: number;
+  prev_purchased: number;
+  prev_lost_competitor: number;
   closed: number;
   open_leads: number;
   purchased: number;

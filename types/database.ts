@@ -800,6 +800,9 @@ export type Database = {
           p_counsellor_id?: string
           p_course_id?: string
           p_from: string
+          p_scope_id?: string
+          p_scope_invert?: boolean
+          p_scope_type?: string
           p_source_id?: string
           p_subject_id?: string
           p_term_id?: string
@@ -824,6 +827,9 @@ export type Database = {
           p_counsellor_id?: string
           p_course_id?: string
           p_from: string
+          p_scope_id?: string
+          p_scope_invert?: boolean
+          p_scope_type?: string
           p_source_id?: string
           p_subject_id?: string
           p_term_id?: string
@@ -1012,22 +1018,37 @@ export type Database = {
           at: string
           created_at: string
           created_by: string
+          end_date: string | null
           id: string
+          metric_note: string | null
           note: string
+          scope_id: string | null
+          scope_type: string
+          start_date: string
         }
         Insert: {
           at: string
           created_at?: string
           created_by: string
+          end_date?: string | null
           id?: string
+          metric_note?: string | null
           note: string
+          scope_id?: string | null
+          scope_type?: string
+          start_date: string
         }
         Update: {
           at?: string
           created_at?: string
           created_by?: string
+          end_date?: string | null
           id?: string
+          metric_note?: string | null
           note?: string
+          scope_id?: string | null
+          scope_type?: string
+          start_date?: string
         }
         Relationships: [
           {
@@ -2887,6 +2908,9 @@ export type Database = {
           p_counsellor_id?: string
           p_course_id?: string
           p_from: string
+          p_scope_id?: string
+          p_scope_invert?: boolean
+          p_scope_type?: string
           p_source_id?: string
           p_subject_id?: string
           p_term_id?: string
@@ -2908,7 +2932,10 @@ export type Database = {
           oldest_open_days: number
           open_leads: number
           overdue: number
+          prev_closed: number
           prev_leads: number
+          prev_lost_competitor: number
+          prev_purchased: number
           purchased: number
           revenue: number
           subject_id: string
@@ -2922,6 +2949,9 @@ export type Database = {
           p_counsellor_id?: string
           p_course_id?: string
           p_from: string
+          p_scope_id?: string
+          p_scope_invert?: boolean
+          p_scope_type?: string
           p_source_id?: string
           p_subject_id?: string
           p_term_id?: string
@@ -2943,7 +2973,10 @@ export type Database = {
           oldest_open_days: number
           open_leads: number
           overdue: number
+          prev_closed: number
           prev_leads: number
+          prev_lost_competitor: number
+          prev_purchased: number
           purchased: number
           revenue: number
         }[]
@@ -2955,6 +2988,9 @@ export type Database = {
           p_counsellor_id?: string
           p_course_id?: string
           p_from: string
+          p_scope_id?: string
+          p_scope_invert?: boolean
+          p_scope_type?: string
           p_source_id?: string
           p_subject_id?: string
           p_term_id?: string
@@ -2976,7 +3012,10 @@ export type Database = {
           oldest_open_days: number
           open_leads: number
           overdue: number
+          prev_closed: number
           prev_leads: number
+          prev_lost_competitor: number
+          prev_purchased: number
           purchased: number
           revenue: number
           teacher_id: string
@@ -2997,12 +3036,30 @@ export type Database = {
           scope: string
         }[]
       }
+      analytics_experiment_result: { Args: { p_id: string }; Returns: Json }
+      analytics_experiments: {
+        Args: never
+        Returns: {
+          author: string
+          created_by: string
+          end_date: string
+          id: string
+          metric_note: string
+          note: string
+          scope_id: string
+          scope_label: string
+          scope_type: string
+          start_date: string
+        }[]
+      }
       analytics_products: {
         Args: {
           p_counsellor_id?: string
           p_course_id?: string
           p_from: string
           p_limit?: number
+          p_scope_id?: string
+          p_scope_type?: string
           p_source_id?: string
           p_subject_id?: string
           p_term_id?: string
@@ -3021,6 +3078,8 @@ export type Database = {
           p_counsellor_id?: string
           p_course_id?: string
           p_from: string
+          p_scope_id?: string
+          p_scope_type?: string
           p_source_id?: string
           p_subject_id?: string
           p_term_id?: string

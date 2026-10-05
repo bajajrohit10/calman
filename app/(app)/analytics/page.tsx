@@ -6,13 +6,15 @@ import { loadMasters } from "@/lib/masters";
 import { isAdmin } from "@/lib/roles";
 import { logServerTiming } from "@/lib/server-timing";
 import { createClient } from "@/lib/supabase/server";
-import { loadAnalytics } from "@/lib/analytics";
-import { buildInsights } from "@/lib/analytics-insights";
+import { loadAnalytics, loadExperimentResults } from "@/lib/analytics";
+import { buildHeads } from "@/lib/analytics-insights";
 import {
   RANGE_PRESETS,
+  SCOPE_LABELS,
   type Basis,
   type CompareMode,
   type RangePreset,
+  type ScopeType,
 } from "@/lib/analytics-shape";
 
 import { AnalyticsView } from "./analytics-view";
@@ -119,7 +121,17 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
     sourceId: one(sp.source) || null,
     counsellorId: one(sp.counsellor) || null,
     termId: one(sp.term) || null,
+    // §84.4. The scope is a filter like any other, and an id without a shape — or a
+    // shape without an id — narrows nothing rather than narrowing wrongly.
+    scopeType: ((Object.keys(SCOPE_LABELS) as ScopeType[]).find(
+      (k) => k === one(sp.scopeType),
+    ) ?? "all") as ScopeType,
+    scopeId: one(sp.scopeId) || null,
   };
+  if (filters.scopeType === "all" || !filters.scopeId) {
+    filters.scopeType = "all";
+    filters.scopeId = null;
+  }
 
   const supabase = await createClient();
   const [masters, data, staff] = await Promise.all([
@@ -146,16 +158,33 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
   if (filters.sourceId) query.set("source", filters.sourceId);
   if (filters.counsellorId) query.set("counsellor", filters.counsellorId);
   if (filters.termId) query.set("term", filters.termId);
+  if (filters.scopeType !== "all" && filters.scopeId) {
+    query.set("scopeType", filters.scopeType);
+    query.set("scopeId", filters.scopeId);
+  }
 
-  const insights = data.scope
-    ? buildInsights({
+  const heads = data.scope
+    ? buildHeads({
         scope: data.scope,
         teachers: data.teachers,
         courses: data.courses,
-        products: data.products,
         query: query.toString(),
       })
-    : [];
+    : null;
+
+  const tab =
+    one(sp.tab) === "products"
+      ? "products"
+      : one(sp.tab) === "experiments"
+        ? "experiments"
+        : "teachers";
+
+  // §84.3. Only the tab that shows them pays for them: four windows per experiment
+  // is four reads, and the other two tabs have no use for any of it.
+  const results =
+    tab === "experiments"
+      ? (await loadExperimentResults(data.experiments.map((e) => e.id))).results
+      : [];
 
   logServerTiming("/analytics");
 
@@ -168,7 +197,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
       preset={preset}
       compareMode={compareMode}
       query={query.toString()}
-      tab={one(sp.tab) === "products" ? "products" : "teachers"}
+      tab={tab}
       by={one(sp.by) === "institute" ? "institute" : "teacher"}
       basis={basis}
       error={data.error}
@@ -178,13 +207,17 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
       courses={data.courses}
       products={data.products}
       events={data.events}
-      insights={insights}
+      experiments={data.experiments}
+      results={results}
+      heads={heads}
       timings={data.timings}
       masters={{
         courses: masters.courses,
         subjects: masters.subjects,
         sources: masters.sources,
         terms: masters.terms,
+        teachers: masters.teachers,
+        institutes: masters.institutes,
       }}
       staff={(staff.data ?? []) as { id: string; full_name: string | null }[]}
     />
