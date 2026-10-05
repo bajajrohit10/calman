@@ -107,21 +107,24 @@ export function buildInsights(input: {
 
   // Demand that is not converting, against the team's own average so the bar
   // moves with the business.
-  const teamConv = conversion(now.purchased, now.leads) ?? 0;
+  const teamConv = conversion(now.purchased, now.closed) ?? 0;
   const floor = teamConv * LOW_CONVERSION_FRACTION_OF_TEAM;
   for (const r of teachers) {
-    const conv = conversion(r.purchased, r.enquiries);
-    if (r.enquiries < MIN_ENQUIRIES_FOR_RATE || conv === null) continue;
+    // §83.1. Over closed, not over leads: a teacher with eighty leads still in
+    // progress has not failed to convert them yet, and judging them on the lead
+    // count punished whoever had the busiest week.
+    const conv = conversion(r.purchased, r.closed);
+    if (r.closed < MIN_ENQUIRIES_FOR_RATE || conv === null) continue;
     if (conv >= floor) continue;
     out.push({
       id: `low-conversion:${r.teacher_id}`,
       kind: "low-conversion",
       tone: "warn",
       text:
-        `${r.teacher_name}: ${r.enquiries} enquiries but ${pct(conv)} conversion, ` +
+        `${r.teacher_name}: ${r.closed} closed calls but ${pct(conv)} conversion, ` +
         `under half the team's ${pct(teamConv)}.`,
       action: "Check price, availability and the counsellor pitch.",
-      magnitude: r.enquiries,
+      magnitude: r.closed,
       href: link("teachers", `row-${r.teacher_id}`),
     });
   }
@@ -130,7 +133,7 @@ export function buildInsights(input: {
   // rather than of everything including work still in progress.
   for (const r of teachers) {
     const d = decided(r);
-    if (d === 0 || r.enquiries < MIN_ENQUIRIES_FOR_RATE) continue;
+    if (d === 0 || r.closed < MIN_ENQUIRIES_FOR_RATE) continue;
     const share = r.lost_competitor / d;
     if (share < COMPETITOR_SHARE) continue;
     out.push({
@@ -172,8 +175,8 @@ export function buildInsights(input: {
    * take if you know which conversation to review.
    */
   const silent = courses
-    .filter((r) => r.enquiries >= SILENT_MIN_ENQUIRIES && r.lost_no_response > 0)
-    .map((r) => ({ r, share: r.lost_no_response / r.enquiries }))
+    .filter((r) => r.closed >= SILENT_MIN_ENQUIRIES && r.lost_no_response > 0)
+    .map((r) => ({ r, share: r.lost_no_response / r.closed }))
     .sort((a, b) => b.share - a.share);
   if (silent.length) {
     const { r, share } = silent[0];
@@ -182,8 +185,8 @@ export function buildInsights(input: {
       kind: "silent",
       tone: "warn",
       text:
-        `${r.course_name} · ${r.subject_name}: ${r.lost_no_response} of ${r.enquiries} ` +
-        `leads (${pct(share)}) went silent — the highest share of any subject.`,
+        `${r.course_name} · ${r.subject_name}: ${r.lost_no_response} of ${r.closed} ` +
+        `closed (${pct(share)}) went silent — the highest share of any subject.`,
       action: "Review the follow-up script for this subject.",
       magnitude: r.lost_no_response,
       href: link("products"),
@@ -222,18 +225,18 @@ export function buildInsights(input: {
   // A course and subject pulling ahead of the same length of time before it.
   // Dormant until there are two populated windows; see `change`.
   for (const r of courses) {
-    const g = change(r.enquiries, r.prev_enquiries);
+    const g = change(r.leads, r.prev_leads);
     if (g === null || g < RISING_GROWTH) continue;
-    if (r.enquiries < RISING_MIN_ENQUIRIES) continue;
+    if (r.leads < RISING_MIN_ENQUIRIES) continue;
     out.push({
       id: `rising:${r.course_id}:${r.subject_id ?? "none"}`,
       kind: "rising",
       tone: "ok",
       text:
         `${r.course_name} · ${r.subject_name} is up ${pct(g)} ` +
-        `(${r.prev_enquiries} to ${r.enquiries}).`,
+        `(${r.prev_leads} to ${r.leads}).`,
       action: "Demand rising — campaign now.",
-      magnitude: r.enquiries,
+      magnitude: r.leads,
       href: link("products"),
     });
   }
@@ -241,20 +244,20 @@ export function buildInsights(input: {
   // A big teacher losing ground, among the ones big enough that a drop is a
   // trend rather than a quiet week. Dormant for the same reason.
   const topTeachers = [...teachers]
-    .sort((a, b) => b.enquiries - a.enquiries)
+    .sort((a, b) => b.leads - a.leads)
     .slice(0, FALLING_TOP_N);
   for (const r of topTeachers) {
-    const g = change(r.enquiries, r.prev_enquiries);
+    const g = change(r.leads, r.prev_leads);
     if (g === null || g > -FALLING_DROP) continue;
     out.push({
       id: `falling:${r.teacher_id}`,
       kind: "falling",
       tone: "warn",
       text:
-        `${r.teacher_name} fell ${pct(Math.abs(g))} against the previous ` +
-        `${scope.days} days (${r.prev_enquiries} to ${r.enquiries}).`,
+        `${r.teacher_name} fell ${pct(Math.abs(g))} against the comparison period ` +
+        `(${r.prev_leads} to ${r.leads}).`,
       action: "Falling demand — worth asking why.",
-      magnitude: r.prev_enquiries - r.enquiries,
+      magnitude: r.prev_leads - r.leads,
       href: link("teachers", `row-${r.teacher_id}`),
     });
   }

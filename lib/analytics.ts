@@ -3,6 +3,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 
 import type {
+  AnalyticsEvent,
   AnalyticsFilters,
   AnalyticsScope,
   CourseRow,
@@ -37,6 +38,10 @@ function args(f: AnalyticsFilters) {
     p_source_id: f.sourceId || null,
     p_counsellor_id: f.counsellorId || null,
     p_term_id: f.termId || null,
+    // §83.3. The comparison window travels with every read, so the strip and the
+    // tables can never be comparing against different periods.
+    p_cmp_from: f.cmpFrom || null,
+    p_cmp_to: f.cmpTo || null,
   };
 }
 
@@ -47,6 +52,7 @@ export async function loadAnalytics(f: AnalyticsFilters): Promise<{
   institutes: InstituteRow[];
   courses: CourseRow[];
   products: ProductRow[];
+  events: AnalyticsEvent[];
   /** Wall time in ms for the whole batch, for the timing note the brief asks for. */
   timings: Record<string, number>;
 }> {
@@ -66,7 +72,7 @@ export async function loadAnalytics(f: AnalyticsFilters): Promise<{
   const started = Date.now();
 
   // Together: they read the same window and none of them needs another's answer.
-  const [scope, teachers, institutes, courses, products] = await Promise.all([
+  const [scope, teachers, institutes, courses, products, events] = await Promise.all([
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     supabase.rpc("analytics_scope", a as any),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -75,8 +81,22 @@ export async function loadAnalytics(f: AnalyticsFilters): Promise<{
     supabase.rpc("analytics_by_institute", a as any),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     supabase.rpc("analytics_by_course", a as any),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    supabase.rpc("analytics_products", { ...a, p_limit: 20 } as any),
+    // The product block has no comparison column, so it does not take the
+    // comparison window — spreading it in would call a function that does not
+    // exist with those arguments.
+    supabase.rpc("analytics_products", {
+      ...a,
+      p_cmp_from: undefined,
+      p_cmp_to: undefined,
+      p_limit: 20,
+    } as never),
+    supabase.rpc("analytics_events_in_range", {
+      p_from: f.from,
+      p_to: f.to,
+      p_cmp_from: f.cmpFrom || null,
+      p_cmp_to: f.cmpTo || null,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any),
   ]);
   const timings: Record<string, number> = { "all five": Date.now() - started };
 
@@ -86,6 +106,7 @@ export async function loadAnalytics(f: AnalyticsFilters): Promise<{
     institutes.error?.message ??
     courses.error?.message ??
     products.error?.message ??
+    events.error?.message ??
     null;
 
   return {
@@ -95,6 +116,7 @@ export async function loadAnalytics(f: AnalyticsFilters): Promise<{
     institutes: (institutes.data ?? []) as unknown as InstituteRow[],
     courses: (courses.data ?? []) as unknown as CourseRow[],
     products: (products.data ?? []) as unknown as ProductRow[],
+    events: (events.data ?? []) as unknown as AnalyticsEvent[],
     timings,
   };
 }

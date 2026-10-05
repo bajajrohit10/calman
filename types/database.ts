@@ -808,9 +808,13 @@ export type Database = {
         Returns: {
           called: boolean
           close_reason: Database["public"]["Enums"]["close_reason"]
+          closed: boolean
+          created_on: string
+          due: string
           enquiry_id: number
           lost_reason: Database["public"]["Enums"]["lost_reason"]
           product_text: string
+          slots: number
           status: Database["public"]["Enums"]["enquiry_status"]
           term_id: string
         }[]
@@ -1003,6 +1007,38 @@ export type Database = {
   }
   public: {
     Tables: {
+      analytics_events: {
+        Row: {
+          at: string
+          created_at: string
+          created_by: string
+          id: string
+          note: string
+        }
+        Insert: {
+          at: string
+          created_at?: string
+          created_by: string
+          id?: string
+          note: string
+        }
+        Update: {
+          at?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          note?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analytics_events_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       archive_batches: {
         Row: {
           call_count: number
@@ -2846,6 +2882,8 @@ export type Database = {
       }
       analytics_by_course: {
         Args: {
+          p_cmp_from?: string
+          p_cmp_to?: string
           p_counsellor_id?: string
           p_course_id?: string
           p_from: string
@@ -2855,24 +2893,32 @@ export type Database = {
           p_to: string
         }
         Returns: {
-          amount: number
+          at_fu1: number
+          at_fu2: number
+          at_fu3: number
+          closed: number
           course_id: string
           course_name: string
-          enquiries: number
-          in_progress: number
           items_lost_competitor: number
+          leads: number
           lost_competitor: number
           lost_no_response: number
           lost_not_interested: number
           lost_wrong_number: number
-          prev_enquiries: number
+          oldest_open_days: number
+          open_leads: number
+          overdue: number
+          prev_leads: number
           purchased: number
+          revenue: number
           subject_id: string
           subject_name: string
         }[]
       }
       analytics_by_institute: {
         Args: {
+          p_cmp_from?: string
+          p_cmp_to?: string
           p_counsellor_id?: string
           p_course_id?: string
           p_from: string
@@ -2882,22 +2928,30 @@ export type Database = {
           p_to: string
         }
         Returns: {
-          amount: number
-          enquiries: number
-          in_progress: number
+          at_fu1: number
+          at_fu2: number
+          at_fu3: number
+          closed: number
           institute_id: string
           institute_name: string
           items_lost_competitor: number
+          leads: number
           lost_competitor: number
           lost_no_response: number
           lost_not_interested: number
           lost_wrong_number: number
-          prev_enquiries: number
+          oldest_open_days: number
+          open_leads: number
+          overdue: number
+          prev_leads: number
           purchased: number
+          revenue: number
         }[]
       }
       analytics_by_teacher: {
         Args: {
+          p_cmp_from?: string
+          p_cmp_to?: string
           p_counsellor_id?: string
           p_course_id?: string
           p_from: string
@@ -2907,20 +2961,40 @@ export type Database = {
           p_to: string
         }
         Returns: {
-          amount: number
-          enquiries: number
-          in_progress: number
+          at_fu1: number
+          at_fu2: number
+          at_fu3: number
+          closed: number
           institute_id: string
           institute_name: string
           items_lost_competitor: number
+          leads: number
           lost_competitor: number
           lost_no_response: number
           lost_not_interested: number
           lost_wrong_number: number
-          prev_enquiries: number
+          oldest_open_days: number
+          open_leads: number
+          overdue: number
+          prev_leads: number
           purchased: number
+          revenue: number
           teacher_id: string
           teacher_name: string
+        }[]
+      }
+      analytics_events_in_range: {
+        Args: {
+          p_cmp_from?: string
+          p_cmp_to?: string
+          p_from: string
+          p_to: string
+        }
+        Returns: {
+          at: string
+          id: string
+          note: string
+          scope: string
         }[]
       }
       analytics_products: {
@@ -2942,6 +3016,8 @@ export type Database = {
       }
       analytics_scope: {
         Args: {
+          p_cmp_from?: string
+          p_cmp_to?: string
           p_counsellor_id?: string
           p_course_id?: string
           p_from: string

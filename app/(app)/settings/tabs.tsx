@@ -11,6 +11,9 @@ const TABS = [
   { href: "/settings/master-lists", label: "Master lists" },
   { href: "/settings/offers", label: "Offers" },
   { href: "/settings/holidays", label: "Holidays" },
+  // §83.3. Beside Holidays rather than at the end: both are small calendars of
+  // things that happened, and a reader looking for one is looking for the other.
+  { href: "/settings/analytics-events", label: "Analytics events" },
   { href: "/settings/data", label: "Data management" },
 ];
 

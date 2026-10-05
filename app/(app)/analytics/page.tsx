@@ -8,6 +8,12 @@ import { logServerTiming } from "@/lib/server-timing";
 import { createClient } from "@/lib/supabase/server";
 import { loadAnalytics } from "@/lib/analytics";
 import { buildInsights } from "@/lib/analytics-insights";
+import {
+  RANGE_PRESETS,
+  type Basis,
+  type CompareMode,
+  type RangePreset,
+} from "@/lib/analytics-shape";
 
 import { AnalyticsView } from "./analytics-view";
 
@@ -16,16 +22,51 @@ export const metadata = { title: "Analytics · Calman" };
 type Params = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || "";
 
+/** Days between two ISO dates, inclusive of both ends. */
+function spanDays(from: string, to: string): number {
+  const a = Date.parse(`${from}T00:00:00Z`);
+  const b = Date.parse(`${to}T00:00:00Z`);
+  return Math.max(1, Math.round((b - a) / 86_400_000) + 1);
+}
+
+function shift(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 /**
- * §81. Analytics.
+ * §83.3. The range the presets resolve to, in IST.
  *
- * Managers and super admins only, and 404 rather than a refusal for anybody
- * else: a counsellor who types the URL should not learn that the page exists.
- * The five SQL functions behind it each re-check the same role, so the gate
- * survives somebody calling the RPC directly.
+ * Resolved here rather than in SQL so the dates are in the URL: a manager who
+ * sends somebody "the last 30 days" link should have them see the same thirty
+ * days tomorrow, not a window that slid.
+ */
+function resolveRange(preset: RangePreset, sp: Params): { from: string; to: string } {
+  const today = istToday();
+  if (preset === "custom") {
+    const from = one(sp.from) || shift(today, -29);
+    const to = one(sp.to) || today;
+    // A backwards range is a typo, not a request for no rows.
+    return from <= to ? { from, to } : { from: to, to: from };
+  }
+  if (preset === "today") return { from: today, to: today };
+  if (preset === "7") return { from: shift(today, -6), to: today };
+  if (preset === "month") return { from: `${today.slice(0, 7)}-01`, to: today };
+  return { from: shift(today, -29), to: today };
+}
+
+/**
+ * §83. Analytics.
  *
- * Read-only by construction — there is no action in this route and nothing it
- * imports writes to a counselling table.
+ * Managers and super admins only, and 404 rather than a refusal for anybody else:
+ * a counsellor who types the URL should not learn that the page exists. The SQL
+ * functions behind it each re-check the same role, so the gate survives somebody
+ * calling the RPC directly.
+ *
+ * Read-only by construction — nothing this route imports writes to a counselling
+ * table. The one writer in §83 is Settings → Analytics events, which writes only
+ * its own annotations.
  */
 export default async function Page({ searchParams }: { searchParams: Promise<Params> }) {
   const viewer = await requireUser();
@@ -33,26 +74,50 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
 
   const sp = await searchParams;
 
-  /**
-   * Default: the last 30 days, in IST.
-   *
-   * Thirty rather than this month, because every rate on this page wants a
-   * stable denominator and a month-to-date window shrinks to nothing on the
-   * first of the month — which is exactly when somebody opens a report.
-   */
-  const today = istToday();
-  const d = new Date(`${today}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() - 29);
-  const defaultFrom = d.toISOString().slice(0, 10);
+  // An explicit from/to in the URL means a custom range, whatever preset says —
+  // which is what makes a shared link reproduce its own window.
+  const asked = one(sp.preset);
+  const preset: RangePreset =
+    (RANGE_PRESETS as readonly string[]).includes(asked)
+      ? (asked as RangePreset)
+      : one(sp.from) || one(sp.to)
+        ? "custom"
+        : "30";
+  const { from, to } = resolveRange(preset, sp);
+
+  const compareAsked = one(sp.compare);
+  const compareMode: CompareMode =
+    compareAsked === "none" || compareAsked === "custom" ? compareAsked : "previous";
+
+  /** The same length of time immediately before the range. */
+  let cmpFrom: string | null = null;
+  let cmpTo: string | null = null;
+  if (compareMode === "previous") {
+    const len = spanDays(from, to);
+    cmpTo = shift(from, -1);
+    cmpFrom = shift(cmpTo, -(len - 1));
+  } else if (compareMode === "custom") {
+    cmpFrom = one(sp.cmpFrom) || null;
+    cmpTo = one(sp.cmpTo) || null;
+    // Half a custom range is no range: comparing against an open end would give
+    // deltas nobody asked for.
+    if (!cmpFrom || !cmpTo) {
+      cmpFrom = null;
+      cmpTo = null;
+    } else if (cmpFrom > cmpTo) {
+      [cmpFrom, cmpTo] = [cmpTo, cmpFrom];
+    }
+  }
 
   const filters = {
-    from: one(sp.from) || defaultFrom,
-    to: one(sp.to) || today,
+    from,
+    to,
+    cmpFrom,
+    cmpTo,
     courseId: one(sp.course) || null,
     subjectId: one(sp.subject) || null,
     sourceId: one(sp.source) || null,
     counsellorId: one(sp.counsellor) || null,
-    // §82.2: term is a filter now, not a dimension of the Products table.
     termId: one(sp.term) || null,
   };
 
@@ -67,12 +132,15 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
       .order("full_name"),
   ]);
 
-  // The query string that reproduces this view, for the insight links and the
-  // tab switches. Built here rather than in the client so a card's link is the
-  // same string whichever tab rendered it.
+  // The query string that reproduces this view, for the insight links and every
+  // toggle. Built here so a card's link is the same string whichever tab made it.
   const query = new URLSearchParams();
-  query.set("from", filters.from);
-  query.set("to", filters.to);
+  query.set("preset", preset);
+  query.set("from", from);
+  query.set("to", to);
+  query.set("compare", compareMode);
+  if (cmpFrom && compareMode === "custom") query.set("cmpFrom", cmpFrom);
+  if (cmpTo && compareMode === "custom") query.set("cmpTo", cmpTo);
   if (filters.courseId) query.set("course", filters.courseId);
   if (filters.subjectId) query.set("subject", filters.subjectId);
   if (filters.sourceId) query.set("source", filters.sourceId);
@@ -91,18 +159,25 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
 
   logServerTiming("/analytics");
 
+  const basis: Basis =
+    (["closed", "open", "total"] as const).find((b) => b === one(sp.basis)) ?? "closed";
+
   return (
     <AnalyticsView
       filters={filters}
+      preset={preset}
+      compareMode={compareMode}
       query={query.toString()}
       tab={one(sp.tab) === "products" ? "products" : "teachers"}
       by={one(sp.by) === "institute" ? "institute" : "teacher"}
+      basis={basis}
       error={data.error}
       scope={data.scope ?? null}
       teachers={data.teachers}
       institutes={data.institutes}
       courses={data.courses}
       products={data.products}
+      events={data.events}
       insights={insights}
       timings={data.timings}
       masters={{

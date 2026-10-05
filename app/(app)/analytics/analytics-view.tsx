@@ -7,8 +7,16 @@ import { Button, Input, PageHeader, Select, cx } from "@/components/ui";
 import {
   avgSale,
   change,
+  closedShares,
   conversion,
+  pointsChange,
+  PRESET_LABELS,
+  RANGE_PRESETS,
+  type AnalyticsEvent,
   type AnalyticsScope,
+  type Basis,
+  type CompareMode,
+  type RangePreset,
   type CourseRow,
   type InstituteRow,
   type ProductRow,
@@ -17,104 +25,164 @@ import {
   type Totals,
 } from "@/lib/analytics-shape";
 import type { Insight } from "@/lib/analytics-insights";
+import { formatDate } from "@/lib/format";
 
 const LABEL = "text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3";
 const money = (v: number) => (v ? `₹${Math.round(v).toLocaleString("en-IN")}` : "—");
 const num = (v: number) => (v ? String(v) : "—");
 const pct = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}%`);
-
-/** §82.4. How many rows before the list is folded behind "Show all". */
 const COLLAPSED_ROWS = 10;
 
-/** ▲12% / ▼30% / nothing when the previous window had no basis for a comparison. */
-function Delta({ now, before, invert }: { now: number; before: number; invert?: boolean }) {
-  const c = change(now, before);
+/**
+ * §83.3. A count's movement in %, a rate's movement in percentage points.
+ *
+ * Two functions because they are two different questions. 24% to 29% is five
+ * points, and reporting it as "+21%" is the single most common way a dashboard
+ * lies about a conversion rate — true of the ratio, misleading about the business.
+ */
+function Delta({
+  now,
+  before,
+  invert,
+  rate,
+}: {
+  now: number | null;
+  before: number | null;
+  invert?: boolean;
+  /** Treat the values as rates and report points. */
+  rate?: boolean;
+}) {
+  if (before === null || now === null) {
+    return <span className="text-[11px] text-ink-3">—</span>;
+  }
+  const c = rate ? pointsChange(now, before) : change(now, before);
   if (c === null) return <span className="text-[11px] text-ink-3">—</span>;
-  if (Math.abs(c) < 0.005) return <span className="text-[11px] text-ink-3">0%</span>;
+  const tiny = rate ? Math.abs(c) < 0.5 : Math.abs(c) < 0.005;
+  if (tiny) return <span className="text-[11px] text-ink-3">{rate ? "0 pts" : "0%"}</span>;
   const up = c > 0;
-  // §82.1. On a Lost column a rise is bad news, so the colour follows the
-  // meaning rather than the arithmetic. The arrow still follows the number.
   const good = invert ? !up : up;
   return (
     <span className={cx("text-[11px] tabular-nums", good ? "text-ok" : "text-danger")}>
       {up ? "▲" : "▼"}
-      {Math.abs(Math.round(c * 100))}%
+      {rate ? `${Math.abs(Math.round(c))} pts` : `${Math.abs(Math.round(c * 100))}%`}
     </span>
   );
 }
 
 /**
- * §82.1. The metrics strip.
+ * §83.1. The metrics strip, on one basis.
  *
- * Nine figures for the period with the change in each beneath, from one SQL
- * function called twice — so the strip cannot drift from the tables about what
- * "purchased" counts. It sits above the insights because it is the thing a
- * manager came to read; the cards are what they would not have thought to look
- * for.
+ * Nine cards in the order the business reads: how many came in, how much is still
+ * open, how much is decided, and then the decomposition of the decided half. Each
+ * carries its number and, where a rate applies, the rate beside it — "110 · 32%".
+ *
+ * Conversion and the three Lost rates are all over `closed`, which is what makes
+ * them comparable and what makes them sum. The tooltip on Conversion carries the
+ * whole decomposition and its total: it should read 100%, and if it does not then
+ * a closed outcome exists that none of the five names.
  */
-function MetricStrip({ now, prev, days }: { now: Totals; prev: Totals; days: number }) {
+function MetricStrip({
+  now,
+  prev,
+  cmpLabel,
+}: {
+  now: Totals;
+  prev: Totals | null;
+  cmpLabel: string | null;
+}) {
+  const share = closedShares(now);
+  const prevShare = prev ? closedShares(prev) : null;
+  const check =
+    `Of ${now.closed} closed: purchased ${pct(share.purchased)}, ` +
+    `competitor ${pct(share.competitor)}, not interested ${pct(share.notInterested)}, ` +
+    `no response ${pct(share.noResponse)}, wrong number ${pct(share.wrongNumber)}` +
+    (now.closedOther ? `, other ${pct(share.other)}` : "") +
+    ` — total ${pct(share.sum)}`;
+
   const cards: {
+    key: string;
     label: string;
     value: string;
-    now: number;
-    before: number;
+    rate?: string;
+    now: number | null;
+    before: number | null;
+    isRate?: boolean;
     invert?: boolean;
-    hint?: string;
+    sub?: string;
+    title?: string;
   }[] = [
-    { label: "Leads", value: String(now.leads), now: now.leads, before: prev.leads },
+    { key: "leads", label: "Leads", value: String(now.leads), now: now.leads, before: prev?.leads ?? null },
     {
-      label: "Called",
-      value: pct(conversion(now.called, now.leads)),
-      now: now.called,
-      before: prev.called,
-      hint: `${now.called} of ${now.leads}`,
+      key: "open",
+      label: "Open calls",
+      value: String(now.open),
+      now: now.open,
+      before: prev?.open ?? null,
+      sub: now.oldestOpenDays ? `oldest ${now.oldestOpenDays}d` : undefined,
     },
-    { label: "Purchased", value: String(now.purchased), now: now.purchased, before: prev.purchased },
     {
+      key: "closed",
+      label: "Closed calls",
+      value: String(now.closed),
+      now: now.closed,
+      before: prev?.closed ?? null,
+      sub: "the basis for every rate",
+    },
+    {
+      key: "purchases",
+      label: "Purchases",
+      value: String(now.purchased),
+      rate: pct(share.purchased),
+      now: now.purchased,
+      before: prev?.purchased ?? null,
+    },
+    {
+      key: "revenue",
       label: "Revenue",
       value: money(Number(now.revenue)),
       now: Number(now.revenue),
-      before: Number(prev.revenue),
+      before: prev ? Number(prev.revenue) : null,
+      sub: `avg sale ${money(avgSale(Number(now.revenue), now.wonItems) ?? 0)}`,
     },
     {
+      key: "conversion",
       label: "Conversion",
-      value: pct(conversion(now.purchased, now.leads)),
-      now: now.purchased,
-      before: prev.purchased,
+      value: pct(share.purchased),
+      now: share.purchased,
+      before: prevShare?.purchased ?? null,
+      isRate: true,
+      sub: `${now.purchased} of ${now.closed} closed`,
+      title: check,
     },
     {
-      label: "Avg sale",
-      value: money(avgSale(Number(now.revenue), now.wonItems) ?? 0),
-      now: Number(now.revenue),
-      before: Number(prev.revenue),
-      hint: `over ${now.wonItems} sold lines`,
-    },
-    {
+      key: "lost-competitor",
       label: "Lost · competitor",
       value: String(now.lostCompetitor),
-      now: now.lostCompetitor,
-      before: prev.lostCompetitor,
+      rate: pct(share.competitor),
+      now: share.competitor,
+      before: prevShare?.competitor ?? null,
+      isRate: true,
       invert: true,
     },
     {
+      key: "lost-not-interested",
       label: "Lost · not interested",
       value: String(now.lostNotInterested),
-      now: now.lostNotInterested,
-      before: prev.lostNotInterested,
+      rate: pct(share.notInterested),
+      now: share.notInterested,
+      before: prevShare?.notInterested ?? null,
+      isRate: true,
       invert: true,
     },
     {
+      key: "lost-no-response",
       label: "Lost · no response",
       value: String(now.lostNoResponse),
-      now: now.lostNoResponse,
-      before: prev.lostNoResponse,
+      rate: pct(share.noResponse),
+      now: share.noResponse,
+      before: prevShare?.noResponse ?? null,
+      isRate: true,
       invert: true,
-    },
-    {
-      label: "Open follow-ups",
-      value: String(now.openFollowUps),
-      now: now.openFollowUps,
-      before: prev.openFollowUps,
     },
   ];
 
@@ -122,21 +190,30 @@ function MetricStrip({ now, prev, days }: { now: Totals; prev: Totals; days: num
     <section
       className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5"
       data-testid="metric-strip"
+      title={check}
     >
       {cards.map((c) => (
         <div
-          key={c.label}
+          key={c.key}
+          data-testid={`metric-${c.key}`}
+          title={c.title}
           className="flex flex-col gap-0.5 rounded-lg border border-line-2 bg-surface px-3 py-2 shadow-card"
-          data-testid={`metric-${c.label.toLowerCase().replace(/[^a-z]+/g, "-")}`}
         >
           <span className={LABEL}>{c.label}</span>
-          <span className="text-[19px] font-semibold leading-tight tabular-nums text-ink">
-            {c.value}
+          <span className="flex items-baseline gap-1.5">
+            <span className="text-[19px] font-semibold leading-tight tabular-nums text-ink">
+              {c.value}
+            </span>
+            {c.rate ? (
+              <span className="text-[12px] tabular-nums text-ink-2">· {c.rate}</span>
+            ) : null}
           </span>
           <span className="flex items-baseline gap-1.5">
-            <Delta now={c.now} before={c.before} invert={c.invert} />
+            {prev ? (
+              <Delta now={c.now} before={c.before} invert={c.invert} rate={c.isRate} />
+            ) : null}
             <span className="text-[10.5px] text-ink-3">
-              {c.hint ?? `vs prev ${days}d`}
+              {c.sub ?? (prev ? (cmpLabel ?? "vs comparison") : "no comparison")}
             </span>
           </span>
         </div>
@@ -146,132 +223,214 @@ function MetricStrip({ now, prev, days }: { now: Totals; prev: Totals; days: num
 }
 
 /**
- * §82.4. The columns, split into the ones worth the width and the rest.
+ * §83.2. Three column sets, one per basis.
  *
- * Seven core columns is what fits without scrolling on a laptop, and the four
- * behind the toggle are the ones that answered a question somebody asked once.
- * Hidden rather than removed: "items lost to competitor" is the only place the
- * teacher-level competitor signal lives, and dropping it would lose the answer
- * rather than tidy the table.
+ * The basis is not a filter — every row is still every row — it is a choice of
+ * which question the columns answer. Closed asks "how did decided business go",
+ * Open asks "where is the work that is left", Total asks "how much of each".
+ *
+ * On the closed basis the five percentages are over that row's own closed count
+ * and sum to 100%, the same arithmetic the strip's tooltip checks.
  */
 type Col = {
   key: string;
-  /** Marks the one column the body renders itself. */
-  key_is_name?: boolean;
   label: string;
   more?: boolean;
-  /** Right-aligned, which is everything except the name. */
+  isName?: boolean;
   cell: (r: Row) => React.ReactNode;
-  /** CSV value, and the sort key. */
   value: (r: Row) => string;
   sort?: (r: Row) => number;
 };
 
-const COLUMNS: Col[] = [
-  {
-    key: "name",
-    // The name cell carries a link and an institute sub-label, so the table body
-    // renders it directly; this entry exists for the header, the sort and the CSV.
-    key_is_name: true,
-    label: "Name",
-    cell: () => null,
-    value: (r) => r.label,
-  },
-  {
-    key: "enquiries",
-    label: "Enquiries",
-    cell: (r) => <span className="font-semibold text-ink">{r.enquiries}</span>,
-    value: (r) => String(r.enquiries),
-    sort: (r) => r.enquiries,
-  },
-  {
-    key: "purchased",
-    label: "Purchased",
-    cell: (r) => <span className="text-ink">{num(r.purchased)}</span>,
-    value: (r) => String(r.purchased),
-    sort: (r) => r.purchased,
-  },
-  {
-    key: "amount",
-    label: "Revenue",
-    cell: (r) => <span className="text-ink-2">{money(Number(r.amount))}</span>,
-    value: (r) => String(Number(r.amount)),
-    sort: (r) => Number(r.amount),
-  },
-  {
-    key: "conversion",
-    label: "Conversion %",
-    cell: (r) => <span className="text-ink">{pct(conversion(r.purchased, r.enquiries))}</span>,
-    value: (r) => {
-      const c = conversion(r.purchased, r.enquiries);
-      return c === null ? "" : `${Math.round(c * 100)}%`;
-    },
-    sort: (r) => conversion(r.purchased, r.enquiries) ?? -1,
-  },
-  {
-    key: "lost_competitor",
-    label: "Competitor",
-    cell: (r) => <span className="text-ink-2">{num(r.lost_competitor)}</span>,
-    value: (r) => String(r.lost_competitor),
-    sort: (r) => r.lost_competitor,
-  },
-  {
-    key: "lost_no_response",
-    label: "No response",
-    cell: (r) => <span className="text-ink-2">{num(r.lost_no_response)}</span>,
-    value: (r) => String(r.lost_no_response),
-    sort: (r) => r.lost_no_response,
-  },
-  {
-    key: "prev",
-    label: "vs prev",
-    cell: (r) => <Delta now={r.enquiries} before={r.prev_enquiries} />,
-    value: (r) => String(r.prev_enquiries),
-    sort: (r) => change(r.enquiries, r.prev_enquiries) ?? -Infinity,
-  },
-  {
-    key: "lost_not_interested",
-    label: "Not interested",
-    more: true,
-    cell: (r) => <span className="text-ink-2">{num(r.lost_not_interested)}</span>,
-    value: (r) => String(r.lost_not_interested),
-    sort: (r) => r.lost_not_interested,
-  },
-  {
-    key: "lost_wrong_number",
-    label: "Wrong number",
-    more: true,
-    cell: (r) => <span className="text-ink-3">{num(r.lost_wrong_number)}</span>,
-    value: (r) => String(r.lost_wrong_number),
-    sort: (r) => r.lost_wrong_number,
-  },
-  {
-    key: "items_lost_competitor",
-    label: "Items lost to competitor",
-    more: true,
-    cell: (r) => <span className="text-ink-3">{num(r.items_lost_competitor)}</span>,
-    value: (r) => String(r.items_lost_competitor),
-    sort: (r) => r.items_lost_competitor,
-  },
-  {
-    key: "in_progress",
-    label: "Open follow-ups",
-    more: true,
-    cell: (r) => <span className="text-ink-2">{num(r.in_progress)}</span>,
-    value: (r) => String(r.in_progress),
-    sort: (r) => r.in_progress,
-  },
-];
+const NAME_COL: Col = {
+  key: "name",
+  label: "Name",
+  isName: true,
+  cell: () => null,
+  value: (r) => r.label,
+};
 
-/**
- * One table for all three grains.
- *
- * §82.2 made Products a table with the teacher table's columns, so there is one
- * component rather than three — which is also what stops the three drifting
- * apart the way the panel's two layouts did in §79.
- */
+/** n with its share of the row's closed count beneath — "38 · 11%". */
+const closedShare = (pick: (r: Row) => number) => ({
+  cell: (r: Row) => (
+    <span className="whitespace-nowrap">
+      <span className="text-ink">{num(pick(r))}</span>
+      {r.closed ? (
+        <span className="ml-1 text-[11px] text-ink-3">· {pct(pick(r) / r.closed)}</span>
+      ) : null}
+    </span>
+  ),
+  value: (r: Row) => (r.closed ? `${pick(r)} (${Math.round((pick(r) / r.closed) * 100)}%)` : String(pick(r))),
+  sort: (r: Row) => (r.closed ? pick(r) / r.closed : -1),
+});
+
+const COLUMNS: Record<Basis, Col[]> = {
+  closed: [
+    NAME_COL,
+    {
+      key: "closed",
+      label: "Closed",
+      cell: (r) => <span className="font-semibold text-ink">{r.closed}</span>,
+      value: (r) => String(r.closed),
+      sort: (r) => r.closed,
+    },
+    { key: "purchased", label: "Purchased", ...closedShare((r) => r.purchased) },
+    {
+      key: "revenue",
+      label: "Revenue",
+      cell: (r) => <span className="text-ink-2">{money(Number(r.revenue))}</span>,
+      value: (r) => String(Number(r.revenue)),
+      sort: (r) => Number(r.revenue),
+    },
+    { key: "lost_competitor", label: "Competitor", ...closedShare((r) => r.lost_competitor) },
+    { key: "lost_not_interested", label: "Not interested", ...closedShare((r) => r.lost_not_interested) },
+    { key: "lost_no_response", label: "No response", ...closedShare((r) => r.lost_no_response) },
+    { key: "lost_wrong_number", label: "Wrong number", ...closedShare((r) => r.lost_wrong_number) },
+    {
+      key: "prev",
+      label: "vs prev",
+      cell: (r) => <Delta now={r.leads} before={r.prev_leads} />,
+      value: (r) => String(r.prev_leads),
+      sort: (r) => change(r.leads, r.prev_leads) ?? -Infinity,
+    },
+    {
+      key: "items_lost_competitor",
+      label: "Items lost to competitor",
+      more: true,
+      cell: (r) => <span className="text-ink-3">{num(r.items_lost_competitor)}</span>,
+      value: (r) => String(r.items_lost_competitor),
+      sort: (r) => r.items_lost_competitor,
+    },
+  ],
+  open: [
+    NAME_COL,
+    {
+      key: "open_leads",
+      label: "Open",
+      cell: (r) => <span className="font-semibold text-ink">{r.open_leads}</span>,
+      value: (r) => String(r.open_leads),
+      sort: (r) => r.open_leads,
+    },
+    {
+      key: "at_fu1",
+      label: "At 1st follow-up",
+      cell: (r) => <span className="text-ink-2">{num(r.at_fu1)}</span>,
+      value: (r) => String(r.at_fu1),
+      sort: (r) => r.at_fu1,
+    },
+    {
+      key: "at_fu2",
+      label: "At 2nd",
+      cell: (r) => <span className="text-ink-2">{num(r.at_fu2)}</span>,
+      value: (r) => String(r.at_fu2),
+      sort: (r) => r.at_fu2,
+    },
+    {
+      key: "at_fu3",
+      label: "At 3rd",
+      cell: (r) => <span className="text-ink-2">{num(r.at_fu3)}</span>,
+      value: (r) => String(r.at_fu3),
+      sort: (r) => r.at_fu3,
+    },
+    {
+      key: "overdue",
+      label: "Overdue",
+      cell: (r) =>
+        r.overdue ? (
+          <span className="font-medium text-warn">{r.overdue}</span>
+        ) : (
+          <span className="text-ink-3">—</span>
+        ),
+      value: (r) => String(r.overdue),
+      sort: (r) => r.overdue,
+    },
+    {
+      key: "oldest_open_days",
+      label: "Oldest open",
+      cell: (r) =>
+        r.oldest_open_days ? (
+          <span className="text-ink-2">{r.oldest_open_days}d</span>
+        ) : (
+          <span className="text-ink-3">—</span>
+        ),
+      value: (r) => String(r.oldest_open_days),
+      sort: (r) => r.oldest_open_days,
+    },
+    {
+      key: "prev",
+      label: "vs prev",
+      cell: (r) => <Delta now={r.leads} before={r.prev_leads} />,
+      value: (r) => String(r.prev_leads),
+      sort: (r) => change(r.leads, r.prev_leads) ?? -Infinity,
+    },
+  ],
+  total: [
+    NAME_COL,
+    {
+      key: "leads",
+      label: "Leads",
+      cell: (r) => <span className="font-semibold text-ink">{r.leads}</span>,
+      value: (r) => String(r.leads),
+      sort: (r) => r.leads,
+    },
+    {
+      key: "open_leads",
+      label: "Open",
+      cell: (r) => (
+        <span className="whitespace-nowrap">
+          <span className="text-ink">{num(r.open_leads)}</span>
+          {r.leads ? (
+            <span className="ml-1 text-[11px] text-ink-3">· {pct(r.open_leads / r.leads)}</span>
+          ) : null}
+        </span>
+      ),
+      value: (r) => String(r.open_leads),
+      sort: (r) => (r.leads ? r.open_leads / r.leads : -1),
+    },
+    {
+      key: "closed",
+      label: "Closed",
+      cell: (r) => (
+        <span className="whitespace-nowrap">
+          <span className="text-ink">{num(r.closed)}</span>
+          {r.leads ? (
+            <span className="ml-1 text-[11px] text-ink-3">· {pct(r.closed / r.leads)}</span>
+          ) : null}
+        </span>
+      ),
+      value: (r) => String(r.closed),
+      sort: (r) => (r.leads ? r.closed / r.leads : -1),
+    },
+    // §83.2. Purchased is a share of closed even here, because a share of leads
+    // would be a different number from the one every other basis shows.
+    { key: "purchased", label: "Purchased", ...closedShare((r) => r.purchased) },
+    {
+      key: "revenue",
+      label: "Revenue",
+      cell: (r) => <span className="text-ink-2">{money(Number(r.revenue))}</span>,
+      value: (r) => String(Number(r.revenue)),
+      sort: (r) => Number(r.revenue),
+    },
+    {
+      key: "prev",
+      label: "vs prev",
+      cell: (r) => <Delta now={r.leads} before={r.prev_leads} />,
+      value: (r) => String(r.prev_leads),
+      sort: (r) => change(r.leads, r.prev_leads) ?? -Infinity,
+    },
+  ],
+};
+
+/** The default sort per basis: the column the basis is about. */
+const DEFAULT_SORT: Record<Basis, string> = {
+  closed: "closed",
+  open: "open_leads",
+  total: "leads",
+};
+
 function DemandTable({
   rows,
+  basis,
   sort,
   onSort,
   showMore,
@@ -280,6 +439,7 @@ function DemandTable({
   nameHeader,
 }: {
   rows: Row[];
+  basis: Basis;
   sort: { key: string; desc: boolean };
   onSort: (key: string) => void;
   showMore: boolean;
@@ -287,12 +447,10 @@ function DemandTable({
   onExpand: () => void;
   nameHeader: string;
 }) {
-  const cols = COLUMNS.filter((c) => showMore || !c.more);
-  // Untagged is pinned last whatever the sort: it is the measure of how much of
-  // the page cannot be attributed, not a competitor for "busiest".
+  const cols = COLUMNS[basis].filter((c) => showMore || !c.more);
   const real = rows.filter((r) => r.id);
   const untagged = rows.filter((r) => !r.id);
-  const col = COLUMNS.find((c) => c.key === sort.key);
+  const col = COLUMNS[basis].find((c) => c.key === sort.key);
   const sorted = [...real].sort((a, b) => {
     if (!col?.sort) {
       return sort.desc ? b.label.localeCompare(a.label) : a.label.localeCompare(b.label);
@@ -312,14 +470,14 @@ function DemandTable({
               {cols.map((c) => (
                 <th
                   key={c.key}
-                  className={cx("px-1.5 py-[7px]", c.key === "name" ? "text-left" : "text-right")}
+                  className={cx("px-1.5 py-[7px]", c.isName ? "text-left" : "text-right")}
                 >
                   <button
                     type="button"
                     onClick={() => onSort(c.key)}
                     className={cx("hover:text-ink", sort.key === c.key && "text-ink")}
                   >
-                    {c.key === "name" ? nameHeader : c.label}
+                    {c.isName ? nameHeader : c.label}
                     {sort.key === c.key ? (sort.desc ? " ▾" : " ▴") : ""}
                   </button>
                 </th>
@@ -345,9 +503,7 @@ function DemandTable({
                   ) : (
                     r.label
                   )}
-                  {r.sub ? (
-                    <span className="ml-1.5 text-[11px] text-ink-3">{r.sub}</span>
-                  ) : null}
+                  {r.sub ? <span className="ml-1.5 text-[11px] text-ink-3">{r.sub}</span> : null}
                 </td>
                 {cols.slice(1).map((c) => (
                   <td key={c.key} className="px-1.5 py-[5px] text-right tabular-nums">
@@ -384,21 +540,27 @@ export function AnalyticsView(props: {
   filters: {
     from: string;
     to: string;
+    cmpFrom: string | null;
+    cmpTo: string | null;
     courseId: string | null;
     subjectId: string | null;
     sourceId: string | null;
     counsellorId: string | null;
     termId: string | null;
   };
+  preset: RangePreset;
+  compareMode: CompareMode;
   query: string;
   tab: "teachers" | "products";
   by: "teacher" | "institute";
+  basis: Basis;
   error: string | null;
   scope: AnalyticsScope | null;
   teachers: TeacherRow[];
   institutes: InstituteRow[];
   courses: CourseRow[];
   products: ProductRow[];
+  events: AnalyticsEvent[];
   insights: Insight[];
   timings: Record<string, number>;
   masters: {
@@ -409,9 +571,9 @@ export function AnalyticsView(props: {
   };
   staff: { id: string; full_name: string | null }[];
 }) {
-  const { scope, filters, query, tab, by } = props;
+  const { scope, filters, query, tab, by, basis, preset, compareMode } = props;
   const [sort, setSort] = useState<{ key: string; desc: boolean }>({
-    key: "enquiries",
+    key: DEFAULT_SORT[basis],
     desc: true,
   });
   const [showMore, setShowMore] = useState(false);
@@ -428,19 +590,12 @@ export function AnalyticsView(props: {
 
   const period = `createdFrom=${filters.from}&createdTo=${filters.to}`;
 
-  /** The three grains, flattened into the one row shape the table takes. */
   const rows: Row[] = useMemo(() => {
     if (tab === "products") {
       return props.courses.map((r) => ({
         ...r,
-        /**
-         * Composite, because the course alone is not the row.
-         *
-         * A course has one row per subject, so keying on course_id gave React
-         * duplicate keys — it was omitting and re-using rows, and the anchors
-         * the insight links point at collided too. The subject is part of the
-         * identity here in a way it is not on the teacher table.
-         */
+        // Composite: a course has one row per subject, so the course alone is not
+        // the row's identity. §82 found this as duplicate React keys.
         id: r.course_id ? `${r.course_id}:${r.subject_id ?? "none"}` : null,
         label: r.course_id ? `${r.course_name} · ${r.subject_name}` : "Untagged",
         href: r.course_id
@@ -453,8 +608,6 @@ export function AnalyticsView(props: {
         ...r,
         id: r.institute_id,
         label: r.institute_name,
-        // The Enquiries list has no institute filter, so an institute row has no
-        // list of its own to open. Its teachers each do.
         href: null,
       }));
     }
@@ -467,9 +620,9 @@ export function AnalyticsView(props: {
     }));
   }, [tab, by, props.teachers, props.institutes, props.courses, period]);
 
-  /** The current tab as CSV, with a BOM — the convention everywhere else here. */
+  /** §83.2. The CSV follows the basis, so it is the table you were looking at. */
   function exportCsv() {
-    const cols = COLUMNS.filter((c) => showMore || !c.more);
+    const cols = COLUMNS[basis].filter((c) => showMore || !c.more);
     const out: string[][] = [cols.map((c) => c.label)];
     for (const r of rows) out.push(cols.map((c) => c.value(r)));
     if (tab === "products") {
@@ -489,7 +642,7 @@ export function AnalyticsView(props: {
     const csv = `﻿${out.map((r) => r.map(esc).join(",")).join("\r\n")}\r\n`;
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
-    a.download = `calman-analytics-${tab}-${filters.from}-to-${filters.to}.csv`;
+    a.download = `calman-analytics-${tab}-${basis}-${filters.from}-to-${filters.to}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
   }
@@ -498,6 +651,10 @@ export function AnalyticsView(props: {
     ? props.masters.subjects.filter((s) => s.course_id === filters.courseId)
     : props.masters.subjects;
   const slowest = Math.max(0, ...Object.values(props.timings));
+  const cmpLabel =
+    filters.cmpFrom && filters.cmpTo
+      ? `vs ${formatDate(filters.cmpFrom)} – ${formatDate(filters.cmpTo)}`
+      : null;
 
   return (
     <div className="flex flex-col gap-5">
@@ -506,18 +663,76 @@ export function AnalyticsView(props: {
         description="Which teachers and courses students ask for, what they buy, and where demand is going. Read-only."
       />
 
+      {/* §83.3. Range on the left, comparison on the right, both in one GET form
+          so a reload lands on the same view. */}
       <form method="GET" className="rounded-lg border border-line bg-surface shadow-card">
-        <div className="flex flex-wrap items-end gap-2 p-2.5">
-          <input type="hidden" name="tab" value={tab} />
-          <input type="hidden" name="by" value={by} />
-          <label className="block">
-            <span className={LABEL}>Period</span>
-            <div className="flex items-center gap-1.5">
-              <Input type="date" name="from" defaultValue={filters.from} aria-label="From" />
-              <span className="text-[12px] text-ink-3">→</span>
-              <Input type="date" name="to" defaultValue={filters.to} aria-label="To" />
+        <input type="hidden" name="tab" value={tab} />
+        <input type="hidden" name="by" value={by} />
+        <input type="hidden" name="basis" value={basis} />
+        <div className="flex flex-wrap items-end gap-2 border-b border-line p-2.5">
+          <div className="flex flex-col gap-1">
+            <span className={LABEL}>Date range</span>
+            <div className="flex flex-wrap items-center gap-1">
+              {RANGE_PRESETS.map((p) => (
+                <Link
+                  key={p}
+                  href={href({ preset: p, from: "", to: "" })}
+                  prefetch={false}
+                  aria-current={preset === p ? "page" : undefined}
+                  data-testid={`preset-${p}`}
+                  className={cx(
+                    "rounded-full border px-2.5 py-[3px] text-[11.5px]",
+                    preset === p
+                      ? "border-accent bg-accent-soft text-accent"
+                      : "border-line-2 bg-surface text-ink-2 hover:text-ink",
+                  )}
+                >
+                  {PRESET_LABELS[p]}
+                </Link>
+              ))}
             </div>
+          </div>
+          <label className="block">
+            <span className={LABEL}>From</span>
+            <Input type="date" name="from" defaultValue={filters.from} aria-label="From" />
           </label>
+          <label className="block">
+            <span className={LABEL}>To</span>
+            <Input type="date" name="to" defaultValue={filters.to} aria-label="To" />
+          </label>
+          <label className="block">
+            <span className={LABEL}>Compare to</span>
+            <Select name="compare" defaultValue={compareMode} aria-label="Compare to">
+              <option value="none">None</option>
+              <option value="previous">Previous period</option>
+              <option value="custom">Custom range</option>
+            </Select>
+          </label>
+          {compareMode === "custom" ? (
+            <>
+              <label className="block">
+                <span className={LABEL}>Compare from</span>
+                <Input
+                  type="date"
+                  name="cmpFrom"
+                  defaultValue={filters.cmpFrom ?? ""}
+                  aria-label="Compare from"
+                />
+              </label>
+              <label className="block">
+                <span className={LABEL}>Compare to date</span>
+                <Input
+                  type="date"
+                  name="cmpTo"
+                  defaultValue={filters.cmpTo ?? ""}
+                  aria-label="Compare to date"
+                />
+              </label>
+            </>
+          ) : null}
+          <Button type="submit" variant="primary" size="sm">Show</Button>
+        </div>
+        <div className="flex flex-wrap items-end gap-2 p-2.5">
           <label className="block">
             <span className={LABEL}>Course</span>
             <Select name="course" defaultValue={filters.courseId ?? ""} aria-label="Course filter">
@@ -536,7 +751,6 @@ export function AnalyticsView(props: {
               ))}
             </Select>
           </label>
-          {/* §82.2. Term's only home now: a filter, not a dimension. */}
           <label className="block">
             <span className={LABEL}>Term</span>
             <Select name="term" defaultValue={filters.termId ?? ""} aria-label="Term filter">
@@ -568,7 +782,7 @@ export function AnalyticsView(props: {
               ))}
             </Select>
           </label>
-          <Button type="submit" variant="primary" size="sm">Show</Button>
+          <Button type="submit" variant="secondary" size="sm">Apply filters</Button>
           <span className="ml-auto">
             <Button type="button" size="sm" variant="secondary" onClick={exportCsv}>
               Export CSV
@@ -577,13 +791,34 @@ export function AnalyticsView(props: {
         </div>
       </form>
 
+      {/* §83.3. What changed, in either window. A comparison without this invites
+          a causal reading the page cannot support. */}
+      {props.events.length ? (
+        <div
+          className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md border border-line-2 bg-surface-2 px-3 py-1.5 text-[11.5px]"
+          data-testid="events-bar"
+        >
+          <span className={LABEL}>Events in range</span>
+          {props.events.map((e) => (
+            <span key={e.id} className="text-ink-2">
+              <span className="tabular-nums text-ink">{formatDate(e.at)}</span> — {e.note}
+              {e.scope === "comparison" ? (
+                <span className="ml-1 text-ink-3">(comparison)</span>
+              ) : null}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
       {props.error ? (
         <p className="rounded-md border border-danger/50 bg-danger-soft/40 px-3 py-2 text-[12.5px] text-danger">
           {props.error}
         </p>
       ) : null}
 
-      {scope ? <MetricStrip now={scope.now} prev={scope.prev} days={scope.days} /> : null}
+      {scope ? (
+        <MetricStrip now={scope.now} prev={scope.prev} cmpLabel={cmpLabel} />
+      ) : null}
 
       {props.insights.length ? (
         <section className="flex flex-col gap-1.5" data-testid="insights">
@@ -635,7 +870,7 @@ export function AnalyticsView(props: {
           </Link>
         ))}
         {tab === "teachers" ? (
-          <span className="ml-3 flex items-center gap-1.5">
+          <span className="ml-2 flex items-center gap-1.5">
             {([
               { key: "teacher", label: "By teacher" },
               { key: "institute", label: "By institute" },
@@ -657,6 +892,30 @@ export function AnalyticsView(props: {
             ))}
           </span>
         ) : null}
+        {/* §83.2. The basis toggle: which question the columns answer. */}
+        <span className="ml-3 flex items-center gap-1.5">
+          {([
+            { key: "closed", label: "Closed calls" },
+            { key: "open", label: "Open calls" },
+            { key: "total", label: "Total calls" },
+          ] as const).map((b) => (
+            <Link
+              key={b.key}
+              href={href({ basis: b.key })}
+              prefetch={false}
+              aria-current={basis === b.key ? "page" : undefined}
+              data-testid={`basis-${b.key}`}
+              className={cx(
+                "rounded-full border px-2.5 py-[3px] text-[11.5px]",
+                basis === b.key
+                  ? "border-accent bg-accent font-medium text-accent-ink"
+                  : "border-line-2 bg-surface text-ink-2 hover:text-ink",
+              )}
+            >
+              {b.label}
+            </Link>
+          ))}
+        </span>
         <button
           type="button"
           onClick={() => setShowMore((v) => !v)}
@@ -669,6 +928,7 @@ export function AnalyticsView(props: {
 
       <DemandTable
         rows={rows}
+        basis={basis}
         sort={sort}
         onSort={(key) =>
           setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: true }))
@@ -676,7 +936,9 @@ export function AnalyticsView(props: {
         showMore={showMore}
         expanded={expanded}
         onExpand={() => setExpanded(true)}
-        nameHeader={tab === "products" ? "Course · Subject" : by === "institute" ? "Institute" : "Teacher"}
+        nameHeader={
+          tab === "products" ? "Course · Subject" : by === "institute" ? "Institute" : "Teacher"
+        }
       />
 
       {tab === "products" ? <ProductsTable rows={props.products} /> : null}
@@ -688,14 +950,19 @@ export function AnalyticsView(props: {
         >
           <span>
             <strong className="text-ink">
+              {scope.now.leads} leads = {scope.now.open} open + {scope.now.closed} closed
+            </strong>
+            . Every rate on this page is over the closed count; the five shares of it
+            — purchased, competitor, not interested, no response, wrong number — sum to 100%.
+          </span>
+          <span>
+            <strong className="text-ink">
               {scope.taggedLeads} leads, {scope.teacherRows} teacher rows
             </strong>{" "}
             — a lead naming two teachers counts under both. Untagged {scope.untagged};{" "}
-            {scope.untagged} + {scope.taggedLeads} = {scope.now.leads}.
-          </span>
-          <span>
-            Products is the same shape: {scope.courseLeads} leads across {scope.courseRows} rows,
-            with {scope.untaggedCourse} naming no course.
+            {scope.untagged} + {scope.taggedLeads} = {scope.now.leads}. Products is the same
+            shape: {scope.courseLeads} leads across {scope.courseRows} rows, {scope.untaggedCourse}{" "}
+            naming no course.
           </span>
           <span>
             Excluded from every figure above: {scope.bookkeeping.handedToSupport} handed to Support
@@ -705,10 +972,11 @@ export function AnalyticsView(props: {
             which is the Enquiries list for the same window.
           </span>
           <span className="text-ink-3">
-            &ldquo;Competitor&rdquo; counts leads the enquiry recorded as lost to one;
-            &ldquo;Items lost to competitor&rdquo; counts the dimension&rsquo;s own lines. The two
-            will not tie. Purchased and Conversion % are counted in leads; Revenue and Avg sale sum
-            the won lines.
+            Purchased counts leads whose own outcome is won, which is what makes the shares sum.
+            Revenue sums won lines wherever they sit, so it includes{" "}
+            {scope.now.purchasedAnyLine - scope.now.purchased} lead
+            {scope.now.purchasedAnyLine - scope.now.purchased === 1 ? "" : "s"} that sold a line
+            while keeping others in play and are therefore not counted as purchases.
           </span>
           <span className="text-ink-3">
             Read in {Object.entries(props.timings).map(([k, v]) => `${v}ms (${k})`).join(" · ")}
