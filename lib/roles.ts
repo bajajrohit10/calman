@@ -46,16 +46,30 @@ export function showsSupport(role: Role | null | undefined): boolean {
 }
 
 /**
- * §62.1. Who may see the Support reports and the CSV export.
+ * §85.2. Who may read a report: every staff role except accounts.
  *
- * Narrower than showsSupport on purpose: the whole team works tickets, but the
- * numbers about the team — resolutions per person per day, average time to
- * resolve — are a management view, and the export is a bulk extract.
+ * This was isAdmin() from §62.1 until §85, on the reasoning that numbers about the
+ * team are a management view. That reasoning holds for *managing* the team and not
+ * for reading the work — a counsellor who cannot see which teachers convert is being
+ * asked to sell without the one report that would tell them what sells.
  *
- * Deliberately the same set as isAdmin() and written as a call to it, so the two
- * cannot drift; the separate name is what makes the reason readable at each
- * route gate.
+ * Accounts stays out for the §50E.3 reason: it has no rows in any counselling table,
+ * so every one of these screens would be empty by design and read as broken.
+ *
+ * One rule, three names. The names are what make each route gate readable; the
+ * single body is what stops the three drifting apart, which is how §62.1's set ended
+ * up meaning two different things in two files.
  */
+export function showsReports(role: Role | null | undefined): boolean {
+  return Boolean(role) && role !== "accounts";
+}
+
+/** §85.2: the Support reports and their CSV export. */
 export function showsSupportReports(role: Role | null | undefined): boolean {
-  return isAdmin(role);
+  return showsReports(role);
+}
+
+/** §85.2: /analytics and its Experiments tab. Writing events stays isAdmin(). */
+export function showsAnalytics(role: Role | null | undefined): boolean {
+  return showsReports(role);
 }

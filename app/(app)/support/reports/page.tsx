@@ -386,7 +386,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
       {/* 3. Ageing */}
       <Section
         title="Ageing of open tickets"
-        hint="As on now. Calendar days since the form was submitted. The four bands are exclusive and sum to the open total; “over 3 days” is the roll-up beside them, so it deliberately overlaps."
+        hint="As on now. Calendar days since the form was submitted. The four bands exclude future-dated tickets — somebody parked those to a later date, so the wait is a plan rather than age — and together with the Future-dated box they sum to the open total. “over 3 days” is the roll-up beside them, so it deliberately overlaps."
       >
         <div className="flex flex-wrap gap-2" data-testid="ageing">
           {[
@@ -418,6 +418,21 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
               </Link>
             );
           })}
+          {/* §85.3. Beside the bands, not among them: these tickets are not ageing,
+              and the box exists so the exclusion is visible rather than only true in
+              the SQL. The divider is what says "this one is a different kind". */}
+          <span className="mx-1 w-px self-stretch bg-line-2" aria-hidden="true" />
+          <Link
+            href={queueLink({ tab: "future" })}
+            prefetch={false}
+            data-testid="ageing-future-dated"
+            className="flex min-w-[118px] flex-col rounded-md border border-dashed border-line-2 bg-surface px-3 py-2 hover:border-accent"
+          >
+            <span className="text-[11px] text-ink-3">Future-dated</span>
+            <span className="text-[18px] font-semibold tabular-nums text-ink">
+              {ageingRows.find((r) => r.bucket === "future-dated")?.n ?? 0}
+            </span>
+          </Link>
         </div>
       </Section>
 

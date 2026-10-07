@@ -37,7 +37,7 @@ function args(f: AnalyticsFilters) {
     p_to: f.to,
     p_course_id: f.courseId || null,
     p_subject_id: f.subjectId || null,
-    p_source_id: f.sourceId || null,
+    p_source_ids: f.sourceIds.length ? f.sourceIds : null,
     p_counsellor_id: f.counsellorId || null,
     p_term_id: f.termId || null,
     // §83.3. The comparison window travels with every read, so the strip and the

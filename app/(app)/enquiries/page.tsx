@@ -125,6 +125,7 @@ export default async function Page({
           name: p.full_name ?? "(no name)",
         }))}
         multi={{
+          source: filters.sourceIds ?? [],
           teacher: filters.teacherIds ?? [],
           content: filters.contentIds ?? [],
           stage: filters.stages ?? [],
@@ -154,7 +155,7 @@ export default async function Page({
           subject: one(sp.subject) ?? "",
           content: one(sp.content) ?? "",
           term: one(sp.term) ?? "",
-          source: one(sp.source) ?? "",
+
           importance: one(sp.importance) ?? "",
           type: one(sp.type) ?? "",
           status: one(sp.status) ?? "",

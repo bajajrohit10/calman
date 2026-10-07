@@ -194,12 +194,15 @@ export function CommonFilterFields({
 
   return (
     <>
+      {/* §85.1. A multi-select, like Teacher beside it: "which sources" has more
+          than one answer, and comparing two feeds meant looking twice. None ticked
+          is Any, which is what an absent parameter already meant. */}
       <Labelled label="Source">
-        <FacetSelect
+        <MultiSelect
           name="source"
           facet="source"
           options={masters.sources}
-          value={selected.source ?? ""}
+          values={multi?.source ?? []}
           facets={facets}
         />
       </Labelled>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { Button, Input, PageHeader, Select, cx } from "@/components/ui";
+import { MultiSelect } from "@/components/multi-select";
 import {
   avgSale,
   change,
@@ -550,7 +551,7 @@ export function AnalyticsView(props: {
     cmpTo: string | null;
     courseId: string | null;
     subjectId: string | null;
-    sourceId: string | null;
+    sourceIds: string[];
     counsellorId: string | null;
     termId: string | null;
     scopeType: ScopeType;
@@ -812,12 +813,13 @@ export function AnalyticsView(props: {
           ) : null}
           <label className="block">
             <span className={LABEL}>Source</span>
-            <Select name="source" defaultValue={filters.sourceId ?? ""} aria-label="Source filter">
-              <option value="">All</option>
-              {props.masters.sources.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </Select>
+            {/* §85.1. The same MultiSelect the Enquiries bar uses, so "which
+                sources" is one question with one control everywhere. */}
+            <MultiSelect
+              name="source"
+              options={props.masters.sources}
+              values={filters.sourceIds}
+            />
           </label>
           <label className="block">
             <span className={LABEL}>Counsellor (called by)</span>

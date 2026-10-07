@@ -123,7 +123,9 @@ export function parseDeskParams(get: ParamReader): {
       lastCalledFrom: str(get, "lastCalledFrom"),
       lastCalledTo: str(get, "lastCalledTo"),
       termId: oneOrNone(get, "term", "term", noDetail),
-      sourceId: str(get, "source"),
+      // §85.1. Several at once, comma-joined — the shape New Calls has used since
+      // §17 and the Teacher filter beside it has always used.
+      sourceIds: many(get, "source"),
       importance: split.values.importance,
       type: str(get, "type") as EnquiryType | null,
       status: str(get, "status") as EnquiryStatus | null,
@@ -241,7 +243,9 @@ export function parseEnquiriesParams(
       subjectId: str(get, "subject"),
       contentIds: many(get, "content"),
       termId: str(get, "term"),
-      sourceId: str(get, "source"),
+      // §85.1. Several at once, comma-joined — the shape New Calls has used since
+      // §17 and the Teacher filter beside it has always used.
+      sourceIds: many(get, "source"),
       importance: many(get, "importance"),
       createdFrom: span.from,
       createdTo: span.to,

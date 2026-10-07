@@ -803,7 +803,7 @@ export type Database = {
           p_scope_id?: string
           p_scope_invert?: boolean
           p_scope_type?: string
-          p_source_id?: string
+          p_source_ids?: string[]
           p_subject_id?: string
           p_term_id?: string
           p_to: string
@@ -830,7 +830,7 @@ export type Database = {
           p_scope_id?: string
           p_scope_invert?: boolean
           p_scope_type?: string
-          p_source_id?: string
+          p_source_ids?: string[]
           p_subject_id?: string
           p_term_id?: string
           p_to: string
@@ -2911,7 +2911,7 @@ export type Database = {
           p_scope_id?: string
           p_scope_invert?: boolean
           p_scope_type?: string
-          p_source_id?: string
+          p_source_ids?: string[]
           p_subject_id?: string
           p_term_id?: string
           p_to: string
@@ -2952,7 +2952,7 @@ export type Database = {
           p_scope_id?: string
           p_scope_invert?: boolean
           p_scope_type?: string
-          p_source_id?: string
+          p_source_ids?: string[]
           p_subject_id?: string
           p_term_id?: string
           p_to: string
@@ -2991,7 +2991,7 @@ export type Database = {
           p_scope_id?: string
           p_scope_invert?: boolean
           p_scope_type?: string
-          p_source_id?: string
+          p_source_ids?: string[]
           p_subject_id?: string
           p_term_id?: string
           p_to: string
@@ -3060,7 +3060,7 @@ export type Database = {
           p_limit?: number
           p_scope_id?: string
           p_scope_type?: string
-          p_source_id?: string
+          p_source_ids?: string[]
           p_subject_id?: string
           p_term_id?: string
           p_to: string
@@ -3080,7 +3080,7 @@ export type Database = {
           p_from: string
           p_scope_id?: string
           p_scope_type?: string
-          p_source_id?: string
+          p_source_ids?: string[]
           p_subject_id?: string
           p_term_id?: string
           p_to: string
@@ -3221,6 +3221,7 @@ export type Database = {
           p_lost_reason?: Database["public"]["Enums"]["lost_reason"]
           p_mobile?: string
           p_source_id?: string
+          p_source_ids?: string[]
           p_stages?: string[]
           p_status?: Database["public"]["Enums"]["enquiry_status"]
           p_subject_id?: string
@@ -3258,6 +3259,7 @@ export type Database = {
           p_offset?: number
           p_sort?: string
           p_source_id?: string
+          p_source_ids?: string[]
           p_stages?: string[]
           p_status?: Database["public"]["Enums"]["enquiry_status"]
           p_subject_id?: string

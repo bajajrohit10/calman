@@ -54,7 +54,12 @@ export type EnquiryFilters = {
   subjectId?: string | null;
   contentIds?: string[] | null;
   termId?: string | null;
-  sourceId?: string | null;
+  /**
+   * §85.1. Several at once. The singular is gone from the parser; the RPC still
+   * accepts `p_source_id` so an old bookmarked link keeps working, but nothing in
+   * this codebase sends it any more.
+   */
+  sourceIds?: string[] | null;
   importance?: string[] | null;
   createdFrom?: string | null;
   createdTo?: string | null;
@@ -94,7 +99,7 @@ export async function loadEnquiries(
     p_subject_id: clean(f.subjectId),
     p_content_ids: f.contentIds?.length ? f.contentIds : undefined,
     p_term_id: clean(f.termId),
-    p_source_id: clean(f.sourceId),
+    p_source_ids: f.sourceIds?.length ? f.sourceIds : undefined,
     p_importance: f.importance?.length ? f.importance : undefined,
     p_created_from: clean(f.createdFrom),
     p_created_to: clean(f.createdTo),

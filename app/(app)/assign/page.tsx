@@ -168,6 +168,10 @@ export default async function Page({
           sources: masters.sources,
         }}
         multi={{
+          // §85.1. The desk shares CommonFilterFields, so it gains the multi-select
+          // too — and recommended_calls has accepted p_source_ids since §47.6, so
+          // this needed nothing in SQL.
+          source: filters.sourceIds ?? [],
           teacher: filters.teacherIds ?? [],
           content: filters.contentIds ?? [],
           stage: filters.stages ?? [],

@@ -74,15 +74,14 @@ const ITEMS: Item[] = [
   },
   { href: "/reports", label: "Reports", hint: "Daily and team reports", icon: "◔" },
   /**
-   * §81. Analytics. adminOnly, which is the same gate Settings uses — managers
-   * and super admins — so a counsellor is never shown a link to their own 404.
+   * §81, opened up by §85.2. No longer adminOnly: every staff role can read it, so
+   * the link is shown to everybody who can follow it.
    */
   {
     href: "/analytics",
     label: "Analytics",
     hint: "Teacher, institute and course demand",
     icon: "◑",
-    adminOnly: true,
   },
 ];
 

@@ -41,7 +41,8 @@ export type AnalyticsFilters = {
   cmpTo: string | null;
   courseId: string | null;
   subjectId: string | null;
-  sourceId: string | null;
+  /** §85.1. Several at once; an empty list is "any". */
+  sourceIds: string[];
   counsellorId: string | null;
   /** §82.2: term left the Products grid and became a filter. */
   termId: string | null;

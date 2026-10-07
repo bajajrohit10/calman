@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { istToday } from "@/lib/format";
 import { loadMasters } from "@/lib/masters";
-import { isAdmin } from "@/lib/roles";
+import { showsAnalytics } from "@/lib/roles";
 import { logServerTiming } from "@/lib/server-timing";
 import { createClient } from "@/lib/supabase/server";
 import { loadAnalytics, loadExperimentResults } from "@/lib/analytics";
@@ -72,7 +72,9 @@ function resolveRange(preset: RangePreset, sp: Params): { from: string; to: stri
  */
 export default async function Page({ searchParams }: { searchParams: Promise<Params> }) {
   const viewer = await requireUser();
-  if (!viewer.profile || !isAdmin(viewer.profile.role)) notFound();
+  // §85.2. Every staff role except accounts. The SQL functions behind the page
+  // re-check the same set, so the gate survives somebody calling an RPC directly.
+  if (!viewer.profile || !showsAnalytics(viewer.profile.role)) notFound();
 
   const sp = await searchParams;
 
@@ -118,7 +120,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
     cmpTo,
     courseId: one(sp.course) || null,
     subjectId: one(sp.subject) || null,
-    sourceId: one(sp.source) || null,
+    // §85.1. Comma-joined, the same shape every other multi-select on the site uses.
+    sourceIds: (one(sp.source) || "").split(",").map((v) => v.trim()).filter(Boolean),
     counsellorId: one(sp.counsellor) || null,
     termId: one(sp.term) || null,
     // §84.4. The scope is a filter like any other, and an id without a shape — or a
@@ -155,7 +158,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
   if (cmpTo && compareMode === "custom") query.set("cmpTo", cmpTo);
   if (filters.courseId) query.set("course", filters.courseId);
   if (filters.subjectId) query.set("subject", filters.subjectId);
-  if (filters.sourceId) query.set("source", filters.sourceId);
+  if (filters.sourceIds.length) query.set("source", filters.sourceIds.join(","));
   if (filters.counsellorId) query.set("counsellor", filters.counsellorId);
   if (filters.termId) query.set("term", filters.termId);
   if (filters.scopeType !== "all" && filters.scopeId) {
