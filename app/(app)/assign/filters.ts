@@ -246,6 +246,9 @@ export function parseEnquiriesParams(
       // §85.1. Several at once, comma-joined — the shape New Calls has used since
       // §17 and the Teacher filter beside it has always used.
       sourceIds: many(get, "source"),
+      // §86. Carried by a click-through from an analytics cell, so the count line
+      // here equals the figure that was clicked. Anything unrecognised is no filter.
+      basis: (["closed", "open", "any"] as const).find((b) => b === str(get, "basis")) ?? null,
       importance: many(get, "importance"),
       createdFrom: span.from,
       createdTo: span.to,

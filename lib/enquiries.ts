@@ -43,7 +43,20 @@ export type EnquiryRow = {
   total_count: number;
 };
 
+/**
+ * §86. Which half of the business a list is about.
+ *
+ * "Closed" is `status in (won, lost) or close_reason = wrong_number` — a union of two
+ * columns that no single status value expresses, which is why this is its own filter
+ * rather than a status list. All three values also drop the bookkeeping rows, because
+ * those sit outside every analytics denominator and leaving them in would stop a
+ * Total cell tying to the list it opens.
+ */
+export type EnquiryBasis = "closed" | "open" | "any";
+
 export type EnquiryFilters = {
+  /** §86: set when the list was opened from an analytics cell. */
+  basis?: EnquiryBasis | null;
   type?: EnquiryType | null;
   status?: EnquiryStatus | null;
   lostReason?: LostReason | null;
@@ -100,6 +113,7 @@ export async function loadEnquiries(
     p_content_ids: f.contentIds?.length ? f.contentIds : undefined,
     p_term_id: clean(f.termId),
     p_source_ids: f.sourceIds?.length ? f.sourceIds : undefined,
+    p_basis: f.basis ?? undefined,
     p_importance: f.importance?.length ? f.importance : undefined,
     p_created_from: clean(f.createdFrom),
     p_created_to: clean(f.createdTo),

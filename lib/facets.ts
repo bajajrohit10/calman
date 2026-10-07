@@ -131,6 +131,9 @@ export async function loadEnquiriesCalledByFacets(f: EnquiryFilters): Promise<Lo
       p_content_ids: f.contentIds?.length ? f.contentIds : undefined,
       p_term_id: clean(f.termId),
       p_source_ids: f.sourceIds?.length ? f.sourceIds : undefined,
+      // §86. Same basis as the list, or the facet totals disagree with it and
+      // facetsAgreeWithList throws them away.
+      p_basis: f.basis ?? undefined,
       p_importance: f.importance?.length ? f.importance : undefined,
       p_created_from: clean(f.createdFrom),
       p_created_to: clean(f.createdTo),

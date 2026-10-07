@@ -601,7 +601,20 @@ export function AnalyticsView(props: {
     return `/analytics?${p.toString()}`;
   };
 
-  const period = `createdFrom=${filters.from}&createdTo=${filters.to}`;
+  /**
+   * §86. What a row's link has to carry for the list to be the same set.
+   *
+   * The window, purchase-only (analytics counts nothing else), and the basis — so a
+   * Closed cell opens the closed leads rather than everything. `any` is not "no
+   * filter": it still drops the bookkeeping rows, which is what makes the Total cell
+   * tie on a window where a lead was handed to Support.
+   */
+  // The two pages name the third value differently — "total" here, "any" on the
+  // Enquiries filter, where "total" would read as a basis rather than the absence of
+  // one. Mapped once, here, rather than accepting both names on the parser.
+  const listBasis = basis === "total" ? "any" : basis;
+  const period =
+    `type=purchase&basis=${listBasis}&createdFrom=${filters.from}&createdTo=${filters.to}`;
 
   const rows: Row[] = useMemo(() => {
     if (tab === "products") {

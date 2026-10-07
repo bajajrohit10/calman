@@ -74,6 +74,8 @@ const SORTABLE = [
 export function EnquiriesTable({
   rows,
   total,
+  basis,
+  clearBasisHref,
   includeArchived,
   error,
   page,
@@ -95,6 +97,10 @@ export function EnquiriesTable({
 }: {
   rows: EnquiryRow[];
   total: number;
+  /** §86: set when this list was opened from an analytics cell. */
+  basis?: "closed" | "open" | "any" | null;
+  /** The same URL with the basis dropped. */
+  clearBasisHref: string;
   includeArchived?: boolean;
   error: string | null;
   page: number;
@@ -257,6 +263,27 @@ export function EnquiriesTable({
           <ExportButton source="enquiries" />
         </div>
       </form>
+
+      {/* §86. A filter the bar cannot show is a filter nobody can clear. The basis
+          arrives only from an analytics click-through and has no control of its own,
+          so it says what it is doing and offers the way out. */}
+      {basis ? (
+        <p className="text-[12px] text-ink-2" role="status" data-testid="basis-note">
+          Showing{" "}
+          <strong className="text-ink">
+            {basis === "closed"
+              ? "closed calls only"
+              : basis === "open"
+                ? "open calls only"
+                : "all calls"}
+          </strong>{" "}
+          — the basis this came in on from Analytics, which also leaves out leads
+          handed to Support or superseded.{" "}
+          <Link href={clearBasisHref} className="underline underline-offset-2">
+            Show every enquiry
+          </Link>
+        </p>
+      ) : null}
 
       {error ? <ErrorNote>{error}</ErrorNote> : null}
       {facetError ? (

@@ -35,6 +35,20 @@ export default async function Page({
 }) {
   const viewer = await requireUser();
   const sp = await searchParams;
+
+  /**
+   * §86. The same view with the basis dropped.
+   *
+   * Built from the incoming params rather than from the parsed filters, so clearing
+   * the basis keeps everything else the link carried — a teacher, a window, a source —
+   * which is what somebody who clicked an analytics cell and wants to widen it means.
+   */
+  const clearBasis = new URLSearchParams();
+  for (const [k, v] of Object.entries(sp)) {
+    if (k === "basis" || v === undefined) continue;
+    for (const one of Array.isArray(v) ? v : [v]) clearBasis.append(k, one);
+  }
+  const clearBasisHref = `/enquiries${clearBasis.size ? `?${clearBasis}` : ""}`;
   const { page, sort, dir, range, calledBy, filters } = parseEnquiriesParams(
     read(sp),
     viewer.userId && viewer.profile
@@ -124,6 +138,8 @@ export default async function Page({
           id: p.id,
           name: p.full_name ?? "(no name)",
         }))}
+        basis={filters.basis ?? null}
+        clearBasisHref={clearBasisHref}
         multi={{
           source: filters.sourceIds ?? [],
           teacher: filters.teacherIds ?? [],
