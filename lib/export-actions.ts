@@ -261,11 +261,14 @@ export async function exportCurrentView(
   }
 
   if (input.source === "enquiries") {
-    const params = new URLSearchParams(input.search);
     // §7.2. The same viewer the page parsed with, so "Called by" defaults the
     // same way here. Without it the export would silently widen a counsellor's
     // default view from their own calls to everybody's.
-    const { filters } = parseEnquiriesParams((k) => params.get(k), {
+    //
+    // §87. And the query string itself, not a reader over it: the export's own
+    // reader kept the first value of a repeated key, so a five-source filter
+    // exported one source. Same params, same parser, same payload as the list.
+    const { filters } = parseEnquiriesParams(new URLSearchParams(input.search), {
       id: viewer.userId!,
       role: viewer.profile.role,
     });
@@ -289,8 +292,7 @@ export async function exportCurrentView(
     }
     stem = "calman-enquiries";
   } else if (input.source === "desk") {
-    const params = new URLSearchParams(input.search);
-    const { filters } = parseDeskParams((k) => params.get(k));
+    const { filters } = parseDeskParams(new URLSearchParams(input.search));
     const all = await loadAllMatching(filters);
     if (all.error) return { error: all.error };
     ids = all.rows.map((r) => r.enquiryId);

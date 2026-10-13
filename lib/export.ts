@@ -1,6 +1,7 @@
 import "server-only";
 
 import { nextFollowUpLabel } from "@/lib/enquiry-labels";
+import { formatSheetDateTime } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -37,6 +38,11 @@ export const EXPORT_COLUMNS = [
   { key: "assigned_to_name", label: "Assigned to" },
   { key: "assigned_date", label: "Assigned for" },
   { key: "assignment_label", label: "Campaign label" },
+  // §87. Arrival beside creation, in that order because that is the order they
+  // happen: the student checked out, then the import wrote the row. They are
+  // the same instant on most leads and days apart on an abandoned checkout,
+  // which is the case the sheet could not previously explain.
+  { key: "arrived_at", label: "Arrived" },
   { key: "created_at", label: "Created" },
   { key: "closed_at", label: "Closed" },
 ] as const;
@@ -76,7 +82,29 @@ export async function loadExportRows(
     out.push(...((data ?? []) as unknown as ExportRow[]));
   }
 
-  return { rows: out.map(withFollowUpLabel), error: null };
+  return { rows: out.map(withFollowUpLabel).map(inIst), error: null };
+}
+
+/**
+ * §87. Every timestamp in the sheet, in IST.
+ *
+ * Postgres hands back a timestamptz as UTC, and the sheet printed it verbatim:
+ * "2026-10-10T16:10:00+00:00" against a screen that said 9:40 pm, and a call
+ * logged after 6:30 pm IST landed on the previous day in the file. The dates
+ * are left alone — a `date` column has no timezone to get wrong.
+ *
+ * Formatted here rather than in SQL, and with the same module every screen
+ * formats with, so there is one place that decides what IST looks like.
+ */
+const SHEET_TIMESTAMPS = ["arrived_at", "created_at", "closed_at", "last_call_at"] as const;
+
+function inIst(row: ExportRow): ExportRow {
+  const out = { ...row };
+  for (const key of SHEET_TIMESTAMPS) {
+    const v = out[key];
+    out[key] = formatSheetDateTime(typeof v === "string" ? v : null);
+  }
+  return out;
 }
 
 /**

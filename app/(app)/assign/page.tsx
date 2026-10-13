@@ -18,18 +18,6 @@ type Params = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) =>
   (Array.isArray(v) ? v[0] : v) || null;
 
-/**
- * A native multi-select submits its values as repeated keys; a hand-built or
- * pasted link may comma-join them. Both shapes reach the parsers as one
- * comma-joined string, which is what the array filters expect — the old reader
- * took the first value and silently dropped the rest.
- */
-const read = (sp: Params) => (k: string): string | null => {
-  const v = sp[k];
-  if (Array.isArray(v)) return v.length ? v.join(",") : null;
-  return v ?? null;
-};
-
 export default async function Page({
   searchParams,
 }: {
@@ -37,7 +25,7 @@ export default async function Page({
 }) {
   const sp = await searchParams;
 
-  const { date, page, includeNotDue, filters } = parseDeskParams(read(sp));
+  const { date, page, includeNotDue, filters } = parseDeskParams(sp);
   const assignment = one(sp.assignment) ?? "unassigned";
   const showMore = one(sp.more) === "1";
 

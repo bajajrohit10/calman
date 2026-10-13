@@ -1,3 +1,4 @@
+import { paramReader, type ParamReader, type ParamSource } from "@/lib/param-reader";
 import { parseCallTypes, type CallType } from "@/lib/call-type";
 
 
@@ -11,8 +12,6 @@ import { parseCallTypes, type CallType } from "@/lib/call-type";
  * AC and Vsmart leads" is one job rather than two.
  */
 export const PAGE_SIZE = 50;
-
-export type ParamReader = (key: string) => string | null;
 
 const str = (get: ParamReader, key: string) => {
   const v = get(key);
@@ -44,7 +43,7 @@ export const NEW_CALLS_SORTS = ["added_by"] as const;
 /** §57.1: the store's own leads, as an option id. */
 export const SHOPIFY_ADDER = "shopify";
 
-export function parseNewCallsParams(get: ParamReader): {
+export function parseNewCallsParams(params: ParamSource): {
   page: number;
   sort: string;
   dir: "asc" | "desc";
@@ -55,6 +54,11 @@ export function parseNewCallsParams(get: ParamReader): {
   callTypes: CallType[];
   filters: NewCallsArgs;
 } {
+  // §87. The params, not a reader over them. "Take the next 10" and
+  // "select all matching" re-parsed this string server-side with a reader that
+  // kept the first value of a repeated key, so a two-source filter handed out
+  // leads from one. See lib/param-reader.ts.
+  const get = paramReader(params);
   const page = Math.max(1, Number(str(get, "page") ?? 1) || 1);
   // Repeated ?source= values arrive comma-joined by the form, so both shapes
   // are accepted.

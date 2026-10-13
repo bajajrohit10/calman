@@ -1,3 +1,4 @@
+import { paramReader, type ParamReader, type ParamSource } from "@/lib/param-reader";
 import { ISSUE_OPTIONS } from "@/lib/support/normalise";
 
 /**
@@ -104,8 +105,6 @@ export const ESCALATION_KIND_LABELS: Record<string, string> = {
 
 export const ISSUE_FILTER_OPTIONS = ISSUE_OPTIONS.map((o) => ({ id: o, name: o }));
 
-export type ParamReader = (key: string) => string | null;
-
 const str = (get: ParamReader, key: string) => {
   const v = get(key);
   return v === null || v === "" ? null : v;
@@ -151,7 +150,7 @@ function isTab(v: string | null): v is SupportTab {
   return SUPPORT_TABS.some((t) => t.id === v);
 }
 
-export function parseSupportParams(get: ParamReader): {
+export function parseSupportParams(params: ParamSource): {
   page: number;
   tab: SupportTab;
   issues: string[];
@@ -162,6 +161,10 @@ export function parseSupportParams(get: ParamReader): {
   filters: SupportQueueArgs;
   selected: Record<string, string>;
 } {
+  // §87. The params, not a reader over them: the queue's own export built one
+  // that kept the first value of a repeated key, so a two-issue filter exported
+  // one issue. See lib/param-reader.ts.
+  const get = paramReader(params);
   const page = Math.max(1, Number(str(get, "page") ?? 1) || 1);
   const many = (key: string) =>
     (str(get, key) ?? "")

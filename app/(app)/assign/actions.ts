@@ -29,8 +29,7 @@ export async function selectAllMatching(search: string): Promise<SelectAllResult
   const auth = await authorise();
   if (auth.error) return { error: auth.error };
 
-  const params = new URLSearchParams(search);
-  const { filters } = parseDeskParams((key) => params.get(key));
+  const { filters } = parseDeskParams(new URLSearchParams(search));
 
   const result = await loadAllMatching(filters);
   if (result.error) return { error: result.error };

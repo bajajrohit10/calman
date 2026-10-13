@@ -23,18 +23,6 @@ export const metadata = { title: "New Calls · Calman" };
 type Params = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || null;
 
-/**
- * A native multi-select submits its values as repeated keys; a hand-built or
- * pasted link may comma-join them. Both shapes reach the parsers as one
- * comma-joined string, which is what the array filters expect — the old reader
- * took the first value and silently dropped the rest.
- */
-const read = (sp: Params) => (k: string): string | null => {
-  const v = sp[k];
-  if (Array.isArray(v)) return v.length ? v.join(",") : null;
-  return v ?? null;
-};
-
 /** §5.12. The unclaimed pool — all roles; anyone who calls can take work. */
 export default async function Page({
   searchParams,
@@ -44,7 +32,7 @@ export default async function Page({
   const viewer = await requireUser();
   const sp = await searchParams;
   const { page, sort, dir, sourceIds, teacherIds, contentIds, addedBy, callTypes, filters } =
-    parseNewCallsParams(read(sp));
+    parseNewCallsParams(sp);
   // §33.6. Two pipelines, one pool. They share nothing but the question — who
   // is waiting and nobody has picked them up — so they are sub-tabs rather
   // than one list with a type column.

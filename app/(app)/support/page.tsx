@@ -16,13 +16,6 @@ export const metadata = { title: "Support · Calman" };
 
 type Params = Record<string, string | string[] | undefined>;
 
-/** Repeated keys arrive comma-joined, as on every other filter bar. */
-const read = (sp: Params) => (k: string): string | null => {
-  const v = sp[k];
-  if (Array.isArray(v)) return v.length ? v.join(",") : null;
-  return v ?? null;
-};
-
 /** §58.0. Ticket team, managers and super admins. Counsellors get a 404. */
 export default async function Page({
   searchParams,
@@ -36,7 +29,7 @@ export default async function Page({
 
   const sp = await searchParams;
   const { page, tab, issues, assignedTo, sources, escalationKinds, statuses, filters, selected } =
-    parseSupportParams(read(sp));
+    parseSupportParams(sp);
 
   const supabase = await createClient();
   const db = supabase.schema("support");

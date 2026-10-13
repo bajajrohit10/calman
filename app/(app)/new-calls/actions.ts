@@ -106,8 +106,7 @@ export async function takeEnquiries(enquiryIds: number[]): Promise<TakeResult> {
 export async function takeNext(search: string, count: number): Promise<TakeResult> {
   await requireUser();
 
-  const params = new URLSearchParams(search);
-  const { filters } = parseNewCallsParams((k) => params.get(k));
+  const { filters } = parseNewCallsParams(new URLSearchParams(search));
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("new_calls_pool", {
@@ -147,8 +146,7 @@ export type SelectAllPoolResult = {
 export async function selectAllPool(search: string): Promise<SelectAllPoolResult> {
   await requireUser();
 
-  const params = new URLSearchParams(search);
-  const { filters } = parseNewCallsParams((k) => params.get(k));
+  const { filters } = parseNewCallsParams(new URLSearchParams(search));
 
   const supabase = await createClient();
   const PAGE = 500;

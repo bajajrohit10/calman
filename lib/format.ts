@@ -60,6 +60,35 @@ export function formatArrived(value: string | null | undefined): string {
     .replace(",", "");
 }
 
+/**
+ * "10 Oct 2026 21:40" from a timestamptz — for a spreadsheet cell (§87).
+ *
+ * Its own format rather than one of the two above because a sheet is read in
+ * Excel, days or weeks later, by somebody who cannot ask: it keeps the year,
+ * which formatArrived drops because a pipeline column is worked in days, and it
+ * keeps the 24-hour clock, which formatDateTime spells as am/pm because a
+ * sentence reads better that way and a column of times does not. No comma, so
+ * a careless CSV reader cannot split the cell in half.
+ *
+ * The export used to print the raw timestamptz, which is UTC — five and a half
+ * hours behind every other date in the file, and enough to put a late-evening
+ * call on the wrong day.
+ */
+export function formatSheetDateTime(value: string | null | undefined): string {
+  if (!value) return "";
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: IST,
+  })
+    .format(new Date(value))
+    .replace(",", "");
+}
+
 /** "4:20 pm" from a timestamptz — for times the reader already knows the day of. */
 export function formatTime(value: string | null | undefined): string {
   if (!value) return "—";

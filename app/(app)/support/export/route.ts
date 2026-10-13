@@ -111,7 +111,7 @@ export async function GET(request: Request) {
   if (!viewer.profile || !showsSupportReports(viewer.profile.role)) notFound();
 
   const url = new URL(request.url);
-  const { tab, filters } = parseSupportParams((k) => url.searchParams.get(k));
+  const { tab, filters } = parseSupportParams(url.searchParams);
 
   const supabase = await createClient();
   const db = supabase.schema("support");
