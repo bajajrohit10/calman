@@ -3,13 +3,19 @@ import { redirect } from "next/navigation";
 import { getViewer } from "@/lib/auth";
 import { landingPathFor } from "@/lib/accounts/landing";
 
+import { safeNext } from "@/lib/login-next";
 import { LoginForm } from "./login-form";
 
 export const metadata = { title: "Sign in · Calman" };
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const next = safeNext((await searchParams).next);
   const { userId, profile } = await getViewer();
-  if (userId) redirect(landingPathFor(profile?.role));
+  if (userId) redirect(next ?? landingPathFor(profile?.role));
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-ground px-6 py-12">
@@ -22,7 +28,7 @@ export default async function LoginPage() {
           <p className="mt-1 text-[13px] text-ink-2">Sign in to continue.</p>
         </div>
 
-        <LoginForm />
+        <LoginForm next={next} />
 
         {/*
           No signup link and no "forgot password" link, on purpose. There is no

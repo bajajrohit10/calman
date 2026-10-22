@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
 import { landingPathFor } from "@/lib/accounts/landing";
+import { safeNext } from "@/lib/login-next";
 
 export type SignInState = { error: string | null };
 
@@ -36,5 +37,5 @@ export async function signIn(
     ? await supabase.from("profiles").select("role").eq("id", userId).maybeSingle()
     : { data: null };
 
-  redirect(landingPathFor(profile?.role));
+  redirect(safeNext(formData.get("next")) ?? landingPathFor(profile?.role));
 }
