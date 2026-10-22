@@ -2352,6 +2352,113 @@ export type Database = {
           },
         ]
       }
+      price_check_excluded_vendors: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          reason: string | null
+          shopify_vendor: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          reason?: string | null
+          shopify_vendor: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          reason?: string | null
+          shopify_vendor?: string
+        }
+        Relationships: []
+      }
+      vendor_site_aliases: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          shopify_vendor: string
+          vendor_site_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          shopify_vendor: string
+          vendor_site_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          shopify_vendor?: string
+          vendor_site_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendor_site_aliases_vendor_site_id_fkey"
+            columns: ["vendor_site_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vendor_sites: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          last_check_result: string | null
+          last_checked_at: string | null
+          name: string
+          notes: string | null
+          platform_key: string | null
+          price_basis: string
+          read_method: string
+          sitemap_url: string | null
+          status: string
+          website_url: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          last_check_result?: string | null
+          last_checked_at?: string | null
+          name: string
+          notes?: string | null
+          platform_key?: string | null
+          price_basis?: string
+          read_method?: string
+          sitemap_url?: string | null
+          status?: string
+          website_url: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          last_check_result?: string | null
+          last_checked_at?: string | null
+          name?: string
+          notes?: string | null
+          platform_key?: string | null
+          price_basis?: string
+          read_method?: string
+          sitemap_url?: string | null
+          status?: string
+          website_url?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
