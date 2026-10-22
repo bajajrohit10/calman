@@ -16,13 +16,14 @@ function SubmitButton() {
   );
 }
 
-export function LoginForm() {
+export function LoginForm({ next }: { next?: string | null }) {
   const [state, formAction] = useActionState<SignInState, FormData>(signIn, {
     error: null,
   });
 
   return (
     <form action={formAction} className="flex flex-col gap-3">
+      {next ? <input type="hidden" name="next" value={next} /> : null}
       <Field label="Email">
         <Input
           name="email"
