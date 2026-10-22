@@ -1,7 +1,7 @@
 import "server-only";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { PoolClient } from "pg";
+import type { PoolClient, QueryArrayConfig } from "pg";
 import { z } from "zod";
 
 import { asUser } from "@/lib/mcp/db";
@@ -58,38 +58,73 @@ async function guarded(fn: () => Promise<Content>): Promise<Content> {
 // ---------------------------------------------------------------------------
 
 /**
- * What run_sql accepts. The real boundary is the database — a READ ONLY
- * transaction, as `authenticated`, under RLS, from a login that can become no
- * other role — and the extended query protocol, which refuses more than one
- * statement. This only adds what those cannot see: a statement must be a
- * query, and it may not rewrite the request's own identity (set_config on
- * request.jwt.claims would let one manager read as another user).
+ * What run_sql accepts.
+ *
+ * The boundary is layered, and no single layer is trusted on its own:
+ *
+ *   1. The database: a READ ONLY transaction, as `authenticated`, under RLS,
+ *      from a login (calman_mcp) that can become no other role. Nothing in a
+ *      query can write, whatever it calls.
+ *   2. The protocol: runSql forces the *extended* query protocol, which
+ *      refuses more than one statement. (node-postgres would otherwise send a
+ *      parameterless query over the simple protocol, which accepts many.)
+ *   3. This check: the statement must be a query, and may not name functions
+ *      that change settings or execute SQL from a string — the latter would let
+ *      a query assemble "set_config" out of fragments a regex cannot see.
+ *   4. The identity check in runSql, after the query: if the role or the jwt
+ *      claims are no longer what asUser set, the result is thrown away and the
+ *      transaction rolled back. This is what actually stops one manager reading
+ *      as another user, however the claims were changed.
  */
+const DENIED_FUNCTIONS =
+  /\b(set_config|query_to_xml\w*|cursor_to_xml\w*|table_to_xml\w*|schema_to_xml\w*|database_to_xml\w*|dblink\w*|pg_advisory\w*|pg_try_advisory\w*|pg_sleep\w*|pg_read_\w*|pg_ls_\w*|lo_\w+|pg_terminate_backend|pg_cancel_backend|pg_reload_conf|pg_notify)\b/;
+
 export function checkSql(raw: string): { sql: string; wrap: boolean } | { error: string } {
   const sql = raw.trim().replace(/;\s*$/, "").trim();
   if (!sql) return { error: "Empty query." };
   if (sql.length > 20_000) return { error: "Query is too long." };
   const lowered = sql.toLowerCase();
   const first = lowered.replace(/^(\s|--[^\n]*\n|\/\*[\s\S]*?\*\/)+/, "").match(/^[a-z]+/)?.[0];
-  if (!first || !["select", "with", "explain", "table", "values", "show"].includes(first)) {
-    return { error: "Only read queries are allowed (SELECT, WITH, EXPLAIN, TABLE, VALUES, SHOW)." };
+  if (!first || !["select", "with", "explain", "table", "values"].includes(first)) {
+    return { error: "Only read queries are allowed (SELECT, WITH, EXPLAIN, TABLE, VALUES)." };
   }
-  if (/set_config|\bu&["']|\bset\s+(local\s+|session\s+)?(role|session)\b|reset\s+role/.test(lowered)) {
-    return { error: "Queries may not change the session's role or settings." };
-  }
-  return { sql, wrap: ["select", "with", "table", "values"].includes(first) };
+  // Unicode-escaped identifiers (U&"...") could spell a denied name in escapes.
+  if (/\bu&["']/.test(lowered)) return { error: "Unicode-escaped identifiers are not allowed." };
+  const denied = lowered.match(DENIED_FUNCTIONS);
+  if (denied) return { error: `${denied[1]}() is not available through run_sql.` };
+  return { sql, wrap: first !== "explain" };
 }
 
 async function runSql(db: PoolClient, raw: string, limit: number) {
   const checked = checkSql(raw);
   if ("error" in checked) throw new Error(checked.error);
   const cap = Math.min(Math.max(1, limit), MAX_ROWS);
+
+  const before = await db.query<{ who: string; claims: string }>(
+    "select current_user::text as who, current_setting('request.jwt.claims', true) as claims",
+  );
+
   // The newline before the parenthesis matters: a query ending in a -- comment
   // would otherwise comment the wrapper's closing bracket out.
   const text = checked.wrap
     ? `select * from (\n${checked.sql}\n) as _q limit ${cap + 1}`
     : checked.sql;
-  const res = await db.query({ text, values: [], rowMode: "array" });
+  // queryMode exists at runtime (pg ≥ 8.11) but not in @types/pg.
+  const config: QueryArrayConfig & { queryMode: "extended" } = {
+    text,
+    values: [],
+    rowMode: "array",
+    queryMode: "extended",
+  };
+  const res = await db.query(config);
+
+  const after = await db.query<{ who: string; claims: string }>(
+    "select current_user::text as who, current_setting('request.jwt.claims', true) as claims",
+  );
+  if (after.rows[0].who !== before.rows[0].who || after.rows[0].claims !== before.rows[0].claims) {
+    throw new Error("The query changed the session's identity, so its result was discarded.");
+  }
+
   const columns = res.fields.map((f) => f.name);
   const truncated = res.rows.length > cap;
   const rows = (truncated ? res.rows.slice(0, cap) : res.rows) as unknown[][];
@@ -255,7 +290,7 @@ export function buildServer(caller: Caller): McpServer {
     {
       title: "Run a read-only SQL query",
       description:
-        "Runs one read-only PostgreSQL query against Calman, as you (row-level security applies). SELECT / WITH / EXPLAIN / TABLE / VALUES / SHOW only; 20 s timeout; up to 1,000 rows (truncated: true when there were more). Timestamps are UTC — convert to Asia/Kolkata for daily figures. Prefer aggregating in SQL. Call describe_data first if you have not.",
+        "Runs one read-only PostgreSQL query against Calman, as you (row-level security applies). SELECT / WITH / EXPLAIN / TABLE / VALUES only; 20 s timeout; up to 1,000 rows (truncated: true when there were more). Timestamps are UTC — convert to Asia/Kolkata for daily figures. Prefer aggregating in SQL. Call describe_data first if you have not.",
       inputSchema: {
         sql: z.string().describe("A single PostgreSQL query."),
         max_rows: z.number().int().min(1).max(MAX_ROWS).optional().describe("Row cap, default 200."),
@@ -570,7 +605,8 @@ export function buildServer(caller: Caller): McpServer {
     "unassign_enquiries",
     {
       title: "Remove leads from a day's assignments",
-      description: "Takes enquiries off whoever has them for a date (today or later only — past days feed the reports). Confirm with the user first.",
+      description:
+        "Takes enquiries off whoever has them for a date (today or later only — past days feed the reports). An enquiry already called on that date keeps its assignment, since the call is counted against it. Confirm with the user first.",
       inputSchema: {
         enquiry_ids: z.array(z.number().int().positive()).min(1).max(500),
         date: DATE,
@@ -581,9 +617,24 @@ export function buildServer(caller: Caller): McpServer {
       guarded(async () => {
         if (date < todayIst()) return fail("Past days' assignments are part of the reports and cannot be removed.");
         const res = await write((db) =>
-          db.query(`delete from public.assignments where date = $1 and enquiry_id = any($2::bigint[])`, [date, enquiry_ids]),
+          db.query<{ enquiry_id: string; called: boolean }>(
+            `with target as (
+               select a.id, a.enquiry_id,
+                      exists (select 1 from public.calls c
+                               where c.enquiry_id = a.enquiry_id and c.call_date = a.date) as called
+                 from public.assignments a
+                where a.date = $1 and a.enquiry_id = any($2::bigint[])
+             ), gone as (
+               delete from public.assignments a using target t
+                where a.id = t.id and not t.called
+               returning a.enquiry_id
+             )
+             select enquiry_id, called from target`,
+            [date, enquiry_ids],
+          ),
         );
-        return ok({ date, removed: res.rowCount ?? 0 });
+        const kept = res.rows.filter((r) => r.called).map((r) => Number(r.enquiry_id));
+        return ok({ date, removed: res.rows.length - kept.length, kept_because_already_called: kept });
       }),
   );
 

@@ -71,11 +71,14 @@ export default async function AuthorizePage({ searchParams }: { searchParams: Pr
     exp: now() + CSRF_TTL_S,
   });
   const callbackHost = new URL(params.redirectUri).host;
+  // The registered name is whatever the registering client typed, so it is only
+  // shown as-is for a local client; Claude's own callback gets a fixed label.
+  const appName = /^(claude\.ai|claude\.com)$/.test(callbackHost) ? "Claude" : `${client.name} (on this computer)`;
 
   return (
     <Shell title="Connect Claude to Calman">
       <p>
-        <strong className="text-ink">{client.name}</strong> is asking to use Calman as{" "}
+        <strong className="text-ink">{appName}</strong> is asking to use Calman as{" "}
         <strong className="text-ink">{viewer.profile.full_name || viewer.email}</strong>.
       </p>
       <ul className="mt-3 list-disc space-y-1 pl-5">

@@ -42,9 +42,12 @@ connected user, so it appears in the audit log under their name.
 - **Database access** is a dedicated login role, `calman_mcp`, that can only
   become `authenticated`. Each request sets the user's id in
   `request.jwt.claims`, so RLS treats Claude exactly like that person in the
-  app. Read tools run in `READ ONLY` transactions. `run_sql` also refuses
-  anything that is not a query, more than one statement, and any attempt to
-  change the role or settings.
+  app. Read tools run in `READ ONLY` transactions. `run_sql` is forced onto the
+  extended query protocol (one statement only), refuses anything that is not
+  a query and any function that changes settings or runs SQL from a string
+  (`set_config`, `query_to_xml`, `dblink`, `pg_sleep`…), and after every query
+  checks the session is still the same user — if not, the result is discarded.
+- The consent screen cannot be framed by another site (`frame-ancestors 'none'`).
 - Data includes students' full phone numbers (as decided on 22 Oct 2026). The
   tools return contacts only when asked; `won_sales` hides them by default.
 
@@ -63,6 +66,8 @@ connected user, so it appears in the audit log under their name.
      user and password differ.
    - `MCP_OAUTH_SECRET` = a random string of 48+ characters
      (`openssl rand -base64 48`).
+   - `MCP_PUBLIC_ORIGIN` = `https://calman.zeroinfy.in` — pins the issuer and
+     the token audience instead of reading them from request headers.
    - Optional `CALMAN_MCP_DATABASE_CA` = the contents of Supabase → Database
      settings → SSL certificate, to verify the server certificate (without it
      the connection is encrypted but not verified).
@@ -78,6 +83,16 @@ Until both env vars are set, the endpoints answer 503 and nothing is exposed.
 - One person: deactivate them in Settings → Users, or remove the connector in Claude.
 - Everyone: rotate `MCP_OAUTH_SECRET` and redeploy.
 - Switch the feature off: delete `CALMAN_MCP_DATABASE_URL`.
+
+## Known limits
+
+- Refresh tokens are stateless, so one cannot be revoked by itself: a leaked
+  refresh token works until it expires (30 days) unless the account is
+  deactivated or the secret rotated.
+- Call notes and student names are free text that reaches Claude. A note
+  written to look like an instruction could try to steer Claude into a write.
+  Claude asks before each tool call by default — keep that on for the write
+  tools in the connector's settings.
 
 ## Testing locally
 

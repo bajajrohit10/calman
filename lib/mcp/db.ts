@@ -89,12 +89,15 @@ export async function asUser<T>(
     );
     const result = await fn(client);
     await client.query("commit");
+    client.release();
     return result;
   } catch (e) {
+    // A connection that failed mid-transaction is destroyed, not returned to
+    // the pool: whatever session state a failed request left on it is not
+    // something the next caller should inherit.
     await client.query("rollback").catch(() => {});
+    client.release(true);
     throw e;
-  } finally {
-    client.release();
   }
 }
 

@@ -37,3 +37,8 @@ $$;
 -- Nothing else is granted to calman_mcp. Until a request has switched to
 -- `authenticated` it can read no table at all.
 grant authenticated to calman_mcp;
+
+-- Backstops at the role level, under the per-transaction timeout the app sets:
+-- nothing this login runs may hold a pooler connection for long.
+alter role calman_mcp set statement_timeout = '30s';
+alter role calman_mcp set idle_in_transaction_session_timeout = '30s';
