@@ -75,6 +75,15 @@ export function Workbench({ productId, onClose }: { productId: number; onClose: 
         </Button>
       </div>
       {error ? <ErrorNote>{error}</ErrorNote> : null}
+      {data.canWrite && data.scopes && !data.scopes.includes("write_products") ? (
+        <ErrorNote>
+          Shopify has not given Calman permission to edit products yet (granted: {data.scopes.join(", ") || "none"}). Adding
+          batches will fail until write_products is approved for the app on the store.
+        </ErrorNote>
+      ) : null}
+      {data.canWrite && data.scopes?.includes("write_products") ? (
+        <div className="text-[11px] text-ok">Shopify edit permission: granted.</div>
+      ) : null}
       {ok ? <div className="rounded-md border border-ok/35 bg-ok-soft px-3 py-2 text-[12.5px] text-ok">{ok}</div> : null}
       {data.vendors.map((vp) =>
         vp.error ? (

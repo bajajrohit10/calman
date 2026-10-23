@@ -158,3 +158,12 @@ export async function listShopifyVendors(): Promise<{ vendors: ShopifyVendor[]; 
   vendors.sort((a, b) => (b.netSales6m ?? -1) - (a.netSales6m ?? -1) || a.name.localeCompare(b.name));
   return { vendors, salesError };
 }
+
+/** Scopes Shopify has actually granted the app (fresh token, so a recent scope change shows). */
+export async function grantedScopes(): Promise<string[]> {
+  cached = null;
+  const data: { currentAppInstallation: { accessScopes: { handle: string }[] } } = await adminQuery(
+    `{ currentAppInstallation { accessScopes { handle } } }`,
+  );
+  return data.currentAppInstallation.accessScopes.map((s) => s.handle);
+}

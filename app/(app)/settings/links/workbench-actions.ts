@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { isAdmin, requireUser } from "@/lib/auth";
 import { readEdportalProduct, type EdportalVariant } from "@/lib/price-check/edportal";
 import { addOption, createVariants, getProductForEdit, type ShopifyProductForEdit } from "@/lib/price-check/shopify-edit";
+import { grantedScopes } from "@/lib/price-check/shopify";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
 
@@ -48,6 +49,7 @@ export type Workbench = {
   vendors: VendorProduct[];
   instructions: { site: string; text: string }[];
   canWrite: boolean;
+  scopes: string[] | null;
 };
 
 const PATH = "/settings/links";
@@ -105,6 +107,7 @@ export async function loadWorkbench(productId: number): Promise<{ error: string 
       vendors,
       instructions: (sites ?? []).filter((s) => s.instructions).map((s) => ({ site: s.name, text: s.instructions! })),
       canWrite: viewer.profile.role === "super_admin",
+      scopes: await grantedScopes().catch(() => null),
     },
   };
 }
