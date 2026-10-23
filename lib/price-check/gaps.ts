@@ -111,7 +111,8 @@ export async function computeGaps(supabase: Supa): Promise<{ error: string | nul
       });
       for (const o of list) {
         const key = `${siteId}|${slug}|${o.variant_id}`;
-        if (o.state === "live" && !linked.has(key) && !ignored.has(`${pid}|${key}`)) missing.push(mk(o));
+        // Zero-price options are BB's internal placeholders (e.g. "CAF DT REG-Hindi MN27 010626"), not for sale.
+        if (o.state === "live" && Number(o.price ?? 0) > 0 && !linked.has(key) && !ignored.has(`${pid}|${key}`)) missing.push(mk(o));
       }
       for (const l of ls) {
         if (l.status !== "approved" || `${l.vendor_site_id}|${l.vendor_product_slug}` !== pk) continue;
