@@ -13,6 +13,7 @@ const TABS = [
   { href: "/settings/holidays", label: "Holidays" },
   // Price check, Brief 1: vendor websites behind the Shopify vendor names.
   { href: "/settings/vendors", label: "Vendors" },
+  { href: "/settings/links", label: "Links" },
   // §83.3. Beside Holidays rather than at the end: both are small calendars of
   // things that happened, and a reader looking for one is looking for the other.
   { href: "/settings/analytics-events", label: "Analytics events" },

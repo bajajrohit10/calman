@@ -2408,6 +2408,86 @@ export type Database = {
           },
         ]
       }
+      vendor_variant_links: {
+        Row: {
+          confidence: string
+          created_at: string
+          id: string
+          reason: string | null
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          shopify_product_handle: string | null
+          shopify_product_id: number
+          shopify_product_title: string
+          shopify_variant_id: number
+          shopify_variant_title: string | null
+          shopify_vendor: string | null
+          status: string
+          suggested_at: string
+          suggested_by: string
+          vendor_product_slug: string | null
+          vendor_product_title: string | null
+          vendor_site_id: string
+          vendor_variant_id: string | null
+          vendor_variant_label: string | null
+        }
+        Insert: {
+          confidence?: string
+          created_at?: string
+          id?: string
+          reason?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          shopify_product_handle?: string | null
+          shopify_product_id: number
+          shopify_product_title: string
+          shopify_variant_id: number
+          shopify_variant_title?: string | null
+          shopify_vendor?: string | null
+          status?: string
+          suggested_at?: string
+          suggested_by?: string
+          vendor_product_slug?: string | null
+          vendor_product_title?: string | null
+          vendor_site_id: string
+          vendor_variant_id?: string | null
+          vendor_variant_label?: string | null
+        }
+        Update: {
+          confidence?: string
+          created_at?: string
+          id?: string
+          reason?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          shopify_product_handle?: string | null
+          shopify_product_id?: number
+          shopify_product_title?: string
+          shopify_variant_id?: number
+          shopify_variant_title?: string | null
+          shopify_vendor?: string | null
+          status?: string
+          suggested_at?: string
+          suggested_by?: string
+          vendor_product_slug?: string | null
+          vendor_product_title?: string | null
+          vendor_site_id?: string
+          vendor_variant_id?: string | null
+          vendor_variant_label?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendor_variant_links_vendor_site_id_fkey"
+            columns: ["vendor_site_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vendor_sites: {
         Row: {
           created_at: string
