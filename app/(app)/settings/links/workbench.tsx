@@ -6,7 +6,16 @@ import { useRouter } from "next/navigation";
 import { Button, CELL, ErrorNote, Input, Select, TABLE_HEAD_ROW, cx } from "@/components/ui";
 import type { EdportalVariant } from "@/lib/price-check/edportal";
 
-import { addToShopify, loadWorkbench, retargetLink, type VendorProduct, type Workbench as WB } from "./workbench-actions";
+import {
+  addToShopify,
+  editVariant,
+  loadWorkbench,
+  removeVariants,
+  renameValue,
+  retargetLink,
+  type VendorProduct,
+  type Workbench as WB,
+} from "./workbench-actions";
 
 /**
  * "Batches & options" panel on a Links product card: re-point a variant at
@@ -45,6 +54,8 @@ export function Workbench({
   // The list behind the panel is refreshed only on Close: an approved product
   // drops out of the "AI suggested" list, which would unmount this panel mid-task.
   const [dirty, setDirty] = useState(false);
+  const [editing, setEditing] = useState<number | null>(null);
+  const [removing, setRemoving] = useState<number | null>(null);
   const close = () => {
     if (dirty) router.refresh();
     onClose();
@@ -114,12 +125,25 @@ export function Workbench({
         ) : null,
       )}
 
+      {data.canWrite ? (
+        <OptionsEditor
+          wb={data}
+          onDone={(msg) => {
+            setOk(msg);
+            setDirty(true);
+            reload();
+          }}
+          onError={setError}
+        />
+      ) : null}
+
       <table className="w-full text-[12px]">
         <thead>
           <tr className={TABLE_HEAD_ROW}>
             <th className={CELL}>Zeroinfy variant</th>
             <th className={CELL}>Price</th>
             <th className={CELL}>Linked vendor option</th>
+            {data.canWrite ? <th className={CELL} /> : null}
           </tr>
         </thead>
         <tbody>
@@ -154,7 +178,7 @@ export function Workbench({
                         });
                       }}
                     >
-                      {allOptions.some((o) => o.key === current) ? null : <option value="">{link.vendor_variant_label ?? "— (not on vendor site any more)"}</option>}
+                      {allOptions.some((o) => o.key === current) ? null : <option value="">{link.vendor_variant_label ?? (link.status === "no_match" ? "— not linked: pick the BB option" : "— (not on vendor site any more)")}</option>}
                       {allOptions.map((o) => (
                         <option key={o.key} value={o.key}>
                           {data.vendors.length > 1 ? `${o.vp.title ?? o.vp.slug}: ` : ""}
@@ -165,8 +189,62 @@ export function Workbench({
                   ) : (
                     <span className="text-ink-3">Not linked yet</span>
                   )}
-                  {link && link.status !== "approved" ? <span className="ml-1 text-[11px] text-ink-3">({link.status})</span> : null}
+                  {link && link.status !== "approved" ? <span className="ml-1 text-[11px] text-ink-3">({link.status === "no_match" ? "not linked" : link.status})</span> : null}
+                  {link?.status === "no_match" && link.reason ? <div className="text-[11px] text-ink-3">{link.reason}</div> : null}
+                  {editing === v.id ? (
+                    <VariantEditor
+                      wb={data}
+                      variantId={v.id}
+                      onCancel={() => setEditing(null)}
+                      onDone={(msg) => {
+                        setEditing(null);
+                        setOk(msg);
+                        setDirty(true);
+                        reload();
+                      }}
+                    />
+                  ) : null}
                 </td>
+                {data.canWrite ? (
+                  <td className={cx(CELL, "whitespace-nowrap text-right align-top")}>
+                    {removing === v.id ? (
+                      <>
+                        <span className="mr-1 text-danger">Delete on Shopify?</span>
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          disabled={pending}
+                          onClick={() =>
+                            start(async () => {
+                              const r = await removeVariants(data.product.id, [v.id]);
+                              setRemoving(null);
+                              if (r.error) setError(r.error);
+                              else {
+                                setOk(`Removed “${v.title}” from the listing.`);
+                                setDirty(true);
+                                reload();
+                              }
+                            })
+                          }
+                        >
+                          Yes, delete
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setRemoving(null)}>
+                          No
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button size="sm" variant="ghost" disabled={pending} onClick={() => setEditing(editing === v.id ? null : v.id)}>
+                          Edit
+                        </Button>
+                        <Button size="sm" variant="ghost" disabled={pending} onClick={() => setRemoving(v.id)}>
+                          Remove
+                        </Button>
+                      </>
+                    )}
+                  </td>
+                ) : null}
               </tr>
             );
           })}
@@ -406,5 +484,109 @@ function AddForm({
         )}
       </div>
     </div>
+  );
+}
+
+/** Rename an option value on every variant (e.g. "May-26" → "May-27"). */
+function OptionsEditor({ wb, onDone, onError }: { wb: WB; onDone: (msg: string) => void; onError: (e: string) => void }) {
+  const [pending, start] = useTransition();
+  const [edit, setEdit] = useState<{ option: string; from: string; to: string } | null>(null);
+  return (
+    <div className="flex flex-col gap-1 text-[12px]">
+      {wb.product.options.map((o) => (
+        <div key={o.name} className="flex flex-wrap items-center gap-1">
+          <span className="w-[160px] text-ink-3">{o.name}</span>
+          {o.values.map((val) =>
+            edit && edit.option === o.name && edit.from === val ? (
+              <form
+                key={val}
+                className="flex items-center gap-1"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  start(async () => {
+                    const r = await renameValue(wb.product.id, o.name, val, edit.to);
+                    if (r.error) onError(r.error);
+                    else {
+                      setEdit(null);
+                      onDone(`Renamed “${val}” to “${edit.to.trim()}” on every variant. Pick the BB option for them below.`);
+                    }
+                  });
+                }}
+              >
+                <Input autoFocus className="h-[24px] w-[220px]" value={edit.to} onChange={(e) => setEdit({ ...edit, to: e.target.value })} />
+                <Button size="sm" variant="primary" type="submit" disabled={pending}>
+                  Rename on Shopify
+                </Button>
+                <Button size="sm" variant="ghost" type="button" onClick={() => setEdit(null)}>
+                  Cancel
+                </Button>
+              </form>
+            ) : (
+              <button
+                key={val}
+                type="button"
+                title="Rename this value on every variant"
+                className="rounded border border-line-2 bg-surface px-2 py-[1px] text-ink-2 hover:bg-surface-2"
+                onClick={() => setEdit({ option: o.name, from: val, to: val })}
+              >
+                {val} ✎
+              </button>
+            ),
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Edit one variant: price, compare-at, option values. */
+function VariantEditor({ wb, variantId, onCancel, onDone }: { wb: WB; variantId: number; onCancel: () => void; onDone: (msg: string) => void }) {
+  const v = wb.product.variants.find((x) => x.id === variantId)!;
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [price, setPrice] = useState(String(v.price));
+  const [compareAt, setCompareAt] = useState(v.compareAtPrice != null ? String(v.compareAtPrice) : "");
+  const [opts, setOpts] = useState<Record<string, string>>({ ...v.selected });
+  return (
+    <form
+      className="mt-2 flex flex-col gap-1 rounded-md border border-accent/40 bg-surface p-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        start(async () => {
+          const r = await editVariant(wb.product.id, variantId, { price: Number(price), compareAtPrice: compareAt.trim() ? Number(compareAt) : null, options: opts });
+          if (r.error) setError(r.error);
+          else onDone("Variant updated on Shopify.");
+        });
+      }}
+    >
+      {wb.product.options.map((o) => (
+        <label key={o.name} className="grid grid-cols-[150px_1fr] items-center gap-2">
+          <span className="text-ink-3">{o.name}</span>
+          <Input className="h-[24px]" list={`opt-${variantId}-${o.name}`} value={opts[o.name] ?? ""} onChange={(e) => setOpts({ ...opts, [o.name]: e.target.value })} />
+          <datalist id={`opt-${variantId}-${o.name}`}>
+            {o.values.map((x) => (
+              <option key={x} value={x} />
+            ))}
+          </datalist>
+        </label>
+      ))}
+      <label className="grid grid-cols-[150px_1fr] items-center gap-2">
+        <span className="text-ink-3">Price</span>
+        <Input className="h-[24px]" inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value)} />
+      </label>
+      <label className="grid grid-cols-[150px_1fr] items-center gap-2">
+        <span className="text-ink-3">Compare-at</span>
+        <Input className="h-[24px]" inputMode="numeric" value={compareAt} onChange={(e) => setCompareAt(e.target.value)} />
+      </label>
+      {error ? <ErrorNote>{error}</ErrorNote> : null}
+      <div className="flex gap-1">
+        <Button size="sm" variant="primary" type="submit" disabled={pending}>
+          {pending ? "Saving…" : "Save on Shopify"}
+        </Button>
+        <Button size="sm" variant="ghost" type="button" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </form>
   );
 }

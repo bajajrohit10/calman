@@ -7,7 +7,7 @@ import { adminQuery } from "@/lib/price-check/shopify";
  * variants to it (a new BB batch). Writes need write_products.
  */
 
-export type ShopifyOption = { id: string; name: string; position: number; values: string[] };
+export type ShopifyOption = { id: string; name: string; position: number; values: string[]; valueIds: Record<string, string> };
 export type ShopifyVariant = {
   id: number;
   title: string;
@@ -44,20 +44,20 @@ type VariantNode = {
 export async function getProductForEdit(productId: number): Promise<ShopifyProductForEdit> {
   const variants: VariantNode[] = [];
   let after: string | null = null;
-  let head: { title: string; handle: string; options: { id: string; name: string; position: number; optionValues: { name: string }[] }[] } | null = null;
+  let head: { title: string; handle: string; options: { id: string; name: string; position: number; optionValues: { id: string; name: string }[] }[] } | null = null;
   for (let page = 0; page < 20; page++) {
     const data: {
       product: {
         title: string;
         handle: string;
-        options: { id: string; name: string; position: number; optionValues: { name: string }[] }[];
+        options: { id: string; name: string; position: number; optionValues: { id: string; name: string }[] }[];
         variants: { nodes: VariantNode[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } };
       } | null;
     } = await adminQuery(
       `query P($id: ID!, $after: String) {
         product(id: $id) {
           title handle
-          options { id name position optionValues { name } }
+          options { id name position optionValues { id name } }
           variants(first: 250, after: $after) {
             nodes { id title price compareAtPrice inventoryPolicy taxable
               selectedOptions { name value } inventoryItem { tracked requiresShipping } }
@@ -78,7 +78,13 @@ export async function getProductForEdit(productId: number): Promise<ShopifyProdu
     title: head!.title,
     handle: head!.handle,
     options: head!.options
-      .map((o) => ({ id: o.id, name: o.name, position: o.position, values: o.optionValues.map((v) => v.name) }))
+      .map((o) => ({
+        id: o.id,
+        name: o.name,
+        position: o.position,
+        values: o.optionValues.map((v) => v.name),
+        valueIds: Object.fromEntries(o.optionValues.map((v) => [v.name, v.id])),
+      }))
       .sort((a, b) => a.position - b.position),
     variants: variants.map((v) => ({
       id: num(v.id),
@@ -166,4 +172,43 @@ export async function updatePrices(
     },
   );
   if (data.productVariantsBulkUpdate.userErrors.length) throw new Error(`Shopify: ${errText(data.productVariantsBulkUpdate.userErrors)}`);
+}
+
+/** Delete variants (e.g. options for exams that have passed). */
+export async function deleteVariants(productId: number, variantIds: number[]): Promise<void> {
+  const data: { productVariantsBulkDelete: { userErrors: UserError[] } } = await adminQuery(
+    `mutation D($id: ID!, $v: [ID!]!) { productVariantsBulkDelete(productId: $id, variantsIds: $v) { userErrors { field message } } }`,
+    { id: gid(productId), v: variantIds.map((v) => `gid://shopify/ProductVariant/${v}`) },
+  );
+  if (data.productVariantsBulkDelete.userErrors.length) throw new Error(`Shopify: ${errText(data.productVariantsBulkDelete.userErrors)}`);
+}
+
+/** Change one variant: price, compare-at, and/or its option values (e.g. May-26 → May-27). */
+export async function updateVariant(
+  productId: number,
+  variantId: number,
+  change: { price?: number; compareAtPrice?: number | null; options?: Record<string, string> },
+): Promise<void> {
+  const v: Record<string, unknown> = { id: `gid://shopify/ProductVariant/${variantId}` };
+  if (change.price != null) v.price = change.price.toFixed(2);
+  if (change.compareAtPrice !== undefined) v.compareAtPrice = change.compareAtPrice == null ? null : change.compareAtPrice.toFixed(2);
+  if (change.options) v.optionValues = Object.entries(change.options).map(([optionName, name]) => ({ optionName, name }));
+  const data: { productVariantsBulkUpdate: { userErrors: UserError[] } } = await adminQuery(
+    `mutation U($id: ID!, $variants: [ProductVariantsBulkInput!]!) {
+      productVariantsBulkUpdate(productId: $id, variants: $variants) { userErrors { field message } }
+    }`,
+    { id: gid(productId), variants: [v] },
+  );
+  if (data.productVariantsBulkUpdate.userErrors.length) throw new Error(`Shopify: ${errText(data.productVariantsBulkUpdate.userErrors)}`);
+}
+
+/** Rename an option value for every variant that uses it (e.g. "May-26" → "May-27"). */
+export async function renameOptionValue(productId: number, optionId: string, valueId: string, name: string): Promise<void> {
+  const data: { productOptionUpdate: { userErrors: UserError[] } } = await adminQuery(
+    `mutation R($id: ID!, $o: OptionUpdateInput!, $v: [OptionValueUpdateInput!]) {
+      productOptionUpdate(productId: $id, option: $o, optionValuesToUpdate: $v) { userErrors { field message } }
+    }`,
+    { id: gid(productId), o: { id: optionId }, v: [{ id: valueId, name }] },
+  );
+  if (data.productOptionUpdate.userErrors.length) throw new Error(`Shopify: ${errText(data.productOptionUpdate.userErrors)}`);
 }

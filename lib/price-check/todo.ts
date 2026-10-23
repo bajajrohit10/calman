@@ -62,7 +62,7 @@ export type TodoListing = {
   confirm: { reasons: string[]; count: number; products: { title: string; url: string }[] } | null;
   priceFixes: PriceFix[];
   missing: MissingGroup[];
-  pastAttempts: string[];
+  pastAttempts: { id: number; title: string }[];
   dropped: { label: string; variants: number }[];
 };
 
@@ -248,7 +248,9 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
     }
 
     // 5. Past attempts still on the listing.
-    item.pastAttempts = ls.filter((l) => l.status === "no_match" && /has passed/.test(l.reason ?? "")).map((l) => l.shopify_variant_title ?? "Default");
+    item.pastAttempts = ls
+      .filter((l) => l.status === "no_match" && /has passed/.test(l.reason ?? ""))
+      .map((l) => ({ id: Number(l.shopify_variant_id), title: l.shopify_variant_title ?? "Default" }));
 
     if (item.attemptQuestion) counts.attempt++;
     if (item.confirm) counts.confirm++;

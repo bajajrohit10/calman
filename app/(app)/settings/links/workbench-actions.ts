@@ -4,7 +4,15 @@ import { revalidatePath } from "next/cache";
 
 import { isAdmin, requireUser } from "@/lib/auth";
 import { readEdportalProduct, type EdportalVariant } from "@/lib/price-check/edportal";
-import { addOption, createVariants, getProductForEdit, type ShopifyProductForEdit } from "@/lib/price-check/shopify-edit";
+import {
+  addOption,
+  createVariants,
+  deleteVariants,
+  getProductForEdit,
+  renameOptionValue,
+  updateVariant,
+  type ShopifyProductForEdit,
+} from "@/lib/price-check/shopify-edit";
 import { grantedScopes } from "@/lib/price-check/shopify";
 import { storeVendorOptions } from "@/lib/price-check/vendor-options";
 import { createClient } from "@/lib/supabase/server";
@@ -32,6 +40,7 @@ export type WorkbenchLink = {
   vendor_variant_label: string | null;
   status: string;
   vendor_site_id: string;
+  reason: string | null;
 };
 
 export type VendorProduct = {
@@ -65,7 +74,7 @@ export async function loadWorkbench(productId: number): Promise<{ error: string 
 
   const { data: links, error } = await supabase
     .from("vendor_variant_links")
-    .select("id, shopify_variant_id, shopify_variant_title, vendor_product_slug, vendor_variant_id, vendor_variant_label, status, vendor_site_id, vendor_product_title")
+    .select("id, shopify_variant_id, shopify_variant_title, vendor_product_slug, vendor_variant_id, vendor_variant_label, status, vendor_site_id, vendor_product_title, reason")
     .eq("shopify_product_id", productId);
   if (error) return { error: error.message };
 
@@ -303,4 +312,166 @@ export async function addToShopify(plan: AddPlan): Promise<{ error: string | nul
   revalidatePath(PATH);
   if (linkErr) return { error: `Added ${created.length} variants on Shopify, but linking them failed: ${linkErr.message}`, count: created.length };
   return { error: null, count: created.length };
+}
+
+/* ------------------------------------------------- edit / remove variants -- */
+
+async function superAdmin() {
+  const viewer = await requireUser();
+  return viewer.profile?.role === "super_admin" ? viewer : null;
+}
+
+async function logChange(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  actor: string | null,
+  pid: number,
+  title: string | null,
+  action: string,
+  request: unknown,
+  ok: boolean,
+  error?: string,
+) {
+  await supabase.from("shopify_change_log").insert({
+    actor,
+    shopify_product_id: pid,
+    shopify_product_title: title,
+    action,
+    request: request as Json,
+    ok,
+    error: error?.slice(0, 2000) ?? null,
+  });
+}
+
+/** Snapshot titles/prices of a listing's links after a change on Shopify. */
+async function resnapshot(supabase: Awaited<ReturnType<typeof createClient>>, pid: number) {
+  try {
+    const p = await getProductForEdit(pid);
+    const now = new Date().toISOString();
+    for (const v of p.variants) {
+      await supabase
+        .from("vendor_variant_links")
+        .update({ shopify_variant_title: v.title, shopify_price: v.price, shopify_compare_at: v.compareAtPrice, shopify_seen_at: now })
+        .eq("shopify_variant_id", v.id);
+    }
+  } catch {
+    // display-only
+  }
+}
+
+/** Delete variants on Shopify (super admin), and their links. */
+export async function removeVariants(productId: number, variantIds: number[]): Promise<{ error: string | null; count?: number }> {
+  const viewer = await superAdmin();
+  if (!viewer) return { error: "Only a super admin can remove variants." };
+  if (!variantIds.length) return { error: null, count: 0 };
+  const supabase = await createClient();
+  let product: ShopifyProductForEdit;
+  try {
+    product = await getProductForEdit(productId);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+  const ids = variantIds.filter((v) => product.variants.some((x) => x.id === v));
+  if (ids.length >= product.variants.length) return { error: "That would remove every variant — a Shopify listing needs at least one. Archive the product in Shopify instead." };
+  try {
+    await deleteVariants(productId, ids);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await logChange(supabase, viewer.userId, productId, product.title, "delete_variants", { variantIds: ids }, false, msg);
+    return { error: msg };
+  }
+  await logChange(supabase, viewer.userId, productId, product.title, "delete_variants", {
+    variants: product.variants.filter((v) => ids.includes(v.id)).map((v) => ({ id: v.id, title: v.title, price: v.price })),
+  }, true);
+  await supabase.from("vendor_variant_links").delete().in("shopify_variant_id", ids);
+  await supabase.from("link_alternatives").delete().in("shopify_variant_id", ids);
+  revalidatePath(PATH);
+  return { error: null, count: ids.length };
+}
+
+/** Change one variant's price / compare-at / option values on Shopify (super admin). */
+export async function editVariant(
+  productId: number,
+  variantId: number,
+  change: { price: number; compareAtPrice: number | null; options: Record<string, string> },
+): Promise<{ error: string | null }> {
+  const viewer = await superAdmin();
+  if (!viewer) return { error: "Only a super admin can edit variants." };
+  if (!(change.price > 0)) return { error: "Enter a price." };
+  if (change.compareAtPrice != null && change.compareAtPrice < change.price) return { error: "Compare-at can't be below the price." };
+  const supabase = await createClient();
+  let product: ShopifyProductForEdit;
+  try {
+    product = await getProductForEdit(productId);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+  const v = product.variants.find((x) => x.id === variantId);
+  if (!v) return { error: "That variant is no longer on Shopify — reload." };
+  const options: Record<string, string> = {};
+  for (const o of product.options) {
+    const val = (change.options[o.name] ?? v.selected[o.name] ?? "").trim();
+    if (!val) return { error: `Give ${o.name} a value.` };
+    options[o.name] = val;
+  }
+  const optsChanged = product.options.some((o) => options[o.name] !== v.selected[o.name]);
+  if (optsChanged && product.variants.some((x) => x.id !== v.id && product.options.every((o) => x.selected[o.name] === options[o.name]))) {
+    return { error: "Another variant already has exactly these options." };
+  }
+  const req = { variantId, from: { price: v.price, compareAt: v.compareAtPrice, options: v.selected }, to: { price: change.price, compareAt: change.compareAtPrice, options } };
+  try {
+    await updateVariant(productId, variantId, { price: change.price, compareAtPrice: change.compareAtPrice, options: optsChanged ? options : undefined });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await logChange(supabase, viewer.userId, productId, product.title, "edit_variant", req, false, msg);
+    return { error: msg };
+  }
+  await logChange(supabase, viewer.userId, productId, product.title, "edit_variant", req, true);
+  if (optsChanged) {
+    // A new attempt/batch: the old vendor link no longer holds — pick the BB option again.
+    await supabase
+      .from("vendor_variant_links")
+      .update({ status: "no_match", vendor_product_slug: null, vendor_variant_id: null, vendor_variant_label: null, reason: "Options changed in Calman — pick the BB option in Batches & options." })
+      .eq("shopify_variant_id", variantId);
+  }
+  await resnapshot(supabase, productId);
+  revalidatePath(PATH);
+  return { error: null };
+}
+
+/** Rename an option value on every variant (e.g. "May-26" → "May-27"), super admin. */
+export async function renameValue(productId: number, optionName: string, from: string, to: string): Promise<{ error: string | null }> {
+  const viewer = await superAdmin();
+  if (!viewer) return { error: "Only a super admin can rename options." };
+  const name = to.trim();
+  if (!name) return { error: "Enter the new name." };
+  const supabase = await createClient();
+  let product: ShopifyProductForEdit;
+  try {
+    product = await getProductForEdit(productId);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+  const o = product.options.find((x) => x.name === optionName);
+  const valueId = o?.valueIds[from];
+  if (!o || !valueId) return { error: "That option value is no longer on the listing — reload." };
+  if (o.values.includes(name)) return { error: `"${name}" already exists in ${optionName}.` };
+  const req = { option: optionName, from, to: name };
+  try {
+    await renameOptionValue(productId, o.id, valueId, name);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await logChange(supabase, viewer.userId, productId, product.title, "rename_option_value", req, false, msg);
+    return { error: msg };
+  }
+  await logChange(supabase, viewer.userId, productId, product.title, "rename_option_value", req, true);
+  const affected = product.variants.filter((v) => v.selected[optionName] === from).map((v) => v.id);
+  if (affected.length) {
+    await supabase
+      .from("vendor_variant_links")
+      .update({ status: "no_match", vendor_product_slug: null, vendor_variant_id: null, vendor_variant_label: null, reason: `Renamed ${from} → ${name} in Calman — pick the BB option in Batches & options.` })
+      .in("shopify_variant_id", affected);
+  }
+  await resnapshot(supabase, productId);
+  revalidatePath(PATH);
+  return { error: null };
 }

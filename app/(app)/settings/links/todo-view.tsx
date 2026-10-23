@@ -9,6 +9,7 @@ import type { MissingGroup, PriceFix, Todo, TodoListing } from "@/lib/price-chec
 import { finishRefresh, ignoreGap, refreshVendorOptions, vendorProductsToRefresh } from "./gap-actions";
 import { answerAttempt, confirmListing, fixPrices, ignoreOptions, refreshShopify, shopifyProductsToRefresh, type PriceFixIn } from "./todo-actions";
 import { Workbench } from "./workbench";
+import { removeVariants } from "./workbench-actions";
 
 /**
  * Settings → Links → "To do on Zeroinfy": one list of what to change on the
@@ -308,11 +309,7 @@ function ListingCard({
         <MissingBlock key={g.slug} l={l} g={g} canWrite={canWrite} pending={pending} act={act} onAdd={(variantId) => setBench({ slug: g.slug, variantId })} />
       ))}
 
-      {l.pastAttempts.length ? (
-        <Block tone="muted" title={`Options for exams that have passed (${l.pastAttempts.length})`}>
-          <p className="text-ink-3">BB no longer sells these. Remove them from the listing in Shopify: {[...new Set(l.pastAttempts)].slice(0, 6).join(" · ")}{l.pastAttempts.length > 6 ? " …" : ""}</p>
-        </Block>
-      ) : null}
+      {l.pastAttempts.length ? <PastBlock l={l} canWrite={canWrite} pending={pending} act={act} openBench={() => setBench("open")} /> : null}
 
       {l.dropped.length ? (
         <Block tone="danger" title="BB no longer lists the option these variants are linked to">
@@ -428,5 +425,59 @@ function Block({ tone, title, children }: { tone: keyof typeof TONE; title: stri
       <div className="text-[11px] font-semibold uppercase tracking-[0.045em] text-ink-2">{title}</div>
       {children}
     </div>
+  );
+}
+
+function PastBlock({
+  l,
+  canWrite,
+  pending,
+  act,
+  openBench,
+}: {
+  l: TodoListing;
+  canWrite: boolean;
+  pending: boolean;
+  act: (fn: () => Promise<{ error: string | null; count?: number }>, done: (n: number) => string) => void;
+  openBench: () => void;
+}) {
+  const [confirm, setConfirm] = useState(false);
+  return (
+    <Block tone="muted" title={`Options for exams that have passed (${l.pastAttempts.length})`}>
+      <p className="text-ink-3">
+        BB no longer sells these: {l.pastAttempts.slice(0, 6).map((v) => v.title).join(" · ")}
+        {l.pastAttempts.length > 6 ? " …" : ""}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        {canWrite ? (
+          confirm ? (
+            <>
+              <span className="text-danger">Delete {l.pastAttempts.length} variants from the listing on Shopify?</span>
+              <Button
+                size="sm"
+                variant="danger"
+                disabled={pending}
+                onClick={() => {
+                  setConfirm(false);
+                  act(() => removeVariants(l.pid, l.pastAttempts.map((v) => v.id)), (n) => `Removed ${n} variants from the listing.`);
+                }}
+              >
+                Yes, delete
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setConfirm(false)}>
+                No
+              </Button>
+            </>
+          ) : (
+            <Button size="sm" variant="secondary" disabled={pending} onClick={() => setConfirm(true)}>
+              Remove them
+            </Button>
+          )
+        ) : null}
+        <Button size="sm" variant="ghost" onClick={openBench}>
+          Or change the attempt (e.g. May-26 → May-27) in Batches &amp; options
+        </Button>
+      </div>
+    </Block>
   );
 }
