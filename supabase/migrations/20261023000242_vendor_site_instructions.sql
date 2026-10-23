@@ -26,8 +26,6 @@ where lower(name) = 'bb virtuals' and instructions is null;
 
 update public.vendor_sites set instructions =
 'Vendor price = Vsmart total after its automatic coupon.
-- Vsmart / Vishal Bhattad courses follow the Rs 500 rule (Rs 500 below; not when Rs 4,000 or below).
-- Exceptions kept unchanged: Vsmart IDT Regular (Vishal Bhattad), CA Rajkumar GST.
 - Shubham Singhal: compare with shubhamsinghal.com too and follow whichever is lower.'
 where lower(name) = 'vsmart academy' and instructions is null;
 
