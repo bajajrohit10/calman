@@ -54,6 +54,8 @@ create policy listing_gap_decisions_select on public.listing_gap_decisions
   for select to authenticated using ((select app.is_admin()));
 create policy listing_gap_decisions_insert on public.listing_gap_decisions
   for insert to authenticated with check ((select app.is_admin()));
+create policy listing_gap_decisions_update on public.listing_gap_decisions
+  for update to authenticated using ((select app.is_admin())) with check ((select app.is_admin()));
 create policy listing_gap_decisions_delete on public.listing_gap_decisions
   for delete to authenticated using ((select app.is_admin()));
 
