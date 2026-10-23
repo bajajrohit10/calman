@@ -37,6 +37,9 @@ export type WorkbenchLink = {
 export type VendorProduct = {
   slug: string;
   title: string | null;
+  /** Set for a vendor product selling the same course for another attempt (not linked yet). */
+  attempts: string | null;
+  sibling: boolean;
   siteId: string;
   siteName: string;
   siteUrl: string;
@@ -73,7 +76,11 @@ export async function loadWorkbench(productId: number): Promise<{ error: string 
     return { error: e instanceof Error ? e.message : String(e) };
   }
 
-  const siteIds = [...new Set((links ?? []).map((l) => l.vendor_site_id))];
+  const { data: sibs } = await supabase
+    .from("listing_vendor_products")
+    .select("vendor_site_id, product_slug, product_title, attempts")
+    .eq("shopify_product_id", productId);
+  const siteIds = [...new Set([...(links ?? []).map((l) => l.vendor_site_id), ...(sibs ?? []).map((x) => x.vendor_site_id)])];
   const { data: sites } = await supabase
     .from("vendor_sites")
     .select("id, name, website_url, read_method, instructions")
@@ -81,17 +88,21 @@ export async function loadWorkbench(productId: number): Promise<{ error: string 
   const siteById = new Map((sites ?? []).map((s) => [s.id, s]));
 
   // Distinct vendor products the listing is linked to (edportal sites only for now).
-  const seen = new Map<string, { slug: string; title: string | null; siteId: string }>();
+  const seen = new Map<string, { slug: string; title: string | null; siteId: string; attempts: string | null; sibling: boolean }>();
   for (const l of links ?? []) {
     if (!l.vendor_product_slug) continue;
     const k = `${l.vendor_site_id}|${l.vendor_product_slug}`;
-    if (!seen.has(k)) seen.set(k, { slug: l.vendor_product_slug, title: l.vendor_product_title, siteId: l.vendor_site_id });
+    if (!seen.has(k)) seen.set(k, { slug: l.vendor_product_slug, title: l.vendor_product_title, siteId: l.vendor_site_id, attempts: null, sibling: false });
+  }
+  for (const x of sibs ?? []) {
+    const k = `${x.vendor_site_id}|${x.product_slug}`;
+    if (!seen.has(k)) seen.set(k, { slug: x.product_slug, title: x.product_title, siteId: x.vendor_site_id, attempts: x.attempts, sibling: true });
   }
   const vendors: VendorProduct[] = [];
   for (const v of seen.values()) {
     const site = siteById.get(v.siteId);
     if (!site) continue;
-    const base = { slug: v.slug, title: v.title, siteId: v.siteId, siteName: site.name, siteUrl: site.website_url };
+    const base = { slug: v.slug, title: v.title, attempts: v.attempts, sibling: v.sibling, siteId: v.siteId, siteName: site.name, siteUrl: site.website_url };
     if (site.read_method !== "edportal_feed") {
       vendors.push({ ...base, variants: [], error: "Batch options can only be read for course-platform sites so far." });
       continue;

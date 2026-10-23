@@ -26,7 +26,16 @@ function splitOpt(o: string): [string, string] {
   return i < 0 ? ["", o] : [o.slice(0, i).trim(), o.slice(i + 2).trim()];
 }
 
-export function Workbench({ productId, onClose }: { productId: number; onClose: () => void }) {
+export function Workbench({
+  productId,
+  onClose,
+  focus,
+}: {
+  productId: number;
+  onClose: () => void;
+  /** Open straight on "Add to Zeroinfy" for this vendor option. */
+  focus?: { slug: string; variantId: string };
+}) {
   const router = useRouter();
   const [data, setData] = useState<WB | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -48,6 +57,11 @@ export function Workbench({ productId, onClose }: { productId: number; onClose: 
       else {
         setError(null);
         setData(r.data!);
+        if (focus) {
+          const vp = r.data!.vendors.find((x) => x.slug === focus.slug);
+          const v = vp?.variants.find((x) => x.id === focus.variantId);
+          if (vp && v) setAdding({ vp, v });
+        }
       }
     });
   }
@@ -166,6 +180,7 @@ export function Workbench({ productId, onClose }: { productId: number; onClose: 
           <div key={vp.slug} className="flex flex-col gap-1">
             <div className="text-[12px] font-semibold text-warn">
               {vp.siteName} sells {gaps.length === 1 ? "an option" : `${gaps.length} options`} you don&apos;t — {vp.title ?? vp.slug}
+              {vp.sibling ? ` (another attempt: ${vp.attempts ?? "?"})` : ""}
             </div>
             {gaps.map((g) => (
               <div key={g.id} className="flex flex-wrap items-center gap-2 text-[12px]">
@@ -236,12 +251,18 @@ function AddForm({
   }, [base, gap]);
 
   const canNew = p.options.length < 3;
-  const guessExisting = p.options.find((o) => /batch/i.test(o.name)) ?? p.options.find((o) => /attempt/i.test(o.name)) ?? p.options[0];
-  const [kind, setKind] = useState<"new" | "existing">(canNew ? "new" : "existing");
-  const [optName, setOptName] = useState(diff.keys.length ? `${diff.keys.join(" & ")} Batch` : "Batch");
+  // Another attempt of the course: goes into the listing's Attempt option (or a new one).
+  const attemptOpt = p.options.find((o) => /attempt/i.test(o.name));
+  const isAttempt = vp.sibling;
+  const guessExisting = isAttempt
+    ? attemptOpt ?? p.options[0]
+    : p.options.find((o) => /batch/i.test(o.name)) ?? p.options.find((o) => /attempt/i.test(o.name)) ?? p.options[0];
+  const [kind, setKind] = useState<"new" | "existing">(isAttempt ? (attemptOpt || !canNew ? "existing" : "new") : canNew ? "new" : "existing");
+  const [optName, setOptName] = useState(isAttempt ? "Attempt" : diff.keys.length ? `${diff.keys.join(" & ")} Batch` : "Batch");
   const [existingOpt, setExistingOpt] = useState(guessExisting?.name ?? "");
-  const [existingValue, setExistingValue] = useState(diff.oldVals.join(" | ") || "Current batch");
-  const [newValue, setNewValue] = useState(diff.newVals.join(" | ") || gap.title);
+  const [existingValue, setExistingValue] = useState(isAttempt ? "Current attempt" : diff.oldVals.join(" | ") || "Current batch");
+  const extra = isAttempt && gap.options.length > 1 ? ` (${gap.options.map((o) => o.split(": ").slice(1).join(": ")).join(", ")})` : "";
+  const [newValue, setNewValue] = useState(isAttempt ? `${vp.attempts ?? "Next attempt"}${extra}` : diff.newVals.join(" | ") || gap.title);
   const [price, setPrice] = useState(String(rulePrice(gap.price)));
   const [compareAt, setCompareAt] = useState(gap.price != null ? String(gap.price) : "");
 

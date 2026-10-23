@@ -2408,6 +2408,45 @@ export type Database = {
           },
         ]
       }
+      link_alternatives: {
+        Row: {
+          attempts: string | null
+          id: string
+          product_slug: string
+          product_title: string | null
+          shopify_product_id: number
+          shopify_variant_id: number
+          vendor_price: number | null
+          vendor_site_id: string
+          vendor_variant_id: string
+          vendor_variant_label: string | null
+        }
+        Insert: {
+          attempts?: string | null
+          id?: string
+          product_slug: string
+          product_title?: string | null
+          shopify_product_id: number
+          shopify_variant_id: number
+          vendor_price?: number | null
+          vendor_site_id: string
+          vendor_variant_id: string
+          vendor_variant_label?: string | null
+        }
+        Update: {
+          attempts?: string | null
+          id?: string
+          product_slug?: string
+          product_title?: string | null
+          shopify_product_id?: number
+          shopify_variant_id?: number
+          vendor_price?: number | null
+          vendor_site_id?: string
+          vendor_variant_id?: string
+          vendor_variant_label?: string | null
+        }
+        Relationships: []
+      }
       listing_gap_decisions: {
         Row: {
           decided_at: string
@@ -2440,6 +2479,36 @@ export type Database = {
           product_slug?: string
           shopify_product_id?: number
           variant_id?: string
+          vendor_site_id?: string
+        }
+        Relationships: []
+      }
+      listing_vendor_products: {
+        Row: {
+          attempts: string | null
+          created_at: string
+          id: string
+          product_slug: string
+          product_title: string | null
+          shopify_product_id: number
+          vendor_site_id: string
+        }
+        Insert: {
+          attempts?: string | null
+          created_at?: string
+          id?: string
+          product_slug: string
+          product_title?: string | null
+          shopify_product_id: number
+          vendor_site_id: string
+        }
+        Update: {
+          attempts?: string | null
+          created_at?: string
+          id?: string
+          product_slug?: string
+          product_title?: string | null
+          shopify_product_id?: number
           vendor_site_id?: string
         }
         Relationships: []
@@ -2527,6 +2596,9 @@ export type Database = {
       }
       vendor_variant_links: {
         Row: {
+          shopify_compare_at: number | null
+          shopify_price: number | null
+          shopify_seen_at: string | null
           confidence: string
           created_at: string
           id: string
@@ -2550,6 +2622,9 @@ export type Database = {
           vendor_variant_label: string | null
         }
         Insert: {
+          shopify_compare_at?: number | null
+          shopify_price?: number | null
+          shopify_seen_at?: string | null
           confidence?: string
           created_at?: string
           id?: string
@@ -2573,6 +2648,9 @@ export type Database = {
           vendor_variant_label?: string | null
         }
         Update: {
+          shopify_compare_at?: number | null
+          shopify_price?: number | null
+          shopify_seen_at?: string | null
           confidence?: string
           created_at?: string
           id?: string

@@ -146,3 +146,24 @@ export async function createVariants(productId: number, vs: NewVariant[]): Promi
   if (r.userErrors.length) throw new Error(`Shopify: ${errText(r.userErrors)}`);
   return (r.productVariants ?? []).map((v) => ({ id: num(v.id), title: v.title }));
 }
+
+/** Set price / compare-at on existing variants of one product. */
+export async function updatePrices(
+  productId: number,
+  items: { variantId: number; price: number; compareAtPrice: number | null }[],
+): Promise<void> {
+  const data: { productVariantsBulkUpdate: { userErrors: UserError[] } } = await adminQuery(
+    `mutation U($id: ID!, $variants: [ProductVariantsBulkInput!]!) {
+      productVariantsBulkUpdate(productId: $id, variants: $variants) { userErrors { field message } }
+    }`,
+    {
+      id: gid(productId),
+      variants: items.map((i) => ({
+        id: `gid://shopify/ProductVariant/${i.variantId}`,
+        price: i.price.toFixed(2),
+        compareAtPrice: i.compareAtPrice == null ? null : i.compareAtPrice.toFixed(2),
+      })),
+    },
+  );
+  if (data.productVariantsBulkUpdate.userErrors.length) throw new Error(`Shopify: ${errText(data.productVariantsBulkUpdate.userErrors)}`);
+}

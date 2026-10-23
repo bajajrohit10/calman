@@ -43,6 +43,13 @@ export async function vendorProductsToRefresh(): Promise<{ error: string | null;
     }
     if (!data || data.length < 1000) break;
   }
+  // Sibling vendor products (the same course for other attempts) too.
+  const { data: sibs } = await supabase.from("listing_vendor_products").select("vendor_site_id, product_slug, product_title").limit(5000);
+  for (const r of sibs ?? []) {
+    if (!readable.has(r.vendor_site_id)) continue;
+    const k = `${r.vendor_site_id}|${r.product_slug}`;
+    if (!seen.has(k)) seen.set(k, { siteId: r.vendor_site_id, slug: r.product_slug, title: r.product_title });
+  }
   return { error: null, items: [...seen.values()] };
 }
 

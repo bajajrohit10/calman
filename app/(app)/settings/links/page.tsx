@@ -1,10 +1,12 @@
 import { PageHeader } from "@/components/ui";
 import { requireAdminProfile } from "@/lib/auth";
 import { fetchAllRows } from "@/lib/paged";
-import { computeGaps } from "@/lib/price-check/gaps";
+import { computeTodo } from "@/lib/price-check/todo";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 
 import { LinksView, type LinkRow } from "./links-view";
+import { TodoView } from "./todo-view";
 
 export const metadata = { title: "Links · Calman" };
 
@@ -18,11 +20,11 @@ type Status = (typeof STATUSES)[number];
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; conf?: string; q?: string }>;
+  searchParams: Promise<{ status?: string; conf?: string; q?: string; view?: string }>;
 }) {
   const { profile } = await requireAdminProfile();
   const sp = await searchParams;
-  const missingView = sp.status === "missing";
+  const todoView = sp.view !== "links";
   const status: Status = (STATUSES as readonly string[]).includes(sp.status ?? "")
     ? (sp.status as Status)
     : "suggested";
@@ -30,6 +32,20 @@ export default async function Page({
   const q = (sp.q ?? "").trim();
 
   const supabase = await createClient();
+
+  if (todoView) {
+    const todo = await computeTodo(supabase);
+    return (
+      <div className="flex flex-col gap-5">
+        <PageHeader
+          title="To do on Zeroinfy"
+          description="What to change on the Zeroinfy listings so they match BB Virtuals: prices, missing batches and attempts, options for exams that have passed."
+        />
+        <ViewTabs todo />
+        <TodoView todo={todo} canWrite={profile.role === "super_admin"} />
+      </div>
+    );
+  }
 
   const counts = await Promise.all(
     STATUSES.map(async (s) => {
@@ -41,11 +57,7 @@ export default async function Page({
     }),
   );
 
-  const gaps = await computeGaps(supabase);
-
-  const result = missingView
-    ? { rows: [] as LinkRow[], error: null, truncated: false }
-    : await fetchAllRows<LinkRow>((from, to) => {
+  const result = await fetchAllRows<LinkRow>((from, to) => {
     let query = supabase
       .from("vendor_variant_links")
       .select(
@@ -62,6 +74,7 @@ export default async function Page({
 
   return (
     <div className="flex flex-col gap-5">
+      <ViewTabs todo={false} />
       <PageHeader
         title="Links"
         description="Which vendor product and batch each Zeroinfy variant resells. AI suggests; a person approves. Only approved links are used for price checks."
@@ -69,14 +82,28 @@ export default async function Page({
       <LinksView
         rows={result.rows}
         counts={Object.fromEntries(counts) as Record<Status, number>}
-        status={missingView ? "missing" : status}
-        gaps={gaps}
+        status={status}
         conf={conf}
         q={q}
         canImport={profile.role === "super_admin"}
         error={result.error}
         truncated={result.truncated}
       />
+    </div>
+  );
+}
+
+function ViewTabs({ todo }: { todo: boolean }) {
+  const cls = (on: boolean) =>
+    `rounded-md px-3 py-1 text-[12.5px] ${on ? "bg-accent text-white" : "border border-line-2 text-ink-2 hover:bg-surface-2"}`;
+  return (
+    <div className="flex gap-2">
+      <Link href="/settings/links" className={cls(todo)}>
+        To do on Zeroinfy
+      </Link>
+      <Link href="/settings/links?view=links" className={cls(!todo)}>
+        All links (admin)
+      </Link>
     </div>
   );
 }

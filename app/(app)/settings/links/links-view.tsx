@@ -12,9 +12,8 @@ import {
   setProductStatus,
   setVariantStatus,
 } from "./actions";
-import { MissingView } from "./missing-view";
+import { importPlan } from "./todo-actions";
 import { Workbench } from "./workbench";
-import type { ListingGaps } from "@/lib/price-check/gaps";
 
 export type LinkRow = {
   id: string;
@@ -54,7 +53,6 @@ export function LinksView({
   canImport,
   error,
   truncated,
-  gaps,
 }: {
   rows: LinkRow[];
   counts: Record<string, number>;
@@ -64,7 +62,6 @@ export function LinksView({
   canImport: boolean;
   error: string | null;
   truncated: boolean;
-  gaps: { error: string | null; listings: ListingGaps[]; refreshedAt: string | null };
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -133,9 +130,6 @@ export function LinksView({
               {STATUS_LABEL[s]} ({counts[s] ?? 0})
             </Button>
           ))}
-          <Button size="sm" variant={status === "missing" ? "primary" : "secondary"} onClick={() => setParam("status", "missing")}>
-            Missing on Zeroinfy ({gaps.listings.length})
-          </Button>
         </div>
         <label className="flex flex-col gap-[3px]">
           <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">Confidence</span>
@@ -190,9 +184,7 @@ export function LinksView({
         ) : null}
       </div>
 
-      {status === "missing" ? <MissingView listings={gaps.listings} refreshedAt={gaps.refreshedAt} error={gaps.error} /> : null}
-
-      <p className={cx("text-[12px] text-ink-3", status === "missing" && "hidden")}>
+      <p className="text-[12px] text-ink-3">
         {groups.length} products · {rows.length} variant links. Spot-check a few before bulk-approving — a wrong link
         silently compares against the wrong price.
       </p>
@@ -382,6 +374,8 @@ function ImportBox({
               onClick={() =>
                 run(
                   async () => {
+                    // A prepared plan ({approve, siblings, alternatives}) or a suggestions array.
+                    if (text.trimStart().startsWith("{")) return importPlan(text);
                     const r = await importSuggestions(text);
                     return { error: r.error, count: r.count };
                   },
