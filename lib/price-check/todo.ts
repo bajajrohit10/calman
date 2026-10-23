@@ -44,18 +44,22 @@ export type PriceFix = {
   expected: number;
   rule: string;
   vendorLabel: string;
+  vendorUrl: string;
+  vendorTitle: string | null;
   confirmed: boolean;
 };
 export type MissingOpt = { siteId: string; slug: string; productTitle: string | null; variantId: string; label: string; price: number | null; expected: number | null };
 export type MissingGroup = { siteId: string; siteName: string; siteUrl: string; slug: string; productTitle: string | null; attempts: string | null; kind: "batch" | "attempt"; options: MissingOpt[] };
-export type AttemptChoice = { siteId: string; slug: string; productTitle: string | null; attempts: string | null; price: number | null };
+export type AttemptChoice = { siteId: string; siteUrl: string; slug: string; productTitle: string | null; attempts: string | null; price: number | null };
+/** Variants for which several vendor products fit equally; pick one. */
+export type AttemptGroup = { variantIds: number[]; variants: { title: string; price: number | null }[]; choices: AttemptChoice[] };
 
 export type TodoListing = {
   pid: number;
   title: string;
   handle: string | null;
-  attemptQuestion: AttemptChoice[] | null;
-  confirm: { reasons: string[]; count: number } | null;
+  attemptQuestion: AttemptGroup[] | null;
+  confirm: { reasons: string[]; count: number; products: { title: string; url: string }[] } | null;
   priceFixes: PriceFix[];
   missing: MissingGroup[];
   pastAttempts: string[];
@@ -116,6 +120,7 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
   const linksBy = group(L.rows);
   const sibsBy = group(S.rows);
   const altsBy = group(A.rows);
+  const linkByVariant = new Map(L.rows.map((l) => [Number(l.shopify_variant_id), l]));
 
   const { data: seen } = await supabase.from("vendor_variant_links").select("shopify_seen_at").not("shopify_seen_at", "is", null).order("shopify_seen_at", { ascending: false }).limit(1);
   const shopifyReadAt = seen?.[0]?.shopify_seen_at ?? null;
@@ -131,12 +136,33 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
     // 1. Attempt question (unclear attempt, several vendor products fit).
     const alts = altsBy.get(pid);
     if (alts?.length) {
-      const seenP = new Map<string, AttemptChoice>();
-      for (const a of alts) {
-        const k = `${a.vendor_site_id}|${a.product_slug}`;
-        if (!seenP.has(k)) seenP.set(k, { siteId: a.vendor_site_id, slug: a.product_slug, productTitle: a.product_title, attempts: a.attempts, price: a.vendor_price == null ? null : Number(a.vendor_price) });
+      // Group variants by the set of vendor products that fit them.
+      const perVariant = new Map<number, Alt[]>();
+      for (const a of alts) (perVariant.get(Number(a.shopify_variant_id)) ?? perVariant.set(Number(a.shopify_variant_id), []).get(Number(a.shopify_variant_id))!).push(a);
+      const groups = new Map<string, AttemptGroup>();
+      for (const [vid, as] of perVariant) {
+        const key = as.map((a) => `${a.vendor_site_id}|${a.product_slug}`).sort().join(",");
+        let g = groups.get(key);
+        if (!g) {
+          g = {
+            variantIds: [],
+            variants: [],
+            choices: as.map((a) => ({
+              siteId: a.vendor_site_id,
+              siteUrl: site.get(a.vendor_site_id)?.website_url ?? "",
+              slug: a.product_slug,
+              productTitle: a.product_title,
+              attempts: a.attempts,
+              price: a.vendor_price == null ? null : Number(a.vendor_price),
+            })),
+          };
+          groups.set(key, g);
+        }
+        const l = linkByVariant.get(vid);
+        g.variantIds.push(vid);
+        g.variants.push({ title: l?.shopify_variant_title ?? String(vid), price: l?.shopify_price == null ? null : Number(l.shopify_price) });
       }
-      item.attemptQuestion = [...seenP.values()];
+      item.attemptQuestion = [...groups.values()];
     }
 
     // 2. Price fixes (linked option still for sale, Zeroinfy price off the rule).
@@ -157,6 +183,8 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
             expected: e.price,
             rule: e.rule,
             vendorLabel: o.label,
+            vendorUrl: `${site.get(l.vendor_site_id)?.website_url ?? ""}/product/${l.vendor_product_slug}`,
+            vendorTitle: l.vendor_product_title,
             confirmed: l.status === "approved",
           });
         }
@@ -166,7 +194,16 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
     // 3. Confirm: unreviewed links with no price issue and no attempt question.
     const pending = live.filter((l) => l.status === "suggested");
     if (!item.attemptQuestion && pending.length && !item.priceFixes.length) {
-      item.confirm = { reasons: [...new Set(pending.map((l) => (l.reason ?? "").split("'.").slice(-1)[0].trim()).filter(Boolean))].slice(0, 3), count: pending.length };
+      const prods = new Map<string, { title: string; url: string }>();
+      for (const l of pending) {
+        if (!l.vendor_product_slug) continue;
+        prods.set(l.vendor_product_slug, { title: l.vendor_product_title ?? l.vendor_product_slug, url: `${site.get(l.vendor_site_id)?.website_url ?? ""}/product/${l.vendor_product_slug}` });
+      }
+      item.confirm = {
+        reasons: [...new Set(pending.map((l) => (l.reason ?? "").split("'.").slice(-1)[0].trim()).filter(Boolean))].slice(0, 3),
+        count: pending.length,
+        products: [...prods.values()],
+      };
     }
 
     // 4. Missing: options of linked products no variant sells; sibling products (other attempts) not linked at all.

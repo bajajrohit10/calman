@@ -21,7 +21,7 @@ const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString("en-IN"
 type Filter = "all" | "attempt" | "confirm" | "price" | "missing" | "past" | "dropped";
 const FILTERS: { key: Filter; label: string; count: (t: Todo) => number }[] = [
   { key: "all", label: "Everything", count: (t) => t.listings.length },
-  { key: "attempt", label: "Which attempt?", count: (t) => t.counts.attempt },
+  { key: "attempt", label: "Which BB product?", count: (t) => t.counts.attempt },
   { key: "confirm", label: "Confirm BB match", count: (t) => t.counts.confirm },
   { key: "price", label: "Price to fix", count: (t) => t.counts.price },
   { key: "missing", label: "Add on Zeroinfy", count: (t) => t.counts.missing },
@@ -197,26 +197,53 @@ function ListingCard({
       </div>
 
       {l.attemptQuestion ? (
-        <Block tone="accent" title="Which attempt is this listing for?">
-          <p className="text-ink-3">BB sells this course separately per attempt. Pick the one your current variants are; the other attempt then shows up under “Add on Zeroinfy”.</p>
-          <div className="flex flex-wrap gap-2">
-            {l.attemptQuestion.map((c) => (
-              <Button
-                key={c.slug}
-                size="sm"
-                variant="secondary"
-                disabled={pending}
-                onClick={() => act(() => answerAttempt(l.pid, c.siteId, c.slug), (n) => `Linked ${n} variants to the ${c.attempts} product.`)}
-              >
-                It&apos;s {c.attempts ?? c.productTitle} {c.price ? `(BB ${rupees(c.price)})` : ""}
-              </Button>
-            ))}
-          </div>
+        <Block tone="accent" title="Which BB product do these variants resell?">
+          <p className="text-ink-3">
+            More than one BB product fits and the prices don&apos;t settle it. Open them on BB (↗) if needed, then pick. Any BB attempt you don&apos;t sell
+            will show up under “Add on Zeroinfy”.
+          </p>
+          {l.attemptQuestion.map((g, gi) => (
+            <div key={gi} className="flex flex-col gap-1 border-t border-line pt-1 first:border-0 first:pt-0">
+              <div className="text-ink-2">
+                {g.variants.length} variant{g.variants.length === 1 ? "" : "s"}:{" "}
+                {g.variants
+                  .slice(0, 4)
+                  .map((v) => `${v.title} (${rupees(v.price)})`)
+                  .join(" · ")}
+                {g.variants.length > 4 ? " …" : ""}
+              </div>
+              <div className="flex flex-col gap-1">
+                {g.choices.map((c) => (
+                  <div key={c.slug} className="flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={pending}
+                      onClick={() => act(() => answerAttempt(l.pid, c.siteId, c.slug, g.variantIds), (n) => `Linked ${n} variants to “${c.productTitle}”.`)}
+                    >
+                      This one
+                    </Button>
+                    <a href={`${c.siteUrl}/product/${c.slug}`} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+                      {c.productTitle ?? c.slug} ↗
+                    </a>
+                    <span className="text-ink-3">
+                      {c.attempts} · BB {rupees(c.price)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </Block>
       ) : null}
 
       {l.confirm ? (
         <Block tone="warn" title={`Confirm the BB match (${l.confirm.count} variants)`}>
+          {l.confirm.products.map((p) => (
+            <a key={p.url} href={p.url} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+              Linked to: {p.title} ↗
+            </a>
+          ))}
           {l.confirm.reasons.map((r, i) => (
             <p key={i} className="text-ink-3">
               {r}
@@ -247,7 +274,10 @@ function ListingCard({
                     BB {rupees(f.vendorPrice)} · {f.rule}
                     {!f.confirmed ? " · BB match not confirmed yet" : ""}
                     <div className="truncate max-w-[420px]" title={f.vendorLabel}>
-                      {f.vendorLabel}
+                      <a href={f.vendorUrl} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+                        {f.vendorTitle ?? "BB product"} ↗
+                      </a>{" "}
+                      · {f.vendorLabel}
                     </div>
                   </td>
                   <td className="py-1 text-right whitespace-nowrap">

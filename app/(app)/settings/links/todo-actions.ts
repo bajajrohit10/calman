@@ -71,7 +71,7 @@ export async function refreshShopify(pids: number[]): Promise<{ error: string | 
 }
 
 /** "It's May 27": re-link every variant of the listing to that vendor product, approved. */
-export async function answerAttempt(pid: number, siteId: string, slug: string): Promise<{ error: string | null; count?: number }> {
+export async function answerAttempt(pid: number, siteId: string, slug: string, variantIds: number[]): Promise<{ error: string | null; count?: number }> {
   const viewer = await gate();
   if (!viewer) return { error: DENIED };
   const supabase = await createClient();
@@ -80,7 +80,8 @@ export async function answerAttempt(pid: number, siteId: string, slug: string): 
     .select("shopify_variant_id, product_title, vendor_variant_id, vendor_variant_label")
     .eq("shopify_product_id", pid)
     .eq("vendor_site_id", siteId)
-    .eq("product_slug", slug);
+    .eq("product_slug", slug)
+    .in("shopify_variant_id", variantIds.length ? variantIds : [-1]);
   if (error) return { error: error.message };
   if (!alts?.length) return { error: "No options stored for that choice — reload." };
   const now = new Date().toISOString();
@@ -96,7 +97,7 @@ export async function answerAttempt(pid: number, siteId: string, slug: string): 
         vendor_variant_label: a.vendor_variant_label,
         status: "approved",
         confidence: "high",
-        review_note: "Attempt chosen in To do on Zeroinfy.",
+        review_note: "BB product chosen in To do on Zeroinfy.",
         reviewed_by: viewer.userId,
         reviewed_at: now,
       })
@@ -105,7 +106,7 @@ export async function answerAttempt(pid: number, siteId: string, slug: string): 
       .select("id");
     count += data?.length ?? 0;
   }
-  await supabase.from("link_alternatives").delete().eq("shopify_product_id", pid);
+  await supabase.from("link_alternatives").delete().eq("shopify_product_id", pid).in("shopify_variant_id", alts.map((a) => a.shopify_variant_id));
   revalidatePath(PATH);
   return { error: null, count };
 }
@@ -181,6 +182,10 @@ export async function ignoreOptions(pid: number, siteId: string, slug: string, v
 
 type Plan = {
   approve: number[];
+  /** Re-point these variants to a vendor option and approve (resolved by me offline). */
+  relink?: { vid: number; site: string; slug: string; title: string; bvid: string; blabel: string; note: string }[];
+  /** Delete every stored alternative before loading the new ones. */
+  replaceAlternatives?: boolean;
   siblings: { pid: number; site: string; slug: string; title: string; attempts: string }[];
   alternatives: { pid: number; vid: number; site: string; slug: string; title: string; attempts: string; bvid: string; blabel: string; bprice: number | null }[];
 };
@@ -210,6 +215,21 @@ export async function importPlan(json: string): Promise<{ error: string | null; 
       .select("id");
     if (error) return { error: error.message, count };
     count += data?.length ?? 0;
+  }
+  for (const r of plan.relink ?? []) {
+    const site = sid.get(r.site.toLowerCase());
+    if (!site) continue;
+    const { data } = await supabase
+      .from("vendor_variant_links")
+      .update({ vendor_site_id: site, vendor_product_slug: r.slug, vendor_product_title: r.title, vendor_variant_id: r.bvid, vendor_variant_label: r.blabel, status: "approved", confidence: "high", reviewed_by: viewer.userId, reviewed_at: now, review_note: r.note })
+      .eq("shopify_variant_id", r.vid)
+      .neq("status", "no_match")
+      .select("id");
+    count += data?.length ?? 0;
+  }
+  if (plan.replaceAlternatives) {
+    const { error } = await supabase.from("link_alternatives").delete().gte("shopify_product_id", 0);
+    if (error) return { error: error.message, count };
   }
   const sibs = plan.siblings
     .map((s) => ({ shopify_product_id: s.pid, vendor_site_id: sid.get(s.site.toLowerCase())!, product_slug: s.slug, product_title: s.title, attempts: s.attempts }))
