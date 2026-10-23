@@ -49,8 +49,12 @@ async function accessToken(domain: string): Promise<string> {
     signal: AbortSignal.timeout(15_000),
   });
   if (!res.ok) {
+    // Shopify's OAuth error body names the reason (e.g. app not installed).
+    // It never echoes the secret, so it is safe to show to an admin.
+    const detail = (await res.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 300);
     throw new Error(
-      `Shopify refused the app credentials (HTTP ${res.status}). Check the Client ID/secret and that the app is installed on the store.`,
+      `Shopify refused the app credentials (HTTP ${res.status}${detail ? `: ${detail}` : ""}). ` +
+        "Check the Client ID/secret and that the app is released and installed on the store.",
     );
   }
   const body = (await res.json()) as { access_token?: string; expires_in?: number };
