@@ -41,30 +41,32 @@ export async function refreshShopify(pids: number[]): Promise<{ error: string | 
   const supabase = await createClient();
   const failed: string[] = [];
   const now = new Date().toISOString();
-  for (const pid of pids) {
-    let p;
-    try {
-      p = await getProductForEdit(pid);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (/no longer on Shopify/.test(msg)) await supabase.from("vendor_variant_links").delete().eq("shopify_product_id", pid);
-      failed.push(`${pid}: ${msg}`);
-      continue;
-    }
-    const { data: links } = await supabase.from("vendor_variant_links").select("id, shopify_variant_id").eq("shopify_product_id", pid);
-    const byId = new Map(p.variants.map((v) => [v.id, v]));
-    for (const l of links ?? []) {
-      const v = byId.get(Number(l.shopify_variant_id));
-      if (!v) {
-        await supabase.from("vendor_variant_links").delete().eq("id", l.id);
-        continue;
+  // Listings in parallel, and each listing's link updates in parallel: one round trip per step.
+  await Promise.all(
+    pids.map(async (pid) => {
+      let p;
+      try {
+        p = await getProductForEdit(pid);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/no longer on Shopify/.test(msg)) await supabase.from("vendor_variant_links").delete().eq("shopify_product_id", pid);
+        failed.push(`${pid}: ${msg}`);
+        return;
       }
-      await supabase
-        .from("vendor_variant_links")
-        .update({ shopify_price: v.price, shopify_compare_at: v.compareAtPrice, shopify_variant_title: v.title, shopify_product_title: p.title, shopify_seen_at: now })
-        .eq("id", l.id);
-    }
-  }
+      const { data: links } = await supabase.from("vendor_variant_links").select("id, shopify_variant_id").eq("shopify_product_id", pid);
+      const byId = new Map(p.variants.map((v) => [v.id, v]));
+      await Promise.all(
+        (links ?? []).map((l) => {
+          const v = byId.get(Number(l.shopify_variant_id));
+          if (!v) return supabase.from("vendor_variant_links").delete().eq("id", l.id);
+          return supabase
+            .from("vendor_variant_links")
+            .update({ shopify_price: v.price, shopify_compare_at: v.compareAtPrice, shopify_variant_title: v.title, shopify_product_title: p.title, shopify_seen_at: now })
+            .eq("id", l.id);
+        }),
+      );
+    }),
+  );
   return { error: null, failed };
 }
 
