@@ -22,7 +22,7 @@ export default async function Page() {
   const [sites, aliases, exclusions] = await Promise.all([
     supabase
       .from("vendor_sites")
-      .select("id, name, website_url, read_method, platform_key, price_basis, status, notes, is_active, last_checked_at, last_check_result")
+      .select("id, name, website_url, read_method, platform_key, price_basis, status, notes, instructions, is_active, last_checked_at, last_check_result")
       .order("name"),
     supabase.from("vendor_site_aliases").select("id, vendor_site_id, shopify_vendor").order("shopify_vendor"),
     supabase.from("price_check_excluded_vendors").select("id, shopify_vendor, reason").order("shopify_vendor"),

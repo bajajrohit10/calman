@@ -26,6 +26,7 @@ export type SiteRow = {
   price_basis: string;
   status: string;
   notes: string | null;
+  instructions: string | null;
   is_active: boolean;
   last_checked_at: string | null;
   last_check_result: string | null;
@@ -312,8 +313,22 @@ function SiteCard({
         </label>
       </div>
 
+      {/* The owner's rules for this vendor, in plain words. Kept above the
+          technical notes because it is the one the team reads while matching. */}
       <label className="flex flex-col gap-[3px]">
-        <span className={LABEL}>Notes</span>
+        <span className={LABEL}>Pricing &amp; matching instructions</span>
+        <Textarea
+          rows={Math.min(8, Math.max(3, (site.instructions ?? "").split("\n").length + 1))}
+          defaultValue={site.instructions ?? ""}
+          placeholder="Special rules for this vendor — e.g. offer amount, products kept at vendor price, exceptions…"
+          className="bg-warn-soft/40"
+          onBlur={(e) => e.target.value !== (site.instructions ?? "") && save({ instructions: e.target.value })}
+        />
+        <span className="text-[11px] text-ink-3">Saved when you click outside the box.</span>
+      </label>
+
+      <label className="flex flex-col gap-[3px]">
+        <span className={LABEL}>Technical notes</span>
         <Textarea
           rows={2}
           defaultValue={site.notes ?? ""}

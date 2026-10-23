@@ -2413,6 +2413,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          instructions: string | null
           is_active: boolean
           last_check_result: string | null
           last_checked_at: string | null
@@ -2429,6 +2430,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          instructions?: string | null
           is_active?: boolean
           last_check_result?: string | null
           last_checked_at?: string | null
@@ -2445,6 +2447,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          instructions?: string | null
           is_active?: boolean
           last_check_result?: string | null
           last_checked_at?: string | null

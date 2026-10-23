@@ -37,6 +37,7 @@ export type SitePatch = {
   price_basis?: string;
   status?: string;
   notes?: string | null;
+  instructions?: string | null;
   is_active?: boolean;
 };
 
@@ -65,6 +66,11 @@ function cleanPatch(p: SitePatch): { patch: SitePatch; error: string | null } {
   }
   if (p.platform_key !== undefined) out.platform_key = p.platform_key?.trim() || null;
   if (p.notes !== undefined) out.notes = p.notes?.trim() || null;
+  if (p.instructions !== undefined) {
+    const v = p.instructions?.trim() || null;
+    if (v && v.length > 5000) return { patch: out, error: "Instructions are limited to 5,000 characters." };
+    out.instructions = v;
+  }
   if (p.is_active !== undefined) out.is_active = p.is_active;
   return { patch: out, error: null };
 }
