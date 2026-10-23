@@ -38,7 +38,7 @@ export default async function Page() {
     }
   } else {
     shopifyError =
-      "Shopify is not connected yet: set SHOPIFY_STORE_DOMAIN and SHOPIFY_ADMIN_TOKEN (read_products, read_reports). Vendor names can still be typed by hand.";
+      "Shopify is not connected yet: set SHOPIFY_STORE_DOMAIN plus SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET from a Dev Dashboard app (scopes read_products, read_reports). Vendor names can still be typed by hand.";
   }
 
   const loadError = sites.error?.message ?? aliases.error?.message ?? exclusions.error?.message ?? null;

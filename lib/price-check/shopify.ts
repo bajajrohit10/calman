@@ -3,10 +3,16 @@ import "server-only";
 /**
  * Price check, Brief 1. Read-only access to Zeroinfy's own Shopify store.
  *
- * Two env vars, server-side only, never sent to the browser:
- *   SHOPIFY_STORE_DOMAIN  zeroinfy.myshopify.com
- *   SHOPIFY_ADMIN_TOKEN   a custom-app Admin API token with read_products and
- *                         read_reports (the second is for ShopifyQL sales).
+ * Env vars, server-side only, never sent to the browser:
+ *   SHOPIFY_STORE_DOMAIN   zeroinfy.myshopify.com
+ * and EITHER (preferred — Shopify stopped allowing new admin-created custom
+ * apps in 2026, so a new connection is a Dev Dashboard app):
+ *   SHOPIFY_CLIENT_ID      } a Dev Dashboard app installed on the store with
+ *   SHOPIFY_CLIENT_SECRET  } scopes read_products + read_reports. Calman swaps
+ *                            them for a ~24h token (client credentials grant)
+ *                            and caches it in memory.
+ * OR, for an existing admin-created custom app:
+ *   SHOPIFY_ADMIN_TOKEN    shpat_… with the same scopes.
  *
  * Nothing in this brief writes to Shopify.
  */
@@ -16,13 +22,47 @@ const API_VERSION = "2026-07";
 export type ShopifyVendor = { name: string; netSales6m: number | null };
 
 export function shopifyConfigured(): boolean {
-  return Boolean(process.env.SHOPIFY_STORE_DOMAIN && process.env.SHOPIFY_ADMIN_TOKEN);
+  const e = process.env;
+  return Boolean(
+    e.SHOPIFY_STORE_DOMAIN && (e.SHOPIFY_ADMIN_TOKEN || (e.SHOPIFY_CLIENT_ID && e.SHOPIFY_CLIENT_SECRET)),
+  );
+}
+
+let cached: { token: string; expiresAt: number } | null = null;
+
+async function accessToken(domain: string): Promise<string> {
+  const fixed = process.env.SHOPIFY_ADMIN_TOKEN;
+  if (fixed) return fixed;
+
+  // Refresh five minutes before Shopify's ~24h expiry.
+  if (cached && cached.expiresAt - 5 * 60_000 > Date.now()) return cached.token;
+
+  const id = process.env.SHOPIFY_CLIENT_ID;
+  const secret = process.env.SHOPIFY_CLIENT_SECRET;
+  if (!id || !secret) throw new Error("Shopify is not connected (SHOPIFY_CLIENT_ID / SHOPIFY_CLIENT_SECRET unset).");
+
+  const res = await fetch(`https://${domain}/admin/oauth/access_token`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "client_credentials", client_id: id, client_secret: secret }),
+    cache: "no-store",
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) {
+    throw new Error(
+      `Shopify refused the app credentials (HTTP ${res.status}). Check the Client ID/secret and that the app is installed on the store.`,
+    );
+  }
+  const body = (await res.json()) as { access_token?: string; expires_in?: number };
+  if (!body.access_token) throw new Error("Shopify returned no access token.");
+  cached = { token: body.access_token, expiresAt: Date.now() + (body.expires_in ?? 3600) * 1000 };
+  return cached.token;
 }
 
 async function adminQuery<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
   const domain = process.env.SHOPIFY_STORE_DOMAIN;
-  const token = process.env.SHOPIFY_ADMIN_TOKEN;
-  if (!domain || !token) throw new Error("Shopify is not connected (SHOPIFY_STORE_DOMAIN / SHOPIFY_ADMIN_TOKEN unset).");
+  if (!domain) throw new Error("Shopify is not connected (SHOPIFY_STORE_DOMAIN unset).");
+  const token = await accessToken(domain);
 
   const res = await fetch(`https://${domain}/admin/api/${API_VERSION}/graphql.json`, {
     method: "POST",
