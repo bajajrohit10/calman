@@ -2408,6 +2408,45 @@ export type Database = {
           },
         ]
       }
+      shopify_change_log: {
+        Row: {
+          action: string
+          actor: string | null
+          created_at: string
+          error: string | null
+          id: string
+          ok: boolean
+          request: Json
+          result: Json | null
+          shopify_product_id: number
+          shopify_product_title: string | null
+        }
+        Insert: {
+          action: string
+          actor?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          ok: boolean
+          request: Json
+          result?: Json | null
+          shopify_product_id: number
+          shopify_product_title?: string | null
+        }
+        Update: {
+          action?: string
+          actor?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          ok?: boolean
+          request?: Json
+          result?: Json | null
+          shopify_product_id?: number
+          shopify_product_title?: string | null
+        }
+        Relationships: []
+      }
       vendor_variant_links: {
         Row: {
           confidence: string

@@ -1,0 +1,148 @@
+import "server-only";
+
+import { adminQuery } from "@/lib/price-check/shopify";
+
+/**
+ * Price check: reading one Zeroinfy listing's options/variants and adding
+ * variants to it (a new BB batch). Writes need write_products.
+ */
+
+export type ShopifyOption = { id: string; name: string; position: number; values: string[] };
+export type ShopifyVariant = {
+  id: number;
+  title: string;
+  price: number;
+  compareAtPrice: number | null;
+  selected: Record<string, string>;
+  inventoryPolicy: string;
+  taxable: boolean;
+  tracked: boolean;
+  requiresShipping: boolean;
+};
+export type ShopifyProductForEdit = {
+  id: number;
+  title: string;
+  handle: string;
+  options: ShopifyOption[];
+  variants: ShopifyVariant[];
+};
+
+const gid = (id: number) => `gid://shopify/Product/${id}`;
+const num = (g: string) => Number(g.split("/").pop());
+
+type VariantNode = {
+  id: string;
+  title: string;
+  price: string;
+  compareAtPrice: string | null;
+  inventoryPolicy: string;
+  taxable: boolean;
+  selectedOptions: { name: string; value: string }[];
+  inventoryItem: { tracked: boolean; requiresShipping: boolean } | null;
+};
+
+export async function getProductForEdit(productId: number): Promise<ShopifyProductForEdit> {
+  const variants: VariantNode[] = [];
+  let after: string | null = null;
+  let head: { title: string; handle: string; options: { id: string; name: string; position: number; optionValues: { name: string }[] }[] } | null = null;
+  for (let page = 0; page < 20; page++) {
+    const data: {
+      product: {
+        title: string;
+        handle: string;
+        options: { id: string; name: string; position: number; optionValues: { name: string }[] }[];
+        variants: { nodes: VariantNode[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } };
+      } | null;
+    } = await adminQuery(
+      `query P($id: ID!, $after: String) {
+        product(id: $id) {
+          title handle
+          options { id name position optionValues { name } }
+          variants(first: 250, after: $after) {
+            nodes { id title price compareAtPrice inventoryPolicy taxable
+              selectedOptions { name value } inventoryItem { tracked requiresShipping } }
+            pageInfo { hasNextPage endCursor }
+          }
+        }
+      }`,
+      { id: gid(productId), after },
+    );
+    if (!data.product) throw new Error("That product is no longer on Shopify.");
+    head = data.product;
+    variants.push(...data.product.variants.nodes);
+    if (!data.product.variants.pageInfo.hasNextPage) break;
+    after = data.product.variants.pageInfo.endCursor;
+  }
+  return {
+    id: productId,
+    title: head!.title,
+    handle: head!.handle,
+    options: head!.options
+      .map((o) => ({ id: o.id, name: o.name, position: o.position, values: o.optionValues.map((v) => v.name) }))
+      .sort((a, b) => a.position - b.position),
+    variants: variants.map((v) => ({
+      id: num(v.id),
+      title: v.title,
+      price: Number(v.price),
+      compareAtPrice: v.compareAtPrice == null ? null : Number(v.compareAtPrice),
+      selected: Object.fromEntries(v.selectedOptions.map((o) => [o.name, o.value])),
+      inventoryPolicy: v.inventoryPolicy,
+      taxable: v.taxable,
+      tracked: v.inventoryItem?.tracked ?? false,
+      requiresShipping: v.inventoryItem?.requiresShipping ?? false,
+    })),
+  };
+}
+
+type UserError = { field: string[] | null; message: string };
+const errText = (e: UserError[]) => e.map((x) => x.message).join("; ");
+
+/** Add a new option to the product; every existing variant takes `existingValue`. */
+export async function addOption(productId: number, name: string, existingValue: string): Promise<void> {
+  const data: { productOptionsCreate: { userErrors: UserError[] } } = await adminQuery(
+    `mutation O($id: ID!, $options: [OptionCreateInput!]!) {
+      productOptionsCreate(productId: $id, options: $options, variantStrategy: LEAVE_AS_IS) {
+        userErrors { field message }
+      }
+    }`,
+    { id: gid(productId), options: [{ name, values: [{ name: existingValue }] }] },
+  );
+  if (data.productOptionsCreate.userErrors.length) throw new Error(`Shopify: ${errText(data.productOptionsCreate.userErrors)}`);
+}
+
+export type NewVariant = {
+  options: Record<string, string>; // every product option → value (new values are created)
+  price: number;
+  compareAtPrice: number | null;
+  inventoryPolicy: string;
+  taxable: boolean;
+  tracked: boolean;
+  requiresShipping: boolean;
+};
+
+export async function createVariants(productId: number, vs: NewVariant[]): Promise<{ id: number; title: string }[]> {
+  const data: {
+    productVariantsBulkCreate: { productVariants: { id: string; title: string }[] | null; userErrors: UserError[] };
+  } = await adminQuery(
+    `mutation V($id: ID!, $variants: [ProductVariantsBulkInput!]!) {
+      productVariantsBulkCreate(productId: $id, variants: $variants) {
+        productVariants { id title }
+        userErrors { field message }
+      }
+    }`,
+    {
+      id: gid(productId),
+      variants: vs.map((v) => ({
+        optionValues: Object.entries(v.options).map(([optionName, name]) => ({ optionName, name })),
+        price: v.price.toFixed(2),
+        compareAtPrice: v.compareAtPrice == null ? null : v.compareAtPrice.toFixed(2),
+        inventoryPolicy: v.inventoryPolicy,
+        taxable: v.taxable,
+        inventoryItem: { tracked: v.tracked, requiresShipping: v.requiresShipping },
+      })),
+    },
+  );
+  const r = data.productVariantsBulkCreate;
+  if (r.userErrors.length) throw new Error(`Shopify: ${errText(r.userErrors)}`);
+  return (r.productVariants ?? []).map((v) => ({ id: num(v.id), title: v.title }));
+}

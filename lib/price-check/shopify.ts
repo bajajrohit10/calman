@@ -14,7 +14,9 @@ import "server-only";
  * OR, for an existing admin-created custom app:
  *   SHOPIFY_ADMIN_TOKEN    shpat_… with the same scopes.
  *
- * Nothing in this brief writes to Shopify.
+ * Writes (adding a batch option / variants to a listing) need write_products
+ * and are only ever made from an explicit, confirmed super-admin action in
+ * Settings → Links. Every write is logged in public.shopify_change_log.
  */
 
 const API_VERSION = "2026-07";
@@ -63,7 +65,7 @@ async function accessToken(domain: string): Promise<string> {
   return cached.token;
 }
 
-async function adminQuery<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
+export async function adminQuery<T>(query: string, variables?: Record<string, unknown>, retried = false): Promise<T> {
   const domain = process.env.SHOPIFY_STORE_DOMAIN;
   if (!domain) throw new Error("Shopify is not connected (SHOPIFY_STORE_DOMAIN unset).");
   const token = await accessToken(domain);
@@ -75,9 +77,26 @@ async function adminQuery<T>(query: string, variables?: Record<string, unknown>)
     cache: "no-store",
     signal: AbortSignal.timeout(20_000),
   });
+  if ((res.status === 401 || res.status === 403) && !retried && cached) {
+    // A cached token minted before a scope change keeps the old scopes: mint a fresh one once.
+    cached = null;
+    return adminQuery<T>(query, variables, true);
+  }
   if (!res.ok) throw new Error(`Shopify answered HTTP ${res.status}.`);
-  const body = (await res.json()) as { data?: T; errors?: { message: string }[] };
-  if (body.errors?.length) throw new Error(body.errors.map((e) => e.message).join("; "));
+  const body = (await res.json()) as { data?: T; errors?: { message: string; extensions?: { code?: string } }[] };
+  if (body.errors?.length) {
+    const denied = body.errors.some((e) => e.extensions?.code === "ACCESS_DENIED");
+    if (denied && !retried && cached) {
+      cached = null;
+      return adminQuery<T>(query, variables, true);
+    }
+    const msg = body.errors.map((e) => e.message).join("; ");
+    throw new Error(
+      denied
+        ? `Shopify refused: ${msg} — the Calman app needs the write_products permission (Dev Dashboard → new version → release → approve in the store).`
+        : msg,
+    );
+  }
   if (!body.data) throw new Error("Shopify returned no data.");
   return body.data;
 }

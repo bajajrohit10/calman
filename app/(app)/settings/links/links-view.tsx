@@ -12,6 +12,7 @@ import {
   setProductStatus,
   setVariantStatus,
 } from "./actions";
+import { Workbench } from "./workbench";
 
 export type LinkRow = {
   id: string;
@@ -209,6 +210,7 @@ function ProductCard({
 }) {
   const [rejecting, setRejecting] = useState(false);
   const [why, setWhy] = useState("");
+  const [bench, setBench] = useState(false);
   const reasons = [...new Set(group.rows.map((r) => r.reason).filter(Boolean))] as string[];
   const notes = [...new Set(group.rows.map((r) => r.review_note).filter(Boolean))] as string[];
   const targets = [...new Set(group.rows.map((r) => r.vendor_product_title ?? r.vendor_product_slug).filter(Boolean))];
@@ -233,6 +235,9 @@ function ProductCard({
         )}
         <span className="text-[11.5px] text-ink-3">{group.vendor}</span>
         <div className="ml-auto flex items-center gap-1">
+          <Button size="sm" variant={bench ? "primary" : "ghost"} onClick={() => setBench((b) => !b)}>
+            Batches &amp; options
+          </Button>
           {status === "suggested" ? (
             rejecting ? (
               <form
@@ -290,6 +295,8 @@ function ProductCard({
           Review note: {n}
         </p>
       ))}
+
+      {bench ? <Workbench productId={group.pid} onClose={() => setBench(false)} /> : null}
 
       <table className="w-full text-[12px]">
         <thead>
