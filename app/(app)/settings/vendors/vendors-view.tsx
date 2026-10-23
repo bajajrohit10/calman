@@ -272,16 +272,16 @@ function SiteCard({
             ))}
           </Select>
         </label>
-        {site.read_method === "edportal_feed" ? (
-          <label className="flex flex-col gap-[3px]">
-            <span className={LABEL}>Platform key</span>
-            <Input
-              defaultValue={site.platform_key ?? ""}
-              placeholder="e.g. onr"
-              onBlur={(e) => e.target.value !== (site.platform_key ?? "") && save({ platform_key: e.target.value })}
-            />
-          </label>
-        ) : null}
+        {/* Always shown: the course-platform feed method is refused by the
+            database without a key, so the key has to be enterable first. */}
+        <label className="flex flex-col gap-[3px]">
+          <span className={LABEL}>Platform key {site.read_method === "edportal_feed" ? "" : "(feed sites only)"}</span>
+          <Input
+            defaultValue={site.platform_key ?? ""}
+            placeholder="e.g. onr"
+            onBlur={(e) => e.target.value !== (site.platform_key ?? "") && save({ platform_key: e.target.value })}
+          />
+        </label>
         <label className="flex flex-col gap-[3px]">
           <span className={LABEL}>Vendor price is</span>
           <Select value={site.price_basis} disabled={pending} onChange={(e) => save({ price_basis: e.target.value })}>
