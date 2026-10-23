@@ -28,8 +28,10 @@ export type Expected = { price: number; rule: string };
 export function expectedZeroinfyPrice(vendorPrice: number, zeroinfyTitle: string): Expected {
   if (vendorPrice <= 4000) return { price: vendorPrice, rule: "₹4,000 or below: same as BB" };
   const f = facultiesIn(zeroinfyTitle);
-  const only = (name: string) => f.length > 0 && f.every((x) => x === name);
   const t = zeroinfyTitle.toLowerCase();
+  // "Own course" = a single-faculty listing; anything sold as a combo or "By BB Virtuals" is a combo.
+  const combo = /combo|bb virtual/.test(t);
+  const only = (name: string) => !combo && f.length > 0 && f.every((x) => x === name);
   if (only("mohnish vora")) return { price: vendorPrice, rule: "CA Mohnish Vora's own course: same as BB" };
   if (only("vishal bhattad")) return { price: vendorPrice, rule: "CA Vishal Bhattad's own course: same as BB" };
   if (only("karan kumar")) return { price: vendorPrice - 1000, rule: "CA Karan Kumar's course: BB − ₹1,000" };
