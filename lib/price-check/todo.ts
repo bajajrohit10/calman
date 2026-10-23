@@ -50,7 +50,7 @@ export type PriceFix = {
 };
 export type MissingOpt = { siteId: string; slug: string; productTitle: string | null; variantId: string; label: string; price: number | null; expected: number | null };
 export type MissingGroup = { siteId: string; siteName: string; siteUrl: string; slug: string; productTitle: string | null; attempts: string | null; kind: "batch" | "attempt"; options: MissingOpt[] };
-export type AttemptChoice = { siteId: string; siteUrl: string; slug: string; productTitle: string | null; attempts: string | null; price: number | null; fits: boolean };
+export type AttemptChoice = { siteId: string; siteUrl: string; slug: string; productTitle: string | null; attempts: string | null; price: number | null };
 /** Variants for which several vendor products fit equally; pick one. */
 export type AttemptGroup = { variantIds: number[]; variants: { title: string; price: number | null }[]; choices: AttemptChoice[] };
 
@@ -154,7 +154,6 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
               productTitle: a.product_title,
               attempts: a.attempts,
               price: a.vendor_price == null ? null : Number(a.vendor_price),
-              fits: false,
             })),
           };
           groups.set(key, g);
@@ -162,11 +161,6 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
         const l = linkByVariant.get(vid);
         g.variantIds.push(vid);
         g.variants.push({ title: l?.shopify_variant_title ?? String(vid), price: l?.shopify_price == null ? null : Number(l.shopify_price) });
-      }
-      // Does the variant's current Zeroinfy price fit each choice under the BB rule?
-      for (const g of groups.values()) {
-        const p0 = g.variants.find((v) => v.price != null)?.price;
-        for (const c of g.choices) c.fits = p0 != null && c.price != null && priceOk(p0, expectedZeroinfyPrice(c.price, first.shopify_product_title).price);
       }
       item.attemptQuestion = [...groups.values()];
     }

@@ -194,6 +194,10 @@ type Plan = {
     status?: "approved" | "suggested";
     reason?: string;
   }[];
+  /** Variants whose current link was chosen by price: put back to "suggested" and ask. */
+  ask?: number[];
+  /** Sibling BB products added earlier that should be removed again. */
+  unsiblings?: { pid: number; site: string; slug: string }[];
   /** Delete every stored alternative before loading the new ones. */
   replaceAlternatives?: boolean;
   siblings: { pid: number; site: string; slug: string; title: string; attempts: string }[];
@@ -240,6 +244,22 @@ export async function importPlan(json: string): Promise<{ error: string | null; 
       .not("status", "in", r.status === "suggested" ? '("approved","rejected")' : '("rejected")')
       .select("id");
     count += data?.length ?? 0;
+  }
+  for (let i = 0; i < (plan.ask ?? []).length; i += 200) {
+    const { data, error } = await supabase
+      .from("vendor_variant_links")
+      .update({ status: "suggested", confidence: "low", reason: "More than one BB product matches by name — please choose which one this variant resells.", review_note: null, reviewed_by: null, reviewed_at: null })
+      .in("shopify_variant_id", plan.ask!.slice(i, i + 200))
+      .like("review_note", "%only this one matches the Zeroinfy price%")
+      .select("id");
+    if (error) return { error: error.message, count };
+    count += data?.length ?? 0;
+  }
+  for (const u of plan.unsiblings ?? []) {
+    const site = sid.get(u.site.toLowerCase());
+    if (!site) continue;
+    await supabase.from("listing_vendor_products").delete().eq("shopify_product_id", u.pid).eq("vendor_site_id", site).eq("product_slug", u.slug);
+    await supabase.from("link_alternatives").delete().eq("shopify_product_id", u.pid).eq("vendor_site_id", site).eq("product_slug", u.slug);
   }
   if (plan.replaceAlternatives) {
     const { error } = await supabase.from("link_alternatives").delete().gte("shopify_product_id", 0);

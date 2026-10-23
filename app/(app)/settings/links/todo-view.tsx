@@ -145,7 +145,7 @@ export function TodoView({ todo, canWrite }: { todo: Todo; canWrite: boolean }) 
                 }, (n) => `Loaded the prepared corrections (${n} links updated).`)
               }
             >
-              Load prepared corrections
+              Load name-only corrections (23 Oct, v4)
             </Button>
           ) : null}
           <Button size="sm" variant="secondary" className={canWrite ? "" : "ml-auto"} disabled={!!busy} onClick={refreshAll}>
@@ -218,7 +218,7 @@ function ListingCard({
       {l.attemptQuestion ? (
         <Block tone="accent" title="Which BB product do these variants resell?">
           <p className="text-ink-3">
-            More than one BB product fits and the prices don&apos;t settle it. Open them on BB (↗) if needed, then pick. Any BB attempt you don&apos;t sell
+            More than one BB product matches by name (subjects, batch type, teachers, attempt), or the titles disagree. Open them on BB (↗), then pick the one that is the same course. Any BB attempt you don&apos;t sell
             will show up under “Add on Zeroinfy”.
           </p>
           {l.attemptQuestion.map((g, gi) => (
@@ -248,7 +248,6 @@ function ListingCard({
                     <span className="text-ink-3">
                       {c.attempts} · BB {rupees(c.price)}
                     </span>
-                    {c.fits ? <span className="text-ok">✓ your price fits</span> : <span className="text-ink-3">(your price doesn&apos;t fit)</span>}
                   </div>
                 ))}
                 <Button
