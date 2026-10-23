@@ -2408,6 +2408,42 @@ export type Database = {
           },
         ]
       }
+      listing_gap_decisions: {
+        Row: {
+          decided_at: string
+          decided_by: string | null
+          decision: string
+          id: string
+          note: string | null
+          product_slug: string
+          shopify_product_id: number
+          variant_id: string
+          vendor_site_id: string
+        }
+        Insert: {
+          decided_at?: string
+          decided_by?: string | null
+          decision?: string
+          id?: string
+          note?: string | null
+          product_slug: string
+          shopify_product_id: number
+          variant_id: string
+          vendor_site_id: string
+        }
+        Update: {
+          decided_at?: string
+          decided_by?: string | null
+          decision?: string
+          id?: string
+          note?: string | null
+          product_slug?: string
+          shopify_product_id?: number
+          variant_id?: string
+          vendor_site_id?: string
+        }
+        Relationships: []
+      }
       shopify_change_log: {
         Row: {
           action: string
@@ -2444,6 +2480,48 @@ export type Database = {
           result?: Json | null
           shopify_product_id?: number
           shopify_product_title?: string | null
+        }
+        Relationships: []
+      }
+      vendor_options: {
+        Row: {
+          first_seen_at: string
+          id: string
+          label: string
+          last_seen_at: string
+          mrp: number | null
+          price: number | null
+          product_slug: string
+          product_title: string | null
+          state: string
+          variant_id: string
+          vendor_site_id: string
+        }
+        Insert: {
+          first_seen_at?: string
+          id?: string
+          label: string
+          last_seen_at?: string
+          mrp?: number | null
+          price?: number | null
+          product_slug: string
+          product_title?: string | null
+          state?: string
+          variant_id: string
+          vendor_site_id: string
+        }
+        Update: {
+          first_seen_at?: string
+          id?: string
+          label?: string
+          last_seen_at?: string
+          mrp?: number | null
+          price?: number | null
+          product_slug?: string
+          product_title?: string | null
+          state?: string
+          variant_id?: string
+          vendor_site_id?: string
         }
         Relationships: []
       }

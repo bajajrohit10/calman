@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/ui";
 import { requireAdminProfile } from "@/lib/auth";
 import { fetchAllRows } from "@/lib/paged";
+import { computeGaps } from "@/lib/price-check/gaps";
 import { createClient } from "@/lib/supabase/server";
 
 import { LinksView, type LinkRow } from "./links-view";
@@ -21,6 +22,7 @@ export default async function Page({
 }) {
   const { profile } = await requireAdminProfile();
   const sp = await searchParams;
+  const missingView = sp.status === "missing";
   const status: Status = (STATUSES as readonly string[]).includes(sp.status ?? "")
     ? (sp.status as Status)
     : "suggested";
@@ -39,7 +41,11 @@ export default async function Page({
     }),
   );
 
-  const result = await fetchAllRows<LinkRow>((from, to) => {
+  const gaps = await computeGaps(supabase);
+
+  const result = missingView
+    ? { rows: [] as LinkRow[], error: null, truncated: false }
+    : await fetchAllRows<LinkRow>((from, to) => {
     let query = supabase
       .from("vendor_variant_links")
       .select(
@@ -63,7 +69,8 @@ export default async function Page({
       <LinksView
         rows={result.rows}
         counts={Object.fromEntries(counts) as Record<Status, number>}
-        status={status}
+        status={missingView ? "missing" : status}
+        gaps={gaps}
         conf={conf}
         q={q}
         canImport={profile.role === "super_admin"}

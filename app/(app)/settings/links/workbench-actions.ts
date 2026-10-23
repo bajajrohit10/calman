@@ -6,6 +6,7 @@ import { isAdmin, requireUser } from "@/lib/auth";
 import { readEdportalProduct, type EdportalVariant } from "@/lib/price-check/edportal";
 import { addOption, createVariants, getProductForEdit, type ShopifyProductForEdit } from "@/lib/price-check/shopify-edit";
 import { grantedScopes } from "@/lib/price-check/shopify";
+import { storeVendorOptions } from "@/lib/price-check/vendor-options";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
 
@@ -96,6 +97,8 @@ export async function loadWorkbench(productId: number): Promise<{ error: string 
       continue;
     }
     const r = await readEdportalProduct(new URL(site.website_url).origin, v.slug);
+    // Keep the "Missing on Zeroinfy" snapshot in step with what the panel shows.
+    if (r.ok) await storeVendorOptions(supabase, v.siteId, v.slug, v.title, r.variants);
     vendors.push({ ...base, variants: r.ok ? r.variants : [], error: r.ok ? null : r.reason });
   }
 
