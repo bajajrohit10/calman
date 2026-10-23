@@ -33,6 +33,13 @@ export function Workbench({ productId, onClose }: { productId: number; onClose: 
   const [ok, setOk] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [adding, setAdding] = useState<{ vp: VendorProduct; v: EdportalVariant } | null>(null);
+  // The list behind the panel is refreshed only on Close: an approved product
+  // drops out of the "AI suggested" list, which would unmount this panel mid-task.
+  const [dirty, setDirty] = useState(false);
+  const close = () => {
+    if (dirty) router.refresh();
+    onClose();
+  };
 
   function reload() {
     start(async () => {
@@ -70,7 +77,7 @@ export function Workbench({ productId, onClose }: { productId: number; onClose: 
       <div className="flex items-center gap-2">
         <span className="text-[12.5px] font-semibold text-ink">Batches &amp; options</span>
         <span className="text-[11.5px] text-ink-3">Live from Shopify and the vendor&apos;s site.</span>
-        <Button size="sm" variant="ghost" className="ml-auto" onClick={onClose}>
+        <Button size="sm" variant="ghost" className="ml-auto" onClick={close}>
           Close
         </Button>
       </div>
@@ -126,8 +133,8 @@ export function Workbench({ productId, onClose }: { productId: number; onClose: 
                           const r = await retargetLink(link.id, o.vp.slug, o.v.id, o.v.title, o.vp.title);
                           if (r.error) setError(r.error);
                           else {
-                            setOk("Link updated and approved.");
-                            router.refresh();
+                            setOk("Link updated and approved. The product stays here until you click Close.");
+                            setDirty(true);
                             reload();
                           }
                         });
@@ -186,7 +193,7 @@ export function Workbench({ productId, onClose }: { productId: number; onClose: 
           onDone={(n) => {
             setAdding(null);
             setOk(`Added ${n} variant${n === 1 ? "" : "s"} on Shopify and linked them.`);
-            router.refresh();
+            setDirty(true);
             reload();
           }}
         />
