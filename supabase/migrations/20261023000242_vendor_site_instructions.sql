@@ -20,12 +20,13 @@ update public.vendor_sites set instructions =
 - Rs 500 off does NOT apply when the product price is Rs 4,000 or below (keep BB price).
 - Mohnish Vora''s own courses: keep BB price (no Rs 500). Combos pairing him with other faculty (e.g. Keswani + Mohnish Vora Audit & FM/SM) DO get Rs 500 off.
 - Group 1 combo follows the Rs 500 rule.
+- Vishal Bhattad courses: do NOT follow the Rs 500 rule (keep BB price).
 - Karan Kumar courses: Rs 1,000 below BB (not Rs 500).
 - Amit Mahajan CA/CMA Inter Taxation (DT + GST) Practice Batch: keep BB price.'
 where lower(name) = 'bb virtuals' and instructions is null;
 
 update public.vendor_sites set instructions =
-'Vendor price = Vsmart total after its automatic coupon.
+'Zeroinfy price = exactly Vsmart''s total after its automatic coupon (no extra discount).
 - Shubham Singhal: compare with shubhamsinghal.com too and follow whichever is lower.'
 where lower(name) = 'vsmart academy' and instructions is null;
 
