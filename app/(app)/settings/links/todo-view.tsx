@@ -7,7 +7,7 @@ import { Button, CARD, ErrorNote, Input, cx } from "@/components/ui";
 import type { MissingGroup, PriceFix, Todo, TodoListing } from "@/lib/price-check/todo";
 
 import { finishRefresh, ignoreGap, refreshVendorOptions, vendorProductsToRefresh } from "./gap-actions";
-import { answerAttempt, confirmListing, fixPrices, ignoreOptions, refreshShopify, shopifyProductsToRefresh, type PriceFixIn } from "./todo-actions";
+import { answerAttempt, confirmListing, dismissChoices, importPlan, fixPrices, ignoreOptions, refreshShopify, shopifyProductsToRefresh, type PriceFixIn } from "./todo-actions";
 import { Workbench } from "./workbench";
 import { removeVariants } from "./workbench-actions";
 
@@ -130,7 +130,25 @@ export function TodoView({ todo, canWrite }: { todo: Todo; canWrite: boolean }) 
           <span className="text-ink-3">
             Zeroinfy prices read {when(todo.shopifyReadAt)} · BB read {when(todo.vendorReadAt)}
           </span>
-          <Button size="sm" variant="secondary" className="ml-auto" disabled={!!busy} onClick={refreshAll}>
+          {canWrite ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="ml-auto"
+              disabled={pending}
+              title="One-off: matching corrections prepared by Claude"
+              onClick={() =>
+                act(async () => {
+                  const r = await fetch("/api/price-check/plan-file", { cache: "no-store" });
+                  if (!r.ok) return { error: "No prepared corrections to load." };
+                  return importPlan(await r.text());
+                }, (n) => `Loaded the prepared corrections (${n} links updated).`)
+              }
+            >
+              Load prepared corrections
+            </Button>
+          ) : null}
+          <Button size="sm" variant="secondary" className={canWrite ? "" : "ml-auto"} disabled={!!busy} onClick={refreshAll}>
             {busy ?? "Refresh everything (~5 min)"}
           </Button>
           {canWrite && shownFixes.length ? (
@@ -230,8 +248,18 @@ function ListingCard({
                     <span className="text-ink-3">
                       {c.attempts} · BB {rupees(c.price)}
                     </span>
+                    {c.fits ? <span className="text-ok">✓ your price fits</span> : <span className="text-ink-3">(your price doesn&apos;t fit)</span>}
                   </div>
                 ))}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="self-start"
+                  disabled={pending}
+                  onClick={() => act(() => dismissChoices(l.pid, g.variantIds), () => "Left unmatched.")}
+                >
+                  None of these
+                </Button>
               </div>
             </div>
           ))}

@@ -102,7 +102,6 @@ export async function answerAttempt(pid: number, siteId: string, slug: string, v
         reviewed_at: now,
       })
       .eq("shopify_variant_id", a.shopify_variant_id)
-      .neq("status", "no_match")
       .select("id");
     count += data?.length ?? 0;
   }
@@ -183,7 +182,18 @@ export async function ignoreOptions(pid: number, siteId: string, slug: string, v
 type Plan = {
   approve: number[];
   /** Re-point these variants to a vendor option and approve (resolved by me offline). */
-  relink?: { vid: number; site: string; slug: string; title: string; bvid: string; blabel: string; note: string }[];
+  relink?: {
+    vid: number;
+    site: string;
+    slug: string;
+    title: string;
+    bvid: string;
+    blabel: string;
+    note: string;
+    /** Default approved; "suggested" puts it under "Confirm BB match". */
+    status?: "approved" | "suggested";
+    reason?: string;
+  }[];
   /** Delete every stored alternative before loading the new ones. */
   replaceAlternatives?: boolean;
   siblings: { pid: number; site: string; slug: string; title: string; attempts: string }[];
@@ -221,9 +231,13 @@ export async function importPlan(json: string): Promise<{ error: string | null; 
     if (!site) continue;
     const { data } = await supabase
       .from("vendor_variant_links")
-      .update({ vendor_site_id: site, vendor_product_slug: r.slug, vendor_product_title: r.title, vendor_variant_id: r.bvid, vendor_variant_label: r.blabel, status: "approved", confidence: "high", reviewed_by: viewer.userId, reviewed_at: now, review_note: r.note })
+      .update(
+        r.status === "suggested"
+          ? { vendor_site_id: site, vendor_product_slug: r.slug, vendor_product_title: r.title, vendor_variant_id: r.bvid, vendor_variant_label: r.blabel, status: "suggested", confidence: "medium", reason: r.reason ?? r.note, review_note: null, reviewed_by: null, reviewed_at: null }
+          : { vendor_site_id: site, vendor_product_slug: r.slug, vendor_product_title: r.title, vendor_variant_id: r.bvid, vendor_variant_label: r.blabel, status: "approved", confidence: "high", reviewed_by: viewer.userId, reviewed_at: now, review_note: r.note },
+      )
       .eq("shopify_variant_id", r.vid)
-      .neq("status", "no_match")
+      .not("status", "in", r.status === "suggested" ? '("approved","rejected")' : '("rejected")')
       .select("id");
     count += data?.length ?? 0;
   }
@@ -257,4 +271,14 @@ export async function importPlan(json: string): Promise<{ error: string | null; 
   }
   revalidatePath(PATH);
   return { error: null, count };
+}
+
+/** "None of these": drop the suggested choices for these variants (they stay unmatched). */
+export async function dismissChoices(pid: number, variantIds: number[]): Promise<{ error: string | null }> {
+  if (!(await gate())) return { error: DENIED };
+  const supabase = await createClient();
+  const { error } = await supabase.from("link_alternatives").delete().eq("shopify_product_id", pid).in("shopify_variant_id", variantIds.length ? variantIds : [-1]);
+  if (error) return { error: error.message };
+  revalidatePath(PATH);
+  return { error: null };
 }
