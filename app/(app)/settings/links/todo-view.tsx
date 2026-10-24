@@ -7,7 +7,7 @@ import { Button, CARD, ErrorNote, Input, cx } from "@/components/ui";
 import type { MissingGroup, PriceFix, Todo, TodoListing } from "@/lib/price-check/todo";
 
 import { finishRefresh, ignoreGap, refreshVendorOptions, vendorProductsToRefresh } from "./gap-actions";
-import { answerAttempt, confirmListing, dismissChoices, importPlan, fixPrices, ignoreOptions, refreshShopify, shopifyProductsToRefresh, type PriceFixIn } from "./todo-actions";
+import { answerAttempt, confirmListing, dismissChoices, importPlan, fixPrices, ignoreOptions, refreshListing, refreshShopify, setKeepPrice, shopifyProductsToRefresh, type PriceFixIn } from "./todo-actions";
 import { Workbench } from "./workbench";
 import { removeVariants } from "./workbench-actions";
 
@@ -33,7 +33,7 @@ const FILTERS: { key: Filter; label: string; count: (t: Todo) => number }[] = [
 function has(l: TodoListing, f: Filter) {
   switch (f) {
     case "attempt":
-      return !!l.attemptQuestion;
+      return !!l.attemptQuestion || l.unlinked.length > 0;
     case "confirm":
       return !!l.confirm;
     case "price":
@@ -210,7 +210,17 @@ function ListingCard({
         ) : (
           <span className="text-[13.5px] font-semibold text-ink">{l.title}</span>
         )}
-        <Button size="sm" variant={bench ? "primary" : "ghost"} className="ml-auto" onClick={() => setBench(bench ? null : "open")}>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="ml-auto"
+          disabled={pending}
+          title="Re-read this listing from Shopify and its BB products from bbvirtuals.com"
+          onClick={() => act(() => refreshListing(l.pid), () => "Refreshed this listing from Shopify and BB.")}
+        >
+          ↻ Refresh
+        </Button>
+        <Button size="sm" variant={bench ? "primary" : "ghost"} onClick={() => setBench(bench ? null : "open")}>
           Batches &amp; options
         </Button>
       </div>
@@ -265,6 +275,19 @@ function ListingCard({
         </Block>
       ) : null}
 
+      {l.unlinked.length ? (
+        <Block tone="accent" title={`Not linked to BB yet (${l.unlinked.length})`}>
+          <p className="text-ink-2">
+            {l.unlinked.slice(0, 6).map((v) => v.title).join(" · ")}
+            {l.unlinked.length > 6 ? " …" : ""}
+          </p>
+          <p className="text-ink-3">Pick the BB option each one resells in Batches &amp; options. If BB doesn&apos;t sell it (e.g. without books), choose “Zeroinfy-only option”. If the BB product isn&apos;t listed, paste its link there.</p>
+          <Button size="sm" variant="secondary" className="self-start" onClick={() => setBench("open")}>
+            Link in Batches &amp; options
+          </Button>
+        </Block>
+      ) : null}
+
       {l.confirm ? (
         <Block tone="warn" title={`Confirm the BB match (${l.confirm.count} variants)`}>
           {l.confirm.products.map((p) => (
@@ -314,6 +337,15 @@ function ListingCard({
                         Fix
                       </Button>
                     ) : null}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={pending}
+                      title="Our price is different on purpose (e.g. includes books). Stop checking this variant against BB."
+                      onClick={() => act(() => setKeepPrice([f.linkId], true, ""), () => "Our price is kept for this variant.")}
+                    >
+                      Keep our price
+                    </Button>
                   </td>
                 </tr>
               ))}

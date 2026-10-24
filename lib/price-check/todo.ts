@@ -28,6 +28,7 @@ type Link = {
   reason: string | null;
   shopify_price: number | null;
   shopify_compare_at: number | null;
+  keep_price: boolean;
 };
 type Opt = { vendor_site_id: string; product_slug: string; product_title: string | null; variant_id: string; label: string; price: number | null; state: string; last_seen_at: string };
 type Sib = { shopify_product_id: number; vendor_site_id: string; product_slug: string; product_title: string | null; attempts: string | null };
@@ -63,6 +64,8 @@ export type TodoListing = {
   priceFixes: PriceFix[];
   missing: MissingGroup[];
   pastAttempts: { id: number; title: string }[];
+  /** Variants on Shopify not linked to any BB option yet (e.g. added on Shopify directly). */
+  unlinked: { id: number; title: string }[];
   dropped: { label: string; variants: number }[];
 };
 
@@ -88,7 +91,7 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
     rows<Link>(
       supabase,
       "vendor_variant_links",
-      "id, shopify_product_id, shopify_variant_id, shopify_product_title, shopify_product_handle, shopify_variant_title, vendor_site_id, vendor_product_slug, vendor_product_title, vendor_variant_id, vendor_variant_label, status, reason, shopify_price, shopify_compare_at",
+      "id, shopify_product_id, shopify_variant_id, shopify_product_title, shopify_product_handle, shopify_variant_title, vendor_site_id, vendor_product_slug, vendor_product_title, vendor_variant_id, vendor_variant_label, status, reason, shopify_price, shopify_compare_at, keep_price",
       (q) => q.in("status", ["approved", "suggested", "no_match"]),
     ),
     rows<Opt>(supabase, "vendor_options", "vendor_site_id, product_slug, product_title, variant_id, label, price, state, last_seen_at"),
@@ -131,7 +134,7 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
   for (const [pid, ls] of linksBy) {
     const live = ls.filter((l) => l.status !== "no_match");
     const first = ls[0];
-    const item: TodoListing = { pid, title: first.shopify_product_title, handle: first.shopify_product_handle, attemptQuestion: null, confirm: null, priceFixes: [], missing: [], pastAttempts: [], dropped: [] };
+    const item: TodoListing = { pid, title: first.shopify_product_title, handle: first.shopify_product_handle, attemptQuestion: null, confirm: null, priceFixes: [], missing: [], pastAttempts: [], unlinked: [], dropped: [] };
 
     // 1. Attempt question (unclear attempt, several vendor products fit).
     const alts = altsBy.get(pid);
@@ -168,7 +171,7 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
     // 2. Price fixes (linked option still for sale, Zeroinfy price off the rule).
     if (!item.attemptQuestion) {
       for (const l of live) {
-        if (l.shopify_price == null || !l.vendor_variant_id) continue;
+        if (l.shopify_price == null || !l.vendor_variant_id || l.keep_price) continue;
         const o = opt.get(`${l.vendor_site_id}|${l.vendor_product_slug}|${l.vendor_variant_id}`);
         if (!o || o.state !== "live" || o.price == null || Number(o.price) <= 0) continue;
         const e = expectedZeroinfyPrice(Number(o.price), l.shopify_product_title);
@@ -210,7 +213,7 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
     if (!item.attemptQuestion) {
       const linkedVar = new Set(live.filter((l) => l.vendor_variant_id).map((l) => `${l.vendor_site_id}|${l.vendor_product_slug}|${l.vendor_variant_id}`));
       const linkedProd = new Set(live.filter((l) => l.vendor_product_slug).map((l) => `${l.vendor_site_id}|${l.vendor_product_slug}`));
-      const sibs = (sibsBy.get(pid) ?? []).filter((s) => !linkedProd.has(`${s.vendor_site_id}|${s.product_slug}`));
+      const sibs = (sibsBy.get(pid) ?? []).filter((s) => s.attempts !== "added by hand" && !linkedProd.has(`${s.vendor_site_id}|${s.product_slug}`));
       const prods: { pk: string; kind: "batch" | "attempt"; attempts: string | null; title: string | null }[] = [
         ...[...linkedProd].map((pk) => ({ pk, kind: "batch" as const, attempts: null, title: live.find((l) => `${l.vendor_site_id}|${l.vendor_product_slug}` === pk)?.vendor_product_title ?? null })),
         ...sibs.map((s) => ({ pk: `${s.vendor_site_id}|${s.product_slug}`, kind: "attempt" as const, attempts: s.attempts, title: s.product_title })),
@@ -252,13 +255,17 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
       .filter((l) => l.status === "no_match" && /has passed/.test(l.reason ?? ""))
       .map((l) => ({ id: Number(l.shopify_variant_id), title: l.shopify_variant_title ?? "Default" }));
 
-    if (item.attemptQuestion) counts.attempt++;
+    item.unlinked = ls
+      .filter((l) => l.status === "no_match" && /^New on Shopify/.test(l.reason ?? "") && !altsBy.get(pid)?.some((a) => Number(a.shopify_variant_id) === Number(l.shopify_variant_id)))
+      .map((l) => ({ id: Number(l.shopify_variant_id), title: l.shopify_variant_title ?? "Default" }));
+
+    if (item.attemptQuestion || item.unlinked.length) counts.attempt++;
     if (item.confirm) counts.confirm++;
     counts.price += item.priceFixes.length;
     counts.missing += item.missing.reduce((n, g) => n + g.options.length, 0);
     counts.past += item.pastAttempts.length;
     counts.dropped += item.dropped.length;
-    if (item.attemptQuestion || item.confirm || item.priceFixes.length || item.missing.length || item.pastAttempts.length || item.dropped.length) out.push(item);
+    if (item.attemptQuestion || item.unlinked.length || item.confirm || item.priceFixes.length || item.missing.length || item.pastAttempts.length || item.dropped.length) out.push(item);
   }
   out.sort((a, b) => a.title.localeCompare(b.title));
   return { error: null, listings: out, vendorReadAt, shopifyReadAt, counts };

@@ -22,7 +22,7 @@ export type EdportalVariant = {
 };
 
 export type EdportalProduct =
-  | { ok: true; slug: string; variants: EdportalVariant[] }
+  | { ok: true; slug: string; variants: EdportalVariant[]; title: string | null }
   | { ok: false; slug: string; reason: string };
 
 const UA =
@@ -83,7 +83,10 @@ export async function readEdportalProduct(origin: string, slug: string): Promise
   }
   if (!res.ok) return { ok: false, slug, reason: `HTTP ${res.status}` };
 
-  const payload = rscPayload(await res.text());
+  const html = await res.text();
+  const tm = html.match(/<meta[^>]+property="og:title"[^>]+content="([^"]*)"/) ?? html.match(/<title>([^<]*)<\/title>/);
+  const title = tm ? tm[1].replace(/&amp;/g, "&").replace(/&#x27;|&#39;/g, "'").replace(/&quot;/g, '"').trim() || null : null;
+  const payload = rscPayload(html);
   const k = payload.indexOf('"variants":[');
   if (k < 0) return { ok: false, slug, reason: "No variant data on the page (product removed or page changed)." };
   const arr = sliceBalanced(payload, k + '"variants":'.length);
@@ -106,5 +109,5 @@ export async function readEdportalProduct(origin: string, slug: string): Promise
       mrp: typeof v.mrp_price === "number" ? v.mrp_price : null,
       status: v.status ?? null,
     }));
-  return { ok: true, slug, variants };
+  return { ok: true, slug, variants, title };
 }

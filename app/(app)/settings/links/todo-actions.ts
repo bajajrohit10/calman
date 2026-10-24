@@ -4,6 +4,9 @@ import { revalidatePath } from "next/cache";
 
 import { isAdmin, requireUser } from "@/lib/auth";
 import { getProductForEdit, updatePrices } from "@/lib/price-check/shopify-edit";
+import { syncLinksWithShopify } from "@/lib/price-check/sync-links";
+import { readEdportalProduct } from "@/lib/price-check/edportal";
+import { storeVendorOptions } from "@/lib/price-check/vendor-options";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
 
@@ -40,7 +43,6 @@ export async function refreshShopify(pids: number[]): Promise<{ error: string | 
   if (pids.length > 10) return { error: "At most 10 per call." };
   const supabase = await createClient();
   const failed: string[] = [];
-  const now = new Date().toISOString();
   // Listings in parallel, and each listing's link updates in parallel: one round trip per step.
   await Promise.all(
     pids.map(async (pid) => {
@@ -53,21 +55,59 @@ export async function refreshShopify(pids: number[]): Promise<{ error: string | 
         failed.push(`${pid}: ${msg}`);
         return;
       }
-      const { data: links } = await supabase.from("vendor_variant_links").select("id, shopify_variant_id").eq("shopify_product_id", pid);
-      const byId = new Map(p.variants.map((v) => [v.id, v]));
-      await Promise.all(
-        (links ?? []).map((l) => {
-          const v = byId.get(Number(l.shopify_variant_id));
-          if (!v) return supabase.from("vendor_variant_links").delete().eq("id", l.id);
-          return supabase
-            .from("vendor_variant_links")
-            .update({ shopify_price: v.price, shopify_compare_at: v.compareAtPrice, shopify_variant_title: v.title, shopify_product_title: p.title, shopify_seen_at: now })
-            .eq("id", l.id);
-        }),
-      );
+      await syncLinksWithShopify(supabase, p);
     }),
   );
   return { error: null, failed };
+}
+
+/** Refresh one listing: re-read it from Shopify and re-read every BB product it links to. */
+export async function refreshListing(pid: number): Promise<{ error: string | null; count?: number }> {
+  const r = await refreshShopify([pid]);
+  if (r.error) return r;
+  const supabase = await createClient();
+  const [{ data: links }, { data: sibs }, { data: sites }] = await Promise.all([
+    supabase.from("vendor_variant_links").select("vendor_site_id, vendor_product_slug, vendor_product_title").eq("shopify_product_id", pid).not("vendor_product_slug", "is", null),
+    supabase.from("listing_vendor_products").select("vendor_site_id, product_slug, product_title").eq("shopify_product_id", pid),
+    supabase.from("vendor_sites").select("id, website_url, read_method"),
+  ]);
+  const url = new Map((sites ?? []).filter((s) => s.read_method === "edportal_feed").map((s) => [s.id, s.website_url]));
+  const seen = new Map<string, { siteId: string; slug: string; title: string | null }>();
+  for (const l of links ?? []) seen.set(`${l.vendor_site_id}|${l.vendor_product_slug}`, { siteId: l.vendor_site_id, slug: l.vendor_product_slug!, title: l.vendor_product_title });
+  for (const x of sibs ?? []) seen.set(`${x.vendor_site_id}|${x.product_slug}`, { siteId: x.vendor_site_id, slug: x.product_slug, title: x.product_title });
+  const failed = [...(r.failed ?? [])];
+  let count = 0;
+  await Promise.all(
+    [...seen.values()].map(async (it) => {
+      const base = url.get(it.siteId);
+      if (!base) return;
+      const v = await readEdportalProduct(new URL(base).origin, it.slug);
+      if (!v.ok) {
+        if (/HTTP 404|No variant data/.test(v.reason)) await storeVendorOptions(supabase, it.siteId, it.slug, it.title, []);
+        failed.push(`${it.title ?? it.slug}: ${v.reason}`);
+        return;
+      }
+      await storeVendorOptions(supabase, it.siteId, it.slug, it.title, v.variants);
+      count++;
+    }),
+  );
+  revalidatePath(PATH);
+  return failed.length ? { error: `Refreshed, but couldn't read: ${failed.join(" · ")}`, count } : { error: null, count };
+}
+
+/** "Keep our price": leave this variant out of "Price to fix" (or put it back). */
+export async function setKeepPrice(linkIds: string[], keep: boolean, note: string): Promise<{ error: string | null; count?: number }> {
+  const viewer = await gate();
+  if (!viewer) return { error: DENIED };
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("vendor_variant_links")
+    .update(keep ? { keep_price: true, review_note: note.trim() ? `Keep our price: ${note.trim()}` : "Keep our price (set by hand)." } : { keep_price: false })
+    .in("id", linkIds.length ? linkIds : ["00000000-0000-0000-0000-000000000000"])
+    .select("id");
+  if (error) return { error: error.message };
+  revalidatePath(PATH);
+  return { error: null, count: data?.length ?? 0 };
 }
 
 /** "It's May 27": re-link every variant of the listing to that vendor product, approved. */

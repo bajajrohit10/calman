@@ -8,7 +8,9 @@ import type { EdportalVariant } from "@/lib/price-check/edportal";
 
 import {
   addToShopify,
+  addVendorProductByUrl,
   editVariant,
+  markOwnOption,
   loadWorkbench,
   removeVariants,
   renameValue,
@@ -16,6 +18,8 @@ import {
   type VendorProduct,
   type Workbench as WB,
 } from "./workbench-actions";
+import { ignoreGap } from "./gap-actions";
+import { setKeepPrice } from "./todo-actions";
 
 /**
  * "Batches & options" panel on a Links product card: re-point a variant at
@@ -56,6 +60,7 @@ export function Workbench({
   const [dirty, setDirty] = useState(false);
   const [editing, setEditing] = useState<number | null>(null);
   const [removing, setRemoving] = useState<number | null>(null);
+  const [paste, setPaste] = useState("");
   const close = () => {
     if (dirty) router.refresh();
     onClose();
@@ -87,6 +92,21 @@ export function Workbench({
     [data],
   );
 
+  /** Run a change, then re-read the panel. */
+  function run(fn: () => Promise<{ error: string | null }>, msg: string) {
+    setOk(null);
+    start(async () => {
+      const r = await fn();
+      if (r.error) setError(r.error);
+      else {
+        setError(null);
+        setOk(msg);
+        setDirty(true);
+        reload();
+      }
+    });
+  }
+
   if (!data) {
     return (
       <div className="rounded-md border border-line bg-surface-2 p-3 text-[12px] text-ink-3">
@@ -102,7 +122,21 @@ export function Workbench({
       <div className="flex items-center gap-2">
         <span className="text-[12.5px] font-semibold text-ink">Batches &amp; options</span>
         <span className="text-[11.5px] text-ink-3">Live from Shopify and the vendor&apos;s site.</span>
-        <Button size="sm" variant="ghost" className="ml-auto" onClick={close}>
+        <Button
+          size="sm"
+          variant="secondary"
+          className="ml-auto"
+          disabled={pending}
+          title="Re-read this listing from Shopify and its BB products from bbvirtuals.com"
+          onClick={() => {
+            setOk("Refreshed from Shopify and BB.");
+            setDirty(true);
+            reload();
+          }}
+        >
+          {pending ? "Reading…" : "↻ Refresh"}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={close}>
           Close
         </Button>
       </div>
@@ -137,6 +171,32 @@ export function Workbench({
         />
       ) : null}
 
+      <form
+        className="flex flex-wrap items-center gap-2 text-[12px]"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!paste.trim()) return;
+          setOk(null);
+          start(async () => {
+            const r = await addVendorProductByUrl(data.product.id, paste);
+            if (r.error) setError(r.error);
+            else {
+              setError(null);
+              setPaste("");
+              setOk(`Added “${r.title}”. Its options are now in each variant's list below — pick the right one per variant.`);
+              setDirty(true);
+              reload();
+            }
+          });
+        }}
+      >
+        <span className="text-ink-2">Right BB product not in the list?</span>
+        <Input className="h-[26px] w-[420px] max-w-full" value={paste} placeholder="Paste the BB product link (https://www.bbvirtuals.com/product/…)" onChange={(e) => setPaste(e.target.value)} />
+        <Button size="sm" variant="secondary" type="submit" disabled={pending || !paste.trim()}>
+          Use this product
+        </Button>
+      </form>
+
       <table className="w-full text-[12px]">
         <thead>
           <tr className={TABLE_HEAD_ROW}>
@@ -149,7 +209,8 @@ export function Workbench({
         <tbody>
           {data.product.variants.map((v) => {
             const link = linkByVariant.get(v.id);
-            const current = link ? `${link.vendor_product_slug}|${link.vendor_variant_id}` : "";
+            const own = !!link && link.status === "approved" && !link.vendor_variant_id && !!link.vendor_product_slug;
+            const current = own ? "__own" : link ? `${link.vendor_product_slug}|${link.vendor_variant_id}` : "";
             return (
               <tr key={v.id} className="border-b border-line last:border-0">
                 <td className={cx(CELL, "max-w-[300px]")}>{v.title}</td>
@@ -161,9 +222,14 @@ export function Workbench({
                   {link ? (
                     <Select
                       className="h-[26px] w-full max-w-[560px]"
-                      value={allOptions.some((o) => o.key === current) ? current : ""}
+                      value={own || allOptions.some((o) => o.key === current) ? current : ""}
                       disabled={pending || !allOptions.length}
                       onChange={(e) => {
+                        if (e.target.value === "__own") {
+                          const vp = data.vendors.find((x) => x.slug === link.vendor_product_slug) ?? data.vendors.find((x) => !x.sibling) ?? data.vendors[0];
+                          if (!vp) return setError("Link a BB product first, so Calman knows which course this option belongs to.");
+                          return run(() => markOwnOption(link.id, vp.slug, vp.title), "Kept as a Zeroinfy-only option. Its price won't be checked against BB.");
+                        }
                         const o = allOptions.find((x) => x.key === e.target.value);
                         if (!o) return;
                         setOk(null);
@@ -178,17 +244,34 @@ export function Workbench({
                         });
                       }}
                     >
-                      {allOptions.some((o) => o.key === current) ? null : <option value="">{link.vendor_variant_label ?? (link.status === "no_match" ? "— not linked: pick the BB option" : "— (not on vendor site any more)")}</option>}
+                      {own || allOptions.some((o) => o.key === current) ? null : <option value="">{link.vendor_variant_label ?? (link.status === "no_match" ? "— not linked: pick the BB option" : "— (not on vendor site any more)")}</option>}
                       {allOptions.map((o) => (
                         <option key={o.key} value={o.key}>
                           {data.vendors.length > 1 ? `${o.vp.title ?? o.vp.slug}: ` : ""}
                           {o.label}
                         </option>
                       ))}
+                      <option value="__own">★ Zeroinfy-only option (BB doesn&apos;t sell it — e.g. without books) — keep, don&apos;t check price</option>
                     </Select>
                   ) : (
                     <span className="text-ink-3">Not linked yet</span>
                   )}
+                  {link && link.vendor_variant_id && link.status !== "no_match" ? (
+                    <label className="mt-0.5 flex items-center gap-1 text-[11px] text-ink-3" title="For a variant priced differently on purpose, e.g. Google Drive + hard copy linked to BB's Drive-only option">
+                      <input
+                        type="checkbox"
+                        checked={link.keep_price}
+                        disabled={pending}
+                        onChange={(e) =>
+                          run(
+                            () => setKeepPrice([link.id], e.target.checked, ""),
+                            e.target.checked ? "Our price is kept for this variant — it won't show under Price to fix." : "Price is checked against BB again.",
+                          )
+                        }
+                      />
+                      Keep our price (priced differently on purpose — don&apos;t check against BB)
+                    </label>
+                  ) : null}
                   {link && link.status !== "approved" ? <span className="ml-1 text-[11px] text-ink-3">({link.status === "no_match" ? "not linked" : link.status})</span> : null}
                   {link?.status === "no_match" && link.reason ? <div className="text-[11px] text-ink-3">{link.reason}</div> : null}
                   {editing === v.id ? (
@@ -252,13 +335,14 @@ export function Workbench({
       </table>
 
       {data.vendors.map((vp) => {
-        const gaps = vp.variants.filter((v) => !linkedIds.has(`${vp.slug}|${v.id}`));
+        const ignored = new Set(data.ignored);
+        const gaps = vp.variants.filter((v) => !linkedIds.has(`${vp.slug}|${v.id}`) && !ignored.has(`${vp.slug}|${v.id}`) && Number(v.price ?? 0) > 0);
         if (!gaps.length) return null;
         return (
           <div key={vp.slug} className="flex flex-col gap-1">
             <div className="text-[12px] font-semibold text-warn">
               {vp.siteName} sells {gaps.length === 1 ? "an option" : `${gaps.length} options`} you don&apos;t — {vp.title ?? vp.slug}
-              {vp.sibling ? ` (another attempt: ${vp.attempts ?? "?"})` : ""}
+              {vp.sibling ? (vp.attempts === "added by hand" ? " (added from a pasted link)" : ` (another attempt: ${vp.attempts ?? "?"})`) : ""}
             </div>
             {gaps.map((g) => (
               <div key={g.id} className="flex flex-wrap items-center gap-2 text-[12px]">
@@ -271,6 +355,9 @@ export function Workbench({
                 ) : (
                   <span className="text-[11px] text-ink-3">(a super admin can add it)</span>
                 )}
+                <Button size="sm" variant="ghost" disabled={pending} onClick={() => run(() => ignoreGap(data.product.id, vp.siteId, vp.slug, g.id, ""), `Hidden: Zeroinfy won't sell “${g.title}” on this listing.`)}>
+                  We don&apos;t sell this
+                </Button>
               </div>
             ))}
           </div>

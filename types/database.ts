@@ -2599,6 +2599,7 @@ export type Database = {
           shopify_compare_at: number | null
           shopify_price: number | null
           shopify_seen_at: string | null
+          keep_price: boolean
           confidence: string
           created_at: string
           id: string
@@ -2625,6 +2626,7 @@ export type Database = {
           shopify_compare_at?: number | null
           shopify_price?: number | null
           shopify_seen_at?: string | null
+          keep_price?: boolean
           confidence?: string
           created_at?: string
           id?: string
@@ -2651,6 +2653,7 @@ export type Database = {
           shopify_compare_at?: number | null
           shopify_price?: number | null
           shopify_seen_at?: string | null
+          keep_price?: boolean
           confidence?: string
           created_at?: string
           id?: string

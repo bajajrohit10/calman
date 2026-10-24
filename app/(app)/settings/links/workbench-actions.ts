@@ -15,6 +15,7 @@ import {
 } from "@/lib/price-check/shopify-edit";
 import { grantedScopes } from "@/lib/price-check/shopify";
 import { storeVendorOptions } from "@/lib/price-check/vendor-options";
+import { syncLinksWithShopify } from "@/lib/price-check/sync-links";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
 
@@ -41,6 +42,7 @@ export type WorkbenchLink = {
   status: string;
   vendor_site_id: string;
   reason: string | null;
+  keep_price: boolean;
 };
 
 export type VendorProduct = {
@@ -63,20 +65,17 @@ export type Workbench = {
   instructions: { site: string; text: string }[];
   canWrite: boolean;
   scopes: string[] | null;
+  /** "We don't sell this" decisions for this listing: `${slug}|${variantId}`. */
+  ignored: string[];
 };
 
 const PATH = "/settings/links";
+const OWN_OPTION = "Zeroinfy-only option (not sold on BB)";
 
 export async function loadWorkbench(productId: number): Promise<{ error: string | null; data?: Workbench }> {
   const viewer = await requireUser();
   if (!viewer.profile || !isAdmin(viewer.profile.role)) return { error: "Only a manager or super admin can do this." };
   const supabase = await createClient();
-
-  const { data: links, error } = await supabase
-    .from("vendor_variant_links")
-    .select("id, shopify_variant_id, shopify_variant_title, vendor_product_slug, vendor_variant_id, vendor_variant_label, status, vendor_site_id, vendor_product_title, reason")
-    .eq("shopify_product_id", productId);
-  if (error) return { error: error.message };
 
   let product: ShopifyProductForEdit;
   try {
@@ -84,6 +83,14 @@ export async function loadWorkbench(productId: number): Promise<{ error: string 
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
   }
+  // Opening the panel is also a refresh of this listing from Shopify (new / deleted variants, prices).
+  await syncLinksWithShopify(supabase, product);
+
+  const { data: links, error } = await supabase
+    .from("vendor_variant_links")
+    .select("id, shopify_variant_id, shopify_variant_title, vendor_product_slug, vendor_variant_id, vendor_variant_label, status, vendor_site_id, vendor_product_title, reason, keep_price")
+    .eq("shopify_product_id", productId);
+  if (error) return { error: error.message };
 
   const { data: sibs } = await supabase
     .from("listing_vendor_products")
@@ -122,9 +129,11 @@ export async function loadWorkbench(productId: number): Promise<{ error: string 
     vendors.push({ ...base, variants: r.ok ? r.variants : [], error: r.ok ? null : r.reason });
   }
 
+  const { data: dec } = await supabase.from("listing_gap_decisions").select("product_slug, variant_id").eq("shopify_product_id", productId);
   return {
     error: null,
     data: {
+      ignored: (dec ?? []).map((d) => `${d.product_slug}|${d.variant_id}`),
       product,
       links: (links ?? []).map(({ vendor_product_title: _t, ...l }) => l),
       vendors,
@@ -315,6 +324,70 @@ export async function addToShopify(plan: AddPlan): Promise<{ error: string | nul
 }
 
 /* ------------------------------------------------- edit / remove variants -- */
+
+/** "Zeroinfy-only option": BB doesn't sell it (e.g. without books); keep it, no price check. */
+export async function markOwnOption(linkId: string, slug: string, productTitle: string | null): Promise<{ error: string | null }> {
+  const viewer = await requireUser();
+  if (!viewer.profile || !isAdmin(viewer.profile.role)) return { error: "Only a manager or super admin can do this." };
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("vendor_variant_links")
+    .update({
+      vendor_product_slug: slug,
+      vendor_product_title: productTitle,
+      vendor_variant_id: null,
+      vendor_variant_label: OWN_OPTION,
+      status: "approved",
+      confidence: "high",
+      keep_price: true,
+      reviewed_by: viewer.userId,
+      reviewed_at: new Date().toISOString(),
+      review_note: "Zeroinfy-only option, kept by hand: not sold on BB, price not checked.",
+    })
+    .eq("id", linkId)
+    .select("id");
+  if (error) return { error: error.message };
+  if (!data?.length) return { error: "That link was not found." };
+  revalidatePath(PATH);
+  return { error: null };
+}
+
+/** Paste a BB product link: add that product to this listing's choices in Batches & options. */
+export async function addVendorProductByUrl(productId: number, link: string): Promise<{ error: string | null; title?: string }> {
+  const viewer = await requireUser();
+  if (!viewer.profile || !isAdmin(viewer.profile.role)) return { error: "Only a manager or super admin can do this." };
+  let u: URL;
+  try {
+    u = new URL(link.trim());
+  } catch {
+    return { error: "That isn't a link. Copy the product page address from bbvirtuals.com." };
+  }
+  const m = u.pathname.match(/\/product\/([^/?#]+)/);
+  if (!m) return { error: "That isn't a product page (the address should contain /product/…)." };
+  const slug = decodeURIComponent(m[1]);
+  const host = u.hostname.replace(/^www\./, "");
+  const supabase = await createClient();
+  const { data: sites } = await supabase.from("vendor_sites").select("id, name, website_url, read_method");
+  const site = (sites ?? []).find((s) => {
+    try {
+      return new URL(s.website_url).hostname.replace(/^www\./, "") === host;
+    } catch {
+      return false;
+    }
+  });
+  if (!site) return { error: `${host} isn't one of the vendor sites in Settings → Vendors.` };
+  if (site.read_method !== "edportal_feed") return { error: `Options can't be read from ${site.name} yet.` };
+  const r = await readEdportalProduct(new URL(site.website_url).origin, slug);
+  if (!r.ok) return { error: `Couldn't read that page: ${r.reason}` };
+  const title = r.title?.replace(/\s*[|–-]\s*BB Virtuals.*$/i, "") ?? slug;
+  await storeVendorOptions(supabase, site.id, slug, title, r.variants);
+  const { error } = await supabase
+    .from("listing_vendor_products")
+    .upsert({ shopify_product_id: productId, vendor_site_id: site.id, product_slug: slug, product_title: title, attempts: "added by hand" }, { onConflict: "shopify_product_id,vendor_site_id,product_slug" });
+  if (error) return { error: error.message };
+  revalidatePath(PATH);
+  return { error: null, title };
+}
 
 async function superAdmin() {
   const viewer = await requireUser();
