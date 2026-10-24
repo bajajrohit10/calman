@@ -22,13 +22,13 @@ const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString("en-IN"
 type Filter = "all" | "attempt" | "batch" | "confirm" | "price" | "missing" | "past" | "dropped";
 const FILTERS: { key: Filter; label: string; count: (t: Todo) => number }[] = [
   { key: "all", label: "Everything", count: (t) => t.listings.length },
-  { key: "attempt", label: "Which BB product?", count: (t) => t.counts.attempt },
-  { key: "batch", label: "Batch names differ", count: (t) => t.counts.batch },
-  { key: "confirm", label: "Confirm BB match", count: (t) => t.counts.confirm },
-  { key: "price", label: "Price to fix", count: (t) => t.counts.price },
-  { key: "missing", label: "Add on Zeroinfy", count: (t) => t.counts.missing },
-  { key: "past", label: "Past attempts listed", count: (t) => t.counts.past },
-  { key: "dropped", label: "BB dropped", count: (t) => t.counts.dropped },
+  { key: "attempt", label: "1. Which BB product?", count: (t) => t.counts.attempt },
+  { key: "batch", label: "2. Batch names differ", count: (t) => t.counts.batch },
+  { key: "dropped", label: "3. BB dropped", count: (t) => t.counts.dropped },
+  { key: "confirm", label: "4. Confirm BB match", count: (t) => t.counts.confirm },
+  { key: "past", label: "5. Past attempts listed", count: (t) => t.counts.past },
+  { key: "missing", label: "6. Add on Zeroinfy", count: (t) => t.counts.missing },
+  { key: "price", label: "7. Price to fix", count: (t) => t.counts.price },
 ];
 
 function has(l: TodoListing, f: Filter) {
@@ -182,7 +182,7 @@ export function TodoView({ todo, canWrite }: { todo: Todo; canWrite: boolean }) 
         </div>
       </div>
 
-      <p className="text-[12px] text-ink-3">{shown.length} listings. Prices follow the BB rules in Settings → Vendors; the compare-at price is set to BB&apos;s price.</p>
+      <p className="text-[12px] text-ink-3">Work through the filters in number order: settle the BB link and batch first, add or remove variants, fix prices last. {shown.length} listings. Prices follow the BB rules in Settings → Vendors; the compare-at price is set to BB&apos;s price.</p>
 
       {shown.map((l) => (
         <ListingCard key={l.pid} l={l} canWrite={canWrite} pending={pending} act={act} />
@@ -363,6 +363,22 @@ function ListingCard({
         </Block>
       ) : null}
 
+      {l.missing.map((g) => (
+        <MissingBlock key={g.slug} l={l} g={g} canWrite={canWrite} pending={pending} act={act} onAdd={(variantId) => setBench({ slug: g.slug, variantId })} />
+      ))}
+
+      {l.pastAttempts.length ? <PastBlock l={l} canWrite={canWrite} pending={pending} act={act} openBench={() => setBench("open")} /> : null}
+
+      {l.dropped.length ? (
+        <Block tone="danger" title="BB no longer lists the option these variants are linked to">
+          {l.dropped.map((d) => (
+            <p key={d.label} className="text-ink-2">
+              {d.label} · {d.variants} variant{d.variants === 1 ? "" : "s"} — re-point them in Batches &amp; options
+            </p>
+          ))}
+        </Block>
+      ) : null}
+
       {l.priceFixes.length ? (
         <Block tone="danger" title="Price to fix">
           <table className="w-full">
@@ -413,22 +429,6 @@ function ListingCard({
               Wrong BB option? Change it
             </Button>
           </div>
-        </Block>
-      ) : null}
-
-      {l.missing.map((g) => (
-        <MissingBlock key={g.slug} l={l} g={g} canWrite={canWrite} pending={pending} act={act} onAdd={(variantId) => setBench({ slug: g.slug, variantId })} />
-      ))}
-
-      {l.pastAttempts.length ? <PastBlock l={l} canWrite={canWrite} pending={pending} act={act} openBench={() => setBench("open")} /> : null}
-
-      {l.dropped.length ? (
-        <Block tone="danger" title="BB no longer lists the option these variants are linked to">
-          {l.dropped.map((d) => (
-            <p key={d.label} className="text-ink-2">
-              {d.label} · {d.variants} variant{d.variants === 1 ? "" : "s"} — re-point them in Batches &amp; options
-            </p>
-          ))}
         </Block>
       ) : null}
 
