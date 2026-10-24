@@ -196,7 +196,7 @@ export const LISTS: ListSpec[] = [
     table: "holidays",
     pk: "date",
     blurb:
-      "Non-working days. Sundays are skipped automatically; Saturday is a working day. A follow-up date landing on one of these moves to the next working day.",
+      "Non-working days. Sundays are skipped automatically; Saturday is a working day. A follow-up date landing on one of these moves to the next working day. A date added here is a holiday — to open a Sunday, use Settings → Holidays, which can set either kind.",
     fields: [
       { name: "date", label: "Date", kind: "date", required: true, width: "w-40" },
       NAME,

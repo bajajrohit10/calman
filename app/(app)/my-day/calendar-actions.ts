@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { isAdmin, requireUser } from "@/lib/auth";
+import { kindToOverride } from "@/lib/calendar-kinds";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -34,8 +35,21 @@ export async function answerCalendarNudge(input: {
   const supabase = await createClient();
 
   if (input.working) {
+    // §88. Keep whatever the row already said. This upserted name: null, so
+    // answering "yes, we worked Diwali" turned the Diwali row into an unnamed
+    // working day and the holiday's name was gone from the calendar for good.
+    const { data: existing } = await supabase
+      .from("holidays")
+      .select("name")
+      .eq("date", input.date)
+      .maybeSingle();
     const { error } = await supabase.from("holidays").upsert(
-      { date: input.date, name: null, is_working_override: true, is_active: true },
+      {
+        date: input.date,
+        name: existing?.name ?? null,
+        is_working_override: kindToOverride("working_day"),
+        is_active: true,
+      },
       { onConflict: "date" },
     );
     if (error) return { error: error.message };

@@ -27,7 +27,7 @@ export default async function Page() {
     <div className="flex flex-col gap-5">
       <PageHeader
         title="Holidays"
-        description="Working days are Monday to Saturday. A holiday closes one; a working Sunday opens one."
+        description="Working days are Monday to Saturday. A holiday row closes a date; a working-day row opens one, which is how a Sunday the team is working gets into the calendar."
       />
       <HolidaysView
         rows={(data ?? []) as HolidayRow[]}
