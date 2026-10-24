@@ -256,7 +256,7 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
       .map((l) => ({ id: Number(l.shopify_variant_id), title: l.shopify_variant_title ?? "Default" }));
 
     item.unlinked = ls
-      .filter((l) => l.status === "no_match" && /^New on Shopify/.test(l.reason ?? "") && !altsBy.get(pid)?.some((a) => Number(a.shopify_variant_id) === Number(l.shopify_variant_id)))
+      .filter((l) => l.status === "no_match" && /^(New on Shopify|BB product chosen by hand)/.test(l.reason ?? "") && !altsBy.get(pid)?.some((a) => Number(a.shopify_variant_id) === Number(l.shopify_variant_id)))
       .map((l) => ({ id: Number(l.shopify_variant_id), title: l.shopify_variant_title ?? "Default" }));
 
     if (item.attemptQuestion || item.unlinked.length) counts.attempt++;

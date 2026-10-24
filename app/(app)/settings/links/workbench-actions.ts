@@ -389,6 +389,43 @@ export async function addVendorProductByUrl(productId: number, link: string): Pr
   return { error: null, title };
 }
 
+/**
+ * "Which BB product?" answered with a pasted link: point these variants at that
+ * product and leave each one to be matched to its BB option in Batches & options.
+ */
+export async function linkPastedProduct(productId: number, link: string, variantIds: number[]): Promise<{ error: string | null; title?: string; count?: number }> {
+  const added = await addVendorProductByUrl(productId, link);
+  if (added.error) return added;
+  const supabase = await createClient();
+  const m = link.match(/\/product\/([^/?#]+)/)!;
+  const slug = decodeURIComponent(m[1]);
+  const { data: lvp } = await supabase.from("listing_vendor_products").select("vendor_site_id").eq("shopify_product_id", productId).eq("product_slug", slug).limit(1);
+  const siteId = lvp?.[0]?.vendor_site_id;
+  if (!siteId) return { error: "Couldn't store that product." };
+  const { data, error } = await supabase
+    .from("vendor_variant_links")
+    .update({
+      vendor_site_id: siteId,
+      vendor_product_slug: slug,
+      vendor_product_title: added.title ?? slug,
+      vendor_variant_id: null,
+      vendor_variant_label: null,
+      status: "no_match",
+      confidence: "low",
+      reason: "BB product chosen by hand — pick the BB option for this variant.",
+      review_note: null,
+      reviewed_by: null,
+      reviewed_at: null,
+    })
+    .eq("shopify_product_id", productId)
+    .in("shopify_variant_id", variantIds.length ? variantIds : [-1])
+    .select("id");
+  if (error) return { error: error.message };
+  await supabase.from("link_alternatives").delete().eq("shopify_product_id", productId).in("shopify_variant_id", variantIds.length ? variantIds : [-1]);
+  revalidatePath(PATH);
+  return { error: null, title: added.title, count: data?.length ?? 0 };
+}
+
 async function superAdmin() {
   const viewer = await requireUser();
   return viewer.profile?.role === "super_admin" ? viewer : null;

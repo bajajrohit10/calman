@@ -9,7 +9,7 @@ import type { MissingGroup, PriceFix, Todo, TodoListing } from "@/lib/price-chec
 import { finishRefresh, ignoreGap, refreshVendorOptions, vendorProductsToRefresh } from "./gap-actions";
 import { answerAttempt, confirmListing, dismissChoices, importPlan, fixPrices, ignoreOptions, refreshListing, refreshShopify, setKeepPrice, shopifyProductsToRefresh, type PriceFixIn } from "./todo-actions";
 import { Workbench } from "./workbench";
-import { removeVariants } from "./workbench-actions";
+import { removeVariants, linkPastedProduct } from "./workbench-actions";
 
 /**
  * Settings → Links → "To do on Zeroinfy": one list of what to change on the
@@ -260,6 +260,19 @@ function ListingCard({
                     </span>
                   </div>
                 ))}
+                <PasteLink
+                  pending={pending}
+                  onUse={(link) =>
+                    act(
+                      async () => {
+                        const r = await linkPastedProduct(l.pid, link, g.variantIds);
+                        if (!r.error) setBench("open");
+                        return r;
+                      },
+                      (n) => `Linked ${n} variants to that BB product. Now pick the matching BB option for each one below.`,
+                    )
+                  }
+                />
                 <Button
                   size="sm"
                   variant="ghost"
@@ -447,6 +460,25 @@ function MissingBlock({
         )
       ) : null}
     </Block>
+  );
+}
+
+function PasteLink({ pending, onUse }: { pending: boolean; onUse: (link: string) => void }) {
+  const [link, setLink] = useState("");
+  return (
+    <form
+      className="flex flex-wrap items-center gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (link.trim()) onUse(link.trim());
+      }}
+    >
+      <span className="text-ink-2">Found the right one yourself?</span>
+      <Input className="h-[26px] w-[420px] max-w-full" value={link} placeholder="Paste the BB product link" onChange={(e) => setLink(e.target.value)} />
+      <Button size="sm" variant="secondary" type="submit" disabled={pending || !link.trim()}>
+        Use this BB product
+      </Button>
+    </form>
   );
 }
 
