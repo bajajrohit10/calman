@@ -1,6 +1,7 @@
 import "server-only";
 
 import { fetchAllRows } from "@/lib/paged";
+import { covers, fmtDates, vendorBatchDates, ziBatchDates } from "@/lib/price-check/batch-dates";
 import { expectedZeroinfyPrice, priceOk } from "@/lib/price-check/rules";
 import type { createClient } from "@/lib/supabase/server";
 
@@ -32,7 +33,7 @@ type Link = {
 };
 type Opt = { vendor_site_id: string; product_slug: string; product_title: string | null; variant_id: string; label: string; price: number | null; state: string; last_seen_at: string };
 type Sib = { shopify_product_id: number; vendor_site_id: string; product_slug: string; product_title: string | null; attempts: string | null };
-type Alt = { shopify_product_id: number; shopify_variant_id: number; vendor_site_id: string; product_slug: string; product_title: string | null; attempts: string | null; vendor_price: number | null };
+type Alt = { shopify_product_id: number; shopify_variant_id: number; vendor_site_id: string; product_slug: string; product_title: string | null; attempts: string | null; vendor_price: number | null; vendor_variant_label: string | null };
 type Dec = { shopify_product_id: number; vendor_site_id: string; product_slug: string; variant_id: string };
 
 export type PriceFix = {
@@ -51,7 +52,9 @@ export type PriceFix = {
 };
 export type MissingOpt = { siteId: string; slug: string; productTitle: string | null; variantId: string; label: string; price: number | null; expected: number | null };
 export type MissingGroup = { siteId: string; siteName: string; siteUrl: string; slug: string; productTitle: string | null; attempts: string | null; kind: "batch" | "attempt"; options: MissingOpt[] };
-export type AttemptChoice = { siteId: string; siteUrl: string; slug: string; productTitle: string | null; attempts: string | null; price: number | null };
+export type AttemptChoice = { siteId: string; siteUrl: string; slug: string; productTitle: string | null; attempts: string | null; price: number | null; label: string | null };
+/** A linked BB option whose batch dates differ from the Zeroinfy variant's, with the option of the same BB product that matches. */
+export type BatchMismatch = { linkId: string; variantId: number; variantTitle: string; ziDates: string; currentLabel: string; siteId: string; slug: string; productTitle: string | null; suggestId: string; suggestLabel: string; suggestPrice: number | null };
 /** Variants for which several vendor products fit equally; pick one. */
 export type AttemptGroup = { variantIds: number[]; variants: { title: string; price: number | null }[]; choices: AttemptChoice[] };
 
@@ -66,6 +69,7 @@ export type TodoListing = {
   pastAttempts: { id: number; title: string }[];
   /** Variants on Shopify not linked to any BB option yet (e.g. added on Shopify directly). */
   unlinked: { id: number; title: string }[];
+  batchMismatch: BatchMismatch[];
   dropped: { label: string; variants: number }[];
 };
 
@@ -74,7 +78,7 @@ export type Todo = {
   listings: TodoListing[];
   vendorReadAt: string | null;
   shopifyReadAt: string | null;
-  counts: { attempt: number; confirm: number; price: number; missing: number; past: number; dropped: number };
+  counts: { attempt: number; confirm: number; price: number; missing: number; past: number; dropped: number; batch: number };
 };
 
 function rows<T>(supabase: Supa, table: string, cols: string, filter?: (q: any) => any) { // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -86,7 +90,7 @@ function rows<T>(supabase: Supa, table: string, cols: string, filter?: (q: any) 
 }
 
 export async function computeTodo(supabase: Supa): Promise<Todo> {
-  const empty = { listings: [], vendorReadAt: null, shopifyReadAt: null, counts: { attempt: 0, confirm: 0, price: 0, missing: 0, past: 0, dropped: 0 } };
+  const empty = { listings: [], vendorReadAt: null, shopifyReadAt: null, counts: { attempt: 0, confirm: 0, price: 0, missing: 0, past: 0, dropped: 0, batch: 0 } };
   const [L, O, S, A, D] = await Promise.all([
     rows<Link>(
       supabase,
@@ -96,7 +100,7 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
     ),
     rows<Opt>(supabase, "vendor_options", "vendor_site_id, product_slug, product_title, variant_id, label, price, state, last_seen_at"),
     rows<Sib>(supabase, "listing_vendor_products", "shopify_product_id, vendor_site_id, product_slug, product_title, attempts"),
-    rows<Alt>(supabase, "link_alternatives", "shopify_product_id, shopify_variant_id, vendor_site_id, product_slug, product_title, attempts, vendor_price"),
+    rows<Alt>(supabase, "link_alternatives", "shopify_product_id, shopify_variant_id, vendor_site_id, product_slug, product_title, attempts, vendor_price, vendor_variant_label"),
     rows<Dec>(supabase, "listing_gap_decisions", "shopify_product_id, vendor_site_id, product_slug, variant_id"),
   ]);
   const err = L.error ?? O.error ?? S.error ?? A.error ?? D.error;
@@ -129,12 +133,12 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
   const shopifyReadAt = seen?.[0]?.shopify_seen_at ?? null;
 
   const out: TodoListing[] = [];
-  const counts = { attempt: 0, confirm: 0, price: 0, missing: 0, past: 0, dropped: 0 };
+  const counts = { attempt: 0, confirm: 0, price: 0, missing: 0, past: 0, dropped: 0, batch: 0 };
 
   for (const [pid, ls] of linksBy) {
     const live = ls.filter((l) => l.status !== "no_match");
     const first = ls[0];
-    const item: TodoListing = { pid, title: first.shopify_product_title, handle: first.shopify_product_handle, attemptQuestion: null, confirm: null, priceFixes: [], missing: [], pastAttempts: [], unlinked: [], dropped: [] };
+    const item: TodoListing = { pid, title: first.shopify_product_title, handle: first.shopify_product_handle, attemptQuestion: null, confirm: null, priceFixes: [], missing: [], pastAttempts: [], unlinked: [], batchMismatch: [], dropped: [] };
 
     // 1. Attempt question (unclear attempt, several vendor products fit).
     const alts = altsBy.get(pid);
@@ -157,6 +161,7 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
               productTitle: a.product_title,
               attempts: a.attempts,
               price: a.vendor_price == null ? null : Number(a.vendor_price),
+              label: a.vendor_variant_label,
             })),
           };
           groups.set(key, g);
@@ -255,6 +260,37 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
       .filter((l) => l.status === "no_match" && /has passed/.test(l.reason ?? ""))
       .map((l) => ({ id: Number(l.shopify_variant_id), title: l.shopify_variant_title ?? "Default" }));
 
+    // 7. Batch names: the linked BB option's batch dates differ from the Zeroinfy variant's,
+    //    while another option of the same BB product carries exactly those dates.
+    if (!item.attemptQuestion) {
+      for (const l of live) {
+        if (l.keep_price || !l.vendor_variant_id || !l.vendor_product_slug) continue;
+        const zd = ziBatchDates(l.shopify_variant_title);
+        if (!zd.size || covers(vendorBatchDates(l.vendor_variant_label), zd)) continue;
+        if (ignored.has(`${pid}|${l.vendor_site_id}|${l.vendor_product_slug}|batch-ok:${l.shopify_variant_id}`)) continue;
+        const better = (optsByProduct.get(`${l.vendor_site_id}|${l.vendor_product_slug}`) ?? []).find(
+          (o) => o.state === "live" && Number(o.price ?? 0) > 0 && o.variant_id !== l.vendor_variant_id && covers(vendorBatchDates(o.label), zd),
+        );
+        if (!better) continue;
+        item.batchMismatch.push({
+          linkId: l.id,
+          variantId: Number(l.shopify_variant_id),
+          variantTitle: l.shopify_variant_title ?? "Default",
+          ziDates: fmtDates(zd),
+          currentLabel: l.vendor_variant_label ?? "",
+          siteId: l.vendor_site_id,
+          slug: l.vendor_product_slug,
+          productTitle: l.vendor_product_title,
+          suggestId: better.variant_id,
+          suggestLabel: better.label,
+          suggestPrice: better.price == null ? null : Number(better.price),
+        });
+      }
+      // A wrong option means its price fix is wrong too: hold those until the batch is settled.
+      const held = new Set(item.batchMismatch.map((b) => b.linkId));
+      item.priceFixes = item.priceFixes.filter((f) => !held.has(f.linkId));
+    }
+
     item.unlinked = ls
       .filter((l) => l.status === "no_match" && /^(New on Shopify|BB product chosen by hand)/.test(l.reason ?? "") && !altsBy.get(pid)?.some((a) => Number(a.shopify_variant_id) === Number(l.shopify_variant_id)))
       .map((l) => ({ id: Number(l.shopify_variant_id), title: l.shopify_variant_title ?? "Default" }));
@@ -265,7 +301,8 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
     counts.missing += item.missing.reduce((n, g) => n + g.options.length, 0);
     counts.past += item.pastAttempts.length;
     counts.dropped += item.dropped.length;
-    if (item.attemptQuestion || item.unlinked.length || item.confirm || item.priceFixes.length || item.missing.length || item.pastAttempts.length || item.dropped.length) out.push(item);
+    counts.batch += item.batchMismatch.length;
+    if (item.attemptQuestion || item.unlinked.length || item.batchMismatch.length || item.confirm || item.priceFixes.length || item.missing.length || item.pastAttempts.length || item.dropped.length) out.push(item);
   }
   out.sort((a, b) => a.title.localeCompare(b.title));
   return { error: null, listings: out, vendorReadAt, shopifyReadAt, counts };

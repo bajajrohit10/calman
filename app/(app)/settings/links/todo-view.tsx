@@ -9,7 +9,7 @@ import type { MissingGroup, PriceFix, Todo, TodoListing } from "@/lib/price-chec
 import { finishRefresh, ignoreGap, refreshVendorOptions, vendorProductsToRefresh } from "./gap-actions";
 import { answerAttempt, confirmListing, dismissChoices, importPlan, fixPrices, ignoreOptions, refreshListing, refreshShopify, setKeepPrice, shopifyProductsToRefresh, type PriceFixIn } from "./todo-actions";
 import { Workbench } from "./workbench";
-import { removeVariants, linkPastedProduct } from "./workbench-actions";
+import { linkPastedProduct, removeVariants, retargetLink } from "./workbench-actions";
 
 /**
  * Settings → Links → "To do on Zeroinfy": one list of what to change on the
@@ -19,10 +19,11 @@ import { removeVariants, linkPastedProduct } from "./workbench-actions";
 const rupees = (n: number | null | undefined) => (n == null ? "—" : `₹${n.toLocaleString("en-IN")}`);
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "never");
 
-type Filter = "all" | "attempt" | "confirm" | "price" | "missing" | "past" | "dropped";
+type Filter = "all" | "attempt" | "batch" | "confirm" | "price" | "missing" | "past" | "dropped";
 const FILTERS: { key: Filter; label: string; count: (t: Todo) => number }[] = [
   { key: "all", label: "Everything", count: (t) => t.listings.length },
   { key: "attempt", label: "Which BB product?", count: (t) => t.counts.attempt },
+  { key: "batch", label: "Batch names differ", count: (t) => t.counts.batch },
   { key: "confirm", label: "Confirm BB match", count: (t) => t.counts.confirm },
   { key: "price", label: "Price to fix", count: (t) => t.counts.price },
   { key: "missing", label: "Add on Zeroinfy", count: (t) => t.counts.missing },
@@ -34,6 +35,8 @@ function has(l: TodoListing, f: Filter) {
   switch (f) {
     case "attempt":
       return !!l.attemptQuestion || l.unlinked.length > 0;
+    case "batch":
+      return l.batchMismatch.length > 0;
     case "confirm":
       return !!l.confirm;
     case "price":
@@ -142,10 +145,10 @@ export function TodoView({ todo, canWrite }: { todo: Todo; canWrite: boolean }) 
                   const r = await fetch("/api/price-check/plan-file", { cache: "no-store" });
                   if (!r.ok) return { error: "No prepared corrections to load." };
                   return importPlan(await r.text());
-                }, (n) => `Loaded the prepared corrections (${n} links updated).`)
+                }, (n) => `Loaded the batch-name questions (${n} links updated).`)
               }
             >
-              Load name-only corrections (23 Oct, v4)
+              Load batch-name questions (24 Oct, v5)
             </Button>
           ) : null}
           <Button size="sm" variant="secondary" className={canWrite ? "" : "ml-auto"} disabled={!!busy} onClick={refreshAll}>
@@ -258,6 +261,7 @@ function ListingCard({
                     <span className="text-ink-3">
                       {c.attempts} · BB {rupees(c.price)}
                     </span>
+                    {c.label ? <div className="basis-full pl-[86px] text-[11.5px] text-ink-2">BB batch: {c.label}</div> : null}
                   </div>
                 ))}
                 <PasteLink
@@ -298,6 +302,41 @@ function ListingCard({
           <Button size="sm" variant="secondary" className="self-start" onClick={() => setBench("open")}>
             Link in Batches &amp; options
           </Button>
+        </Block>
+      ) : null}
+
+      {l.batchMismatch.length ? (
+        <Block tone="warn" title="Batch names don't match the linked BB option">
+          {l.batchMismatch.map((b) => (
+            <div key={b.linkId} className="flex flex-col gap-1 border-t border-line pt-1 first:border-0 first:pt-0">
+              <div className="text-ink">
+                {b.variantTitle} <span className="text-ink-3">— Zeroinfy batches: {b.ziDates}</span>
+              </div>
+              <div className="text-ink-3">Linked now: {b.currentLabel || "—"}</div>
+              <div className="text-ink-2">
+                Same BB product, matching batches: <b>{b.suggestLabel}</b> · BB {rupees(b.suggestPrice)}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={pending}
+                  onClick={() => act(() => retargetLink(b.linkId, b.slug, b.suggestId, b.suggestLabel, b.productTitle), () => "Switched to the BB option with the same batches.")}
+                >
+                  Switch to this option
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={pending}
+                  onClick={() => act(() => ignoreGap(l.pid, b.siteId, b.slug, `batch-ok:${b.variantId}`, "Current link confirmed despite batch names"), () => "Kept the current link.")}
+                >
+                  Current link is right
+                </Button>
+              </div>
+            </div>
+          ))}
+          <p className="text-ink-3">Its price fix (if any) is held until this is settled.</p>
         </Block>
       ) : null}
 
