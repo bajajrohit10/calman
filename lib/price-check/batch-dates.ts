@@ -63,3 +63,30 @@ export function attemptHasPassed(variantTitle: string | null, now = new Date()):
   const cur = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   return a.every((x) => x < cur);
 }
+
+/**
+ * Books: Zeroinfy sells "with Hard Copy" / "without Hard Copy"; on BB the same
+ * choice is "With Books" / "Without Books" or "E-Book" (owner, 27 Oct 2026:
+ * E-Book and without-books courses are listed on Zeroinfy as "without Hard Copy").
+ */
+export function ziBooks(variantTitle: string | null): "with" | "without" | null {
+  const t = variantTitle ?? "";
+  if (/without\s*(hard\s*copy|books?)/i.test(t)) return "without";
+  if (/with\s*(hard\s*copy|books?)/i.test(t)) return "with";
+  return null;
+}
+export function vendorBooks(label: string | null): "with" | "without" | null {
+  const t = label ?? "";
+  if (/without\s*(hard\s*copy|books?)|\be\s*-?\s*books?\b|no\s*books?/i.test(t)) return "without";
+  if (/with\s*(hard\s*copy|books?)|hard\s*copy/i.test(t)) return "with";
+  return null;
+}
+/** A vendor option name with the books part taken out, to compare two options that differ only in books. */
+export function withoutBooksPart(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/with(out)?\s*(hard\s*copy|e\s*-?\s*books?|books?)|\be\s*-?\s*books?\b|hard\s*copy|\(no soft copy[^)]*\)/g, "")
+    .replace(/\bbooks?\s*:/g, "")
+    .replace(/[\s,:]+/g, " ")
+    .trim();
+}

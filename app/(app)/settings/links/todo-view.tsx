@@ -24,7 +24,7 @@ type Filter = "all" | "attempt" | "batch" | "confirm" | "price" | "missing" | "p
 const FILTERS: { key: Filter; label: string; count: (t: Todo) => number }[] = [
   { key: "all", label: "Everything", count: (t) => t.listings.length },
   { key: "attempt", label: "1. Which BB product?", count: (t) => t.counts.attempt },
-  { key: "batch", label: "2. Batch names differ", count: (t) => t.counts.batch },
+  { key: "batch", label: "2. Batch or books differ", count: (t) => t.counts.batch },
   { key: "dropped", label: "3. BB dropped", count: (t) => t.counts.dropped },
   { key: "confirm", label: "4. Confirm BB match", count: (t) => t.counts.confirm },
   { key: "past", label: "5. Past attempts listed", count: (t) => t.counts.past },
@@ -333,15 +333,15 @@ function ListingCard({
       ) : null}
 
       {l.batchMismatch.length ? (
-        <Block tone="warn" title="Batch names don't match the linked BB option">
+        <Block tone="warn" title="Batch or books don't match the linked BB option">
           {l.batchMismatch.map((b) => (
             <div key={b.linkId} className="flex flex-col gap-1 border-t border-line pt-1 first:border-0 first:pt-0">
               <div className="text-ink">
-                {b.variantTitle} <span className="text-ink-3">— Zeroinfy batches: {b.ziDates}</span>
+                {b.variantTitle} <span className="text-ink-3">— {b.why === "books" ? `Zeroinfy says ${b.ziDates}` : `Zeroinfy batches: ${b.ziDates}`}</span>
               </div>
               <div className="text-ink-3">Linked now: {b.currentLabel || "—"}</div>
               <div className="text-ink-2">
-                Same BB product, matching batches: <b>{b.suggestLabel}</b> · BB {rupees(b.suggestPrice)}
+                Same BB product, {b.why === "books" ? "matching books (E-Book / without books = without Hard Copy)" : "matching batches"}: <b>{b.suggestLabel}</b> · BB {rupees(b.suggestPrice)}
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button

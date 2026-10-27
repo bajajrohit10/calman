@@ -3,7 +3,7 @@ import "server-only";
 import { fetchAllRows } from "@/lib/paged";
 import { OPTION_TYPES, optionType } from "@/lib/price-check/option-types";
 import { planAttempt, type AttemptPlan } from "@/lib/price-check/attempt-plan";
-import { attemptHasPassed, covers, fmtDates, vendorBatchDates, ziBatchDates } from "@/lib/price-check/batch-dates";
+import { attemptHasPassed, covers, fmtDates, vendorBatchDates, vendorBooks, withoutBooksPart, ziBatchDates, ziBooks } from "@/lib/price-check/batch-dates";
 import { expectedZeroinfyPrice, priceOk } from "@/lib/price-check/rules";
 import type { createClient } from "@/lib/supabase/server";
 
@@ -56,7 +56,7 @@ export type MissingOpt = { siteId: string; slug: string; productTitle: string | 
 export type MissingGroup = { siteId: string; siteName: string; siteUrl: string; slug: string; productTitle: string | null; attempts: string | null; kind: "batch" | "attempt"; options: MissingOpt[]; auto: AttemptPlan | null };
 export type AttemptChoice = { siteId: string; siteUrl: string; slug: string; productTitle: string | null; attempts: string | null; price: number | null; label: string | null };
 /** A linked BB option whose batch dates differ from the Zeroinfy variant's, with the option of the same BB product that matches. */
-export type BatchMismatch = { linkId: string; variantId: number; variantTitle: string; ziDates: string; currentLabel: string; siteId: string; slug: string; productTitle: string | null; suggestId: string; suggestLabel: string; suggestPrice: number | null };
+export type BatchMismatch = { why: "batch" | "books"; linkId: string; variantId: number; variantTitle: string; ziDates: string; currentLabel: string; siteId: string; slug: string; productTitle: string | null; suggestId: string; suggestLabel: string; suggestPrice: number | null };
 /** Variants for which several vendor products fit equally; pick one. */
 export type AttemptGroup = { variantIds: number[]; variants: { title: string; price: number | null }[]; choices: AttemptChoice[] };
 
@@ -143,6 +143,10 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
     (optsByProduct.get(pk) ?? optsByProduct.set(pk, []).get(pk)!).push(o);
     if (!vendorReadAt || o.last_seen_at > vendorReadAt) vendorReadAt = o.last_seen_at;
   }
+  // A vendor option already sold on any Zeroinfy listing (e.g. the separate English listing) isn't missing.
+  const linkedAnywhere = new Set(
+    L.rows.filter((l) => l.status !== "no_match" && l.vendor_variant_id).map((l) => `${l.vendor_site_id}|${l.vendor_product_slug}|${l.vendor_variant_id}`),
+  );
   const ignored = new Set(D.rows.map((d) => `${d.shopify_product_id}|${d.vendor_site_id}|${d.product_slug}|${d.variant_id}`));
   const group = <T extends { shopify_product_id: number }>(xs: T[]) => {
     const m = new Map<number, T[]>();
@@ -257,7 +261,7 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
         const s = site.get(siteId);
         const options = (optsByProduct.get(p.pk) ?? [])
           .filter((o) => o.state === "live" && Number(o.price ?? 0) > 0)
-          .filter((o) => !linkedVar.has(`${p.pk}|${o.variant_id}`) && !ignored.has(`${pid}|${p.pk}|${o.variant_id}`))
+          .filter((o) => !linkedVar.has(`${p.pk}|${o.variant_id}`) && !linkedAnywhere.has(`${p.pk}|${o.variant_id}`) && !ignored.has(`${pid}|${p.pk}|${o.variant_id}`))
           .filter((o) => {
             const t = optionType(o.label);
             if (t && neverSell.has(t.key)) {
@@ -326,19 +330,32 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
     //    while another option of the same BB product carries exactly those dates.
     if (!item.attemptQuestion) {
       for (const l of live) {
-        if (l.keep_price || !l.vendor_variant_id || !l.vendor_product_slug) continue;
-        const zd = ziBatchDates(l.shopify_variant_title);
-        if (!zd.size || covers(vendorBatchDates(l.vendor_variant_label), zd)) continue;
+        if (!l.vendor_variant_id || !l.vendor_product_slug) continue;
         if (ignored.has(`${pid}|${l.vendor_site_id}|${l.vendor_product_slug}|batch-ok:${l.shopify_variant_id}`)) continue;
-        const better = (optsByProduct.get(`${l.vendor_site_id}|${l.vendor_product_slug}`) ?? []).find(
-          (o) => o.state === "live" && Number(o.price ?? 0) > 0 && o.variant_id !== l.vendor_variant_id && covers(vendorBatchDates(o.label), zd),
+        const opts = (optsByProduct.get(`${l.vendor_site_id}|${l.vendor_product_slug}`) ?? []).filter(
+          (o) => o.state === "live" && Number(o.price ?? 0) > 0 && o.variant_id !== l.vendor_variant_id,
         );
+        const zd = ziBatchDates(l.shopify_variant_title);
+        const zb = ziBooks(l.shopify_variant_title);
+        const cb = vendorBooks(l.vendor_variant_label);
+        const datesOff = !l.keep_price && zd.size > 0 && !covers(vendorBatchDates(l.vendor_variant_label), zd);
+        const booksOff = !!zb && !!cb && zb !== cb;
+        if (!datesOff && !booksOff) continue;
+        let better: Opt | undefined;
+        let why: "batch" | "books" = "batch";
+        if (datesOff) better = opts.find((o) => covers(vendorBatchDates(o.label), zd) && (!zb || vendorBooks(o.label) !== (zb === "with" ? "without" : "with")));
+        if (!better && booksOff) {
+          why = "books";
+          const base = withoutBooksPart(l.vendor_variant_label ?? "");
+          better = opts.find((o) => vendorBooks(o.label) === zb && withoutBooksPart(o.label) === base);
+        }
         if (!better) continue;
         item.batchMismatch.push({
+          why,
           linkId: l.id,
           variantId: Number(l.shopify_variant_id),
           variantTitle: l.shopify_variant_title ?? "Default",
-          ziDates: fmtDates(zd),
+          ziDates: why === "books" ? (zb === "with" ? "with Hard Copy" : "without Hard Copy") : fmtDates(zd),
           currentLabel: l.vendor_variant_label ?? "",
           siteId: l.vendor_site_id,
           slug: l.vendor_product_slug,
