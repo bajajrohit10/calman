@@ -44,3 +44,22 @@ export function fmtDates(ds: Set<string>): string {
     .map((d) => `${N[Number(d.slice(5)) - 1]} ${d.slice(0, 4)}`)
     .join(", ");
 }
+
+/** The exam attempt(s) in a Zeroinfy variant name: a month-year that starts an option ("May 27 and onwards", "Nov-26"). */
+export function ziAttempts(variantTitle: string | null): string[] {
+  const out: string[] = [];
+  for (const seg of (variantTitle ?? "").split(" / ")) {
+    const s = seg.trim();
+    const m = s.match(/^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?[\s'’,-]*(20\d\d|\d\d)\b/i);
+    if (m && !/^\s*(record|batch|live)/i.test(s.slice(m[0].length, m[0].length + 25))) out.push(key(m[2], m[1]));
+  }
+  return out;
+}
+
+/** True unless the variant names an attempt that is this month or later. */
+export function attemptHasPassed(variantTitle: string | null, now = new Date()): boolean {
+  const a = ziAttempts(variantTitle);
+  if (!a.length) return true;
+  const cur = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  return a.every((x) => x < cur);
+}

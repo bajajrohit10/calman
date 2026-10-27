@@ -372,9 +372,36 @@ function ListingCard({
       {l.dropped.length ? (
         <Block tone="danger" title="BB no longer lists the option these variants are linked to">
           {l.dropped.map((d) => (
-            <p key={d.label} className="text-ink-2">
-              {d.label} · {d.variants} variant{d.variants === 1 ? "" : "s"} — re-point them in Batches &amp; options
-            </p>
+            <div key={d.label} className="flex flex-col gap-1 border-t border-line pt-1 first:border-0 first:pt-0">
+              <div className="text-ink-2">
+                <s>{d.label}</s> · {d.variants} variant{d.variants === 1 ? "" : "s"}
+              </div>
+              {d.replacement ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-ink">
+                    BB now sells instead: <b>{d.replacement.changed}</b> · BB {rupees(d.replacement.price)}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={pending}
+                    onClick={() =>
+                      act(async () => {
+                        for (const id of d.linkIds) {
+                          const r = await retargetLink(id, d.slug, d.replacement!.id, d.replacement!.label, d.productTitle);
+                          if (r.error) return r;
+                        }
+                        return { error: null, count: d.linkIds.length };
+                      }, (n) => `Re-pointed ${n} variants. Rename the batch on Zeroinfy in Batches & options if its name should change too.`)
+                    }
+                  >
+                    Re-point to it
+                  </Button>
+                </div>
+              ) : (
+                <span className="text-ink-3">No single replacement on BB — re-point or remove these variants in Batches &amp; options.</span>
+              )}
+            </div>
           ))}
         </Block>
       ) : null}

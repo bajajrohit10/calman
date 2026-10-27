@@ -1,7 +1,7 @@
 import "server-only";
 
 import { fetchAllRows } from "@/lib/paged";
-import { covers, fmtDates, vendorBatchDates, ziBatchDates } from "@/lib/price-check/batch-dates";
+import { attemptHasPassed, covers, fmtDates, vendorBatchDates, ziBatchDates } from "@/lib/price-check/batch-dates";
 import { expectedZeroinfyPrice, priceOk } from "@/lib/price-check/rules";
 import type { createClient } from "@/lib/supabase/server";
 
@@ -58,6 +58,12 @@ export type BatchMismatch = { linkId: string; variantId: number; variantTitle: s
 /** Variants for which several vendor products fit equally; pick one. */
 export type AttemptGroup = { variantIds: number[]; variants: { title: string; price: number | null }[]; choices: AttemptChoice[] };
 
+/** A linked vendor option the vendor no longer sells; `replacement` = the live option of the same product that differs in one part only (e.g. the batch). */
+export type Dropped = { label: string; variants: number; linkIds: string[]; slug: string; productTitle: string | null; replacement: { id: string; label: string; price: number | null; changed: string } | null };
+
+const parts = (label: string) => label.split(/,\s*(?=[A-Za-z .&/()-]+:)/).map((p) => p.trim().replace(/\s+/g, " "));
+const partKey = (p: string) => p.slice(0, Math.max(0, p.indexOf(":"))).trim().toLowerCase();
+
 export type TodoListing = {
   pid: number;
   title: string;
@@ -70,7 +76,7 @@ export type TodoListing = {
   /** Variants on Shopify not linked to any BB option yet (e.g. added on Shopify directly). */
   unlinked: { id: number; title: string }[];
   batchMismatch: BatchMismatch[];
-  dropped: { label: string; variants: number }[];
+  dropped: Dropped[];
 };
 
 export type Todo = {
@@ -242,14 +248,31 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
       }
 
       // 6. Vendor dropped a linked option.
-      const gone = new Map<string, { label: string; variants: number }>();
+      const gone = new Map<string, Dropped>();
       for (const l of live) {
         if (l.status !== "approved" || !l.vendor_variant_id) continue;
         const o = opt.get(`${l.vendor_site_id}|${l.vendor_product_slug}|${l.vendor_variant_id}`);
         if (o?.state === "gone") {
-          const g = gone.get(o.variant_id) ?? { label: o.label, variants: 0 };
+          let g = gone.get(o.variant_id);
+          if (!g) {
+            // Same product, same option names, exactly one value different (e.g. the batch) → BB replaced it.
+            const op = parts(o.label);
+            let replacement: Dropped["replacement"] = null;
+            for (const c of optsByProduct.get(`${l.vendor_site_id}|${l.vendor_product_slug}`) ?? []) {
+              if (c.state !== "live" || Number(c.price ?? 0) <= 0) continue;
+              const cp = parts(c.label);
+              if (cp.length !== op.length || cp.map(partKey).join("|") !== op.map(partKey).join("|")) continue;
+              const diff = cp.filter((p, i) => p.toLowerCase() !== op[i].toLowerCase());
+              if (diff.length === 1) {
+                if (replacement) { replacement = null; break; } // two candidates: leave it to a person
+                replacement = { id: c.variant_id, label: c.label, price: c.price == null ? null : Number(c.price), changed: diff[0] };
+              }
+            }
+            g = { label: o.label, variants: 0, linkIds: [], slug: l.vendor_product_slug!, productTitle: l.vendor_product_title, replacement };
+            gone.set(o.variant_id, g);
+          }
           g.variants++;
-          gone.set(o.variant_id, g);
+          g.linkIds.push(l.id);
         }
       }
       item.dropped = [...gone.values()];
@@ -257,7 +280,7 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
 
     // 5. Past attempts still on the listing.
     item.pastAttempts = ls
-      .filter((l) => l.status === "no_match" && /has passed/.test(l.reason ?? ""))
+      .filter((l) => l.status === "no_match" && /has passed/.test(l.reason ?? "") && attemptHasPassed(l.shopify_variant_title))
       .map((l) => ({ id: Number(l.shopify_variant_id), title: l.shopify_variant_title ?? "Default" }));
 
     // 7. Batch names: the linked BB option's batch dates differ from the Zeroinfy variant's,
@@ -292,7 +315,7 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
     }
 
     item.unlinked = ls
-      .filter((l) => l.status === "no_match" && /^(New on Shopify|BB product chosen by hand)/.test(l.reason ?? "") && !altsBy.get(pid)?.some((a) => Number(a.shopify_variant_id) === Number(l.shopify_variant_id)))
+      .filter((l) => l.status === "no_match" && (/^(New on Shopify|BB product chosen by hand)/.test(l.reason ?? "") || (/has passed/.test(l.reason ?? "") && !attemptHasPassed(l.shopify_variant_title))) && !altsBy.get(pid)?.some((a) => Number(a.shopify_variant_id) === Number(l.shopify_variant_id)))
       .map((l) => ({ id: Number(l.shopify_variant_id), title: l.shopify_variant_title ?? "Default" }));
 
     if (item.attemptQuestion || item.unlinked.length) counts.attempt++;
