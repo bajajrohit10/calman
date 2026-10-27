@@ -488,6 +488,17 @@ function ListingCard({
                 Fix all {l.priceFixes.length}
               </Button>
             ) : null}
+            {l.priceFixes.length > 1 ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={pending}
+                title="All these prices are different on purpose: stop checking them against BB"
+                onClick={() => act(() => setKeepPrice(l.priceFixes.map((f) => f.linkId), true, ""), (n) => `Kept our price for ${n} variants.`)}
+              >
+                Keep our price for all {l.priceFixes.length}
+              </Button>
+            ) : null}
             <Button size="sm" variant="ghost" onClick={() => setBench("open")}>
               Wrong BB option? Change it
             </Button>
