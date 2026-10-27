@@ -1,6 +1,7 @@
 import "server-only";
 
 import { fetchAllRows } from "@/lib/paged";
+import { OPTION_TYPES, optionType } from "@/lib/price-check/option-types";
 import { planAttempt, type AttemptPlan } from "@/lib/price-check/attempt-plan";
 import { attemptHasPassed, covers, fmtDates, vendorBatchDates, ziBatchDates } from "@/lib/price-check/batch-dates";
 import { expectedZeroinfyPrice, priceOk } from "@/lib/price-check/rules";
@@ -80,12 +81,23 @@ export type TodoListing = {
   dropped: Dropped[];
 };
 
+export type Rule = { id: string; kind: string; key: string; answer: string; label: string; settles: number; decidedAt: string };
+/** Groups of To do items with one root cause: one answer settles them all. */
+export type Causes = {
+  optionTypes: { key: string; label: string; count: number; listings: { pid: number; title: string; labels: string[] }[] }[];
+  past: { count: number; listings: { pid: number; title: string; variants: { id: number; title: string }[] }[] };
+  confirm: { reason: string; listings: { pid: number; title: string; count: number }[] }[];
+  priceDown: { count: number; listings: { pid: number; title: string; fixes: PriceFix[] }[] };
+};
+
 export type Todo = {
   error: string | null;
   listings: TodoListing[];
   vendorReadAt: string | null;
   shopifyReadAt: string | null;
   counts: { attempt: number; confirm: number; price: number; missing: number; past: number; dropped: number; batch: number };
+  causes: Causes;
+  rules: Rule[];
 };
 
 function rows<T>(supabase: Supa, table: string, cols: string, filter?: (q: any) => any) { // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -97,7 +109,7 @@ function rows<T>(supabase: Supa, table: string, cols: string, filter?: (q: any) 
 }
 
 export async function computeTodo(supabase: Supa): Promise<Todo> {
-  const empty = { listings: [], vendorReadAt: null, shopifyReadAt: null, counts: { attempt: 0, confirm: 0, price: 0, missing: 0, past: 0, dropped: 0, batch: 0 } };
+  const empty = { listings: [], vendorReadAt: null, shopifyReadAt: null, counts: { attempt: 0, confirm: 0, price: 0, missing: 0, past: 0, dropped: 0, batch: 0 }, causes: { optionTypes: [], past: { count: 0, listings: [] }, confirm: [], priceDown: { count: 0, listings: [] } }, rules: [] };
   const [L, O, S, A, D] = await Promise.all([
     rows<Link>(
       supabase,
@@ -114,6 +126,12 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
   if (err) return { error: err, ...empty };
 
   const { data: sites } = await supabase.from("vendor_sites").select("id, name, website_url");
+  const { data: ruleRows, error: ruleErr } = await supabase.from("price_check_rules").select("id, kind, key, answer, decided_at");
+  if (ruleErr) return { error: ruleErr.message, ...empty };
+  const neverSell = new Set((ruleRows ?? []).filter((r) => r.kind === "option_type" && r.answer === "never_sell").map((r) => r.key));
+  const keepWhenLower = (ruleRows ?? []).some((r) => r.kind === "price_down" && r.answer === "keep_ours");
+  const ruleHits = new Map<string, number>();
+  const hit = (k: string) => ruleHits.set(k, (ruleHits.get(k) ?? 0) + 1);
   const site = new Map((sites ?? []).map((s) => [s.id, s]));
 
   const opt = new Map<string, Opt>();
@@ -188,6 +206,10 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
         if (!o || o.state !== "live" || o.price == null || Number(o.price) <= 0) continue;
         const e = expectedZeroinfyPrice(Number(o.price), l.shopify_product_title);
         if (!priceOk(Number(l.shopify_price), e.price)) {
+          if (keepWhenLower && e.price < Number(l.shopify_price)) {
+            hit("price_down|all");
+            continue;
+          }
           item.priceFixes.push({
             linkId: l.id,
             variantId: l.shopify_variant_id,
@@ -236,6 +258,14 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
         const options = (optsByProduct.get(p.pk) ?? [])
           .filter((o) => o.state === "live" && Number(o.price ?? 0) > 0)
           .filter((o) => !linkedVar.has(`${p.pk}|${o.variant_id}`) && !ignored.has(`${pid}|${p.pk}|${o.variant_id}`))
+          .filter((o) => {
+            const t = optionType(o.label);
+            if (t && neverSell.has(t.key)) {
+              hit(`option_type|${t.key}`);
+              return false;
+            }
+            return true;
+          })
           .map((o) => ({
             siteId,
             slug,
@@ -337,5 +367,55 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
     if (item.attemptQuestion || item.unlinked.length || item.batchMismatch.length || item.confirm || item.priceFixes.length || item.missing.length || item.pastAttempts.length || item.dropped.length) out.push(item);
   }
   out.sort((a, b) => a.title.localeCompare(b.title));
-  return { error: null, listings: out, vendorReadAt, shopifyReadAt, counts };
+
+  // Common causes: one answer settles many items.
+  const causes: Causes = { optionTypes: [], past: { count: 0, listings: [] }, confirm: [], priceDown: { count: 0, listings: [] } };
+  const answered = new Set((ruleRows ?? []).filter((r) => r.kind === "option_type").map((r) => r.key));
+  const byType = new Map<string, Causes["optionTypes"][number]>();
+  for (const l of out) {
+    for (const g of l.missing) {
+      for (const o of g.options) {
+        const t = optionType(o.label);
+        if (!t || answered.has(t.key)) continue;
+        const c = byType.get(t.key) ?? byType.set(t.key, { key: t.key, label: t.label, count: 0, listings: [] }).get(t.key)!;
+        c.count++;
+        let li = c.listings.find((x) => x.pid === l.pid);
+        if (!li) c.listings.push((li = { pid: l.pid, title: l.title, labels: [] }));
+        li.labels.push(o.label);
+      }
+    }
+    if (l.pastAttempts.length) {
+      causes.past.count += l.pastAttempts.length;
+      causes.past.listings.push({ pid: l.pid, title: l.title, variants: l.pastAttempts });
+    }
+    const down = l.priceFixes.filter((f) => f.expected < f.current);
+    if (down.length) {
+      causes.priceDown.count += down.length;
+      causes.priceDown.listings.push({ pid: l.pid, title: l.title, fixes: down });
+    }
+  }
+  causes.optionTypes = OPTION_TYPES.map((t) => byType.get(t.key)).filter((x): x is NonNullable<typeof x> => !!x && x.count > 0);
+  if (keepWhenLower) causes.priceDown = { count: 0, listings: [] };
+  const byReason = new Map<string, Causes["confirm"][number]>();
+  for (const l of out) {
+    if (!l.confirm) continue;
+    for (const r of l.confirm.reasons) {
+      const c = byReason.get(r) ?? byReason.set(r, { reason: r, listings: [] }).get(r)!;
+      c.listings.push({ pid: l.pid, title: l.title, count: l.confirm.count });
+    }
+  }
+  causes.confirm = [...byReason.values()].filter((c) => c.listings.length >= 2).sort((a, b) => b.listings.length - a.listings.length);
+
+  const labelOf = (kind: string, key: string) =>
+    kind === "option_type" ? (OPTION_TYPES.find((t) => t.key === key)?.label ?? key) : "When BB's price is lower than ours";
+  const rules: Rule[] = (ruleRows ?? []).map((r) => ({
+    id: r.id,
+    kind: r.kind,
+    key: r.key,
+    answer: r.answer,
+    label: labelOf(r.kind, r.key),
+    settles: ruleHits.get(`${r.kind}|${r.key}`) ?? 0,
+    decidedAt: r.decided_at,
+  }));
+  return { error: null, listings: out, vendorReadAt, shopifyReadAt, counts, causes, rules };
 }

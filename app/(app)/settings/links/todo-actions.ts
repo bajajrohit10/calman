@@ -342,3 +342,27 @@ export async function dismissChoices(pid: number, variantIds: number[]): Promise
   revalidatePath(PATH);
   return { error: null };
 }
+
+/** Save one answer as a rule (it applies to every listing, now and on every refresh). */
+export async function setRule(kind: "option_type" | "price_down", key: string, answer: string, note: string): Promise<{ error: string | null }> {
+  const viewer = await gate();
+  if (!viewer) return { error: DENIED };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("price_check_rules")
+    .upsert({ kind, key, answer, note: note.trim() || null, decided_by: viewer.userId, decided_at: new Date().toISOString() }, { onConflict: "kind,key" });
+  if (error) return { error: error.message };
+  revalidatePath(PATH);
+  return { error: null };
+}
+
+/** Undo a rule: the items it settled come back to the To do list. */
+export async function deleteRule(id: string): Promise<{ error: string | null }> {
+  const viewer = await gate();
+  if (!viewer) return { error: DENIED };
+  const supabase = await createClient();
+  const { error } = await supabase.from("price_check_rules").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath(PATH);
+  return { error: null };
+}

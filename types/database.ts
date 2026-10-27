@@ -2594,6 +2594,36 @@ export type Database = {
         }
         Relationships: []
       }
+      price_check_rules: {
+        Row: {
+          answer: string
+          decided_at: string
+          decided_by: string | null
+          id: string
+          key: string
+          kind: string
+          note: string | null
+        }
+        Insert: {
+          answer: string
+          decided_at?: string
+          decided_by?: string | null
+          id?: string
+          key: string
+          kind: string
+          note?: string | null
+        }
+        Update: {
+          answer?: string
+          decided_at?: string
+          decided_by?: string | null
+          id?: string
+          key?: string
+          kind?: string
+          note?: string | null
+        }
+        Relationships: []
+      }
       vendor_variant_links: {
         Row: {
           shopify_compare_at: number | null

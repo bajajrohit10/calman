@@ -8,6 +8,7 @@ import type { MissingGroup, PriceFix, Todo, TodoListing } from "@/lib/price-chec
 
 import { finishRefresh, ignoreGap, refreshVendorOptions, vendorProductsToRefresh } from "./gap-actions";
 import { answerAttempt, confirmListing, dismissChoices, importPlan, fixPrices, ignoreOptions, refreshListing, refreshShopify, setKeepPrice, shopifyProductsToRefresh, type PriceFixIn } from "./todo-actions";
+import { CausesView } from "./causes-view";
 import { Workbench } from "./workbench";
 import { addAttemptAuto, linkPastedProduct, removeVariants, retargetLink } from "./workbench-actions";
 
@@ -121,6 +122,8 @@ export function TodoView({ todo, canWrite }: { todo: Todo; canWrite: boolean }) 
       {todo.error ? <ErrorNote>{todo.error}</ErrorNote> : null}
       {note ? <ErrorNote>{note}</ErrorNote> : null}
       {ok ? <div className="rounded-md border border-ok/35 bg-ok-soft px-3 py-2 text-[12.5px] text-ok">{ok}</div> : null}
+
+      <CausesView todo={todo} canWrite={canWrite} />
 
       <div className={cx(CARD, "flex flex-col gap-2 p-3")}>
         <div className="flex flex-wrap items-center gap-1">
