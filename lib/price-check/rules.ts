@@ -1,4 +1,11 @@
 /**
+ * BB's Oct 2026 offer ended on 27 Oct 2026: Zeroinfy = BB's price, for every
+ * course. The offer rules below are kept for the next offer; switch
+ * OFFER_RULES_ACTIVE back on (and update Settings → Vendors) to use them.
+ */
+export const OFFER_RULES_ACTIVE = false;
+
+/**
  * Price check: the owner's BB pricing rules (Settings → Vendors → BB Virtuals
  * instructions, Oct 2026 offer) as code. Keep in step with that text.
  *
@@ -26,6 +33,7 @@ export function facultiesIn(title: string): string[] {
 export type Expected = { price: number; rule: string };
 
 export function expectedZeroinfyPrice(vendorPrice: number, zeroinfyTitle: string): Expected {
+  if (!OFFER_RULES_ACTIVE) return { price: vendorPrice, rule: "Same as BB" };
   if (vendorPrice <= 4000) return { price: vendorPrice, rule: "₹4,000 or below: same as BB" };
   const f = facultiesIn(zeroinfyTitle);
   const t = zeroinfyTitle.toLowerCase();

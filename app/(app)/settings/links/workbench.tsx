@@ -31,7 +31,7 @@ const rupees = (n: number | null | undefined) => (n == null ? "—" : `₹${n.to
 /** Default Zeroinfy price from the general BB offer rule; the person checks it against the site's instructions. */
 function rulePrice(vendorPrice: number | null): number {
   if (vendorPrice == null) return 0;
-  return vendorPrice > 4000 ? vendorPrice - 500 : vendorPrice;
+  return vendorPrice; // Same as BB (offer ended 27 Oct 2026); see lib/price-check/rules.ts
 }
 
 function splitOpt(o: string): [string, string] {
@@ -502,7 +502,7 @@ function AddForm({
       <div className="grid grid-cols-[170px_160px_1fr] items-center gap-2">
         <span className="text-ink-3">Price (each new variant)</span>
         <Input className="h-[26px]" inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value)} />
-        <span className="text-ink-3">Default: vendor price − ₹500 above ₹4,000. Check the rules below.</span>
+        <span className="text-ink-3">Default: same as the BB price.</span>
         <span className="text-ink-3">Compare-at price</span>
         <Input className="h-[26px]" inputMode="numeric" value={compareAt} onChange={(e) => setCompareAt(e.target.value)} />
         <span className="text-ink-3">Default: the vendor&apos;s price.</span>

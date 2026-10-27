@@ -52,7 +52,7 @@ function has(l: TodoListing, f: Filter) {
   }
 }
 
-const toFix = (l: TodoListing, f: PriceFix): PriceFixIn => ({ pid: l.pid, title: l.title, linkId: f.linkId, variantId: f.variantId, price: f.expected, compareAt: f.vendorPrice });
+const toFix = (l: TodoListing, f: PriceFix): PriceFixIn => ({ pid: l.pid, title: l.title, linkId: f.linkId, variantId: f.variantId, price: f.expected, compareAt: Math.max(f.compareAt ?? 0, f.vendorPrice) });
 
 export function TodoView({ todo, canWrite }: { todo: Todo; canWrite: boolean }) {
   const router = useRouter();
@@ -182,7 +182,7 @@ export function TodoView({ todo, canWrite }: { todo: Todo; canWrite: boolean }) 
         </div>
       </div>
 
-      <p className="text-[12px] text-ink-3">Work through the filters in number order: settle the BB link and batch first, add or remove variants, fix prices last. {shown.length} listings. Prices follow the BB rules in Settings → Vendors; the compare-at price is set to BB&apos;s price.</p>
+      <p className="text-[12px] text-ink-3">Work through the filters in number order: settle the BB link and batch first, add or remove variants, fix prices last. {shown.length} listings. Zeroinfy price = BB price (BB&apos;s offer ended 27 Oct).</p>
 
       {shown.map((l) => (
         <ListingCard key={l.pid} l={l} canWrite={canWrite} pending={pending} act={act} />
