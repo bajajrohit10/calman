@@ -7,7 +7,7 @@ import { Button, CARD, ErrorNote, Input, cx } from "@/components/ui";
 import type { MissingGroup, PriceFix, Todo, TodoListing } from "@/lib/price-check/todo";
 
 import { finishRefresh, ignoreGap, refreshVendorOptions, vendorProductsToRefresh } from "./gap-actions";
-import { answerAttempt, confirmListing, dismissChoices, importPlan, fixPrices, ignoreOptions, refreshListing, refreshShopify, setKeepPrice, shopifyProductsToRefresh, type PriceFixIn } from "./todo-actions";
+import { answerAttempt, confirmListing, dismissChoices, fixPrices, ignoreOptions, refreshListing, refreshShopify, setKeepPrice, shopifyProductsToRefresh, type PriceFixIn } from "./todo-actions";
 import { CausesView } from "./causes-view";
 import { Workbench } from "./workbench";
 import { addAttemptAuto, linkPastedProduct, removeVariants, retargetLink } from "./workbench-actions";
@@ -138,25 +138,7 @@ export function TodoView({ todo, canWrite }: { todo: Todo; canWrite: boolean }) 
           <span className="text-ink-3">
             Zeroinfy prices read {when(todo.shopifyReadAt)} · BB read {when(todo.vendorReadAt)}
           </span>
-          {canWrite ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="ml-auto"
-              disabled={pending}
-              title="One-off: matching corrections prepared by Claude"
-              onClick={() =>
-                act(async () => {
-                  const r = await fetch("/api/price-check/plan-file", { cache: "no-store" });
-                  if (!r.ok) return { error: "No prepared corrections to load." };
-                  return importPlan(await r.text());
-                }, (n) => `Loaded the batch-name questions (${n} links updated).`)
-              }
-            >
-              Load batch-name questions (24 Oct, v5)
-            </Button>
-          ) : null}
-          <Button size="sm" variant="secondary" className={canWrite ? "" : "ml-auto"} disabled={!!busy} onClick={refreshAll}>
+          <Button size="sm" variant="secondary" className="ml-auto" disabled={!!busy} onClick={refreshAll}>
             {busy ?? "Refresh everything (~5 min)"}
           </Button>
           {canWrite && clearAttempts.length ? (
