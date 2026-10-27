@@ -1,6 +1,7 @@
 import { getViewer } from "@/lib/auth";
 import { fetchAllRows } from "@/lib/paged";
 import { createClient } from "@/lib/supabase/server";
+import { computeTodo } from "@/lib/price-check/todo";
 
 /**
  * Read-only export of the current links and stored BB options, for the
@@ -18,5 +19,6 @@ export async function GET() {
   );
   const options = await fetchAllRows((from, to) => supabase.from("vendor_options").select("product_slug, product_title, variant_id, label, price, state").range(from, to));
   const alts = await fetchAllRows((from, to) => supabase.from("link_alternatives").select("shopify_product_id, shopify_variant_id, product_slug").range(from, to));
-  return Response.json({ links: links.rows, options: options.rows, alts: alts.rows, error: links.error ?? options.error ?? alts.error }, { headers: { "cache-control": "no-store" } });
+  const todo = await computeTodo(supabase);
+  return Response.json({ todo, links: links.rows, options: options.rows, alts: alts.rows, error: links.error ?? options.error ?? alts.error }, { headers: { "cache-control": "no-store" } });
 }
