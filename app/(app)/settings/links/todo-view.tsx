@@ -9,7 +9,7 @@ import type { MissingGroup, PriceFix, Todo, TodoListing } from "@/lib/price-chec
 import { finishRefresh, ignoreGap, refreshVendorOptions, vendorProductsToRefresh } from "./gap-actions";
 import { answerAttempt, confirmListing, dismissChoices, importPlan, fixPrices, ignoreOptions, refreshListing, refreshShopify, setKeepPrice, shopifyProductsToRefresh, type PriceFixIn } from "./todo-actions";
 import { Workbench } from "./workbench";
-import { linkPastedProduct, removeVariants, retargetLink } from "./workbench-actions";
+import { addAttemptAuto, linkPastedProduct, removeVariants, retargetLink } from "./workbench-actions";
 
 /**
  * Settings → Links → "To do on Zeroinfy": one list of what to change on the
@@ -69,6 +69,8 @@ export function TodoView({ todo, canWrite }: { todo: Todo; canWrite: boolean }) 
     [todo, filter, q],
   );
   const shownFixes = shown.flatMap((l) => l.priceFixes.map((f) => toFix(l, f)));
+  const [confirmAtt, setConfirmAtt] = useState(false);
+  const clearAttempts = shown.flatMap((l) => l.missing.filter((g) => g.auto?.ok).map((g) => ({ pid: l.pid, title: l.title, siteId: g.siteId, slug: g.slug })));
 
   async function refreshAll() {
     setNote(null);
@@ -154,6 +156,40 @@ export function TodoView({ todo, canWrite }: { todo: Todo; canWrite: boolean }) 
           <Button size="sm" variant="secondary" className={canWrite ? "" : "ml-auto"} disabled={!!busy} onClick={refreshAll}>
             {busy ?? "Refresh everything (~5 min)"}
           </Button>
+          {canWrite && clearAttempts.length ? (
+            confirmAtt ? (
+              <>
+                <span className="text-ink-2">Add {clearAttempts.length} attempts on zeroinfy.in?</span>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  disabled={pending}
+                  onClick={() => {
+                    setConfirmAtt(false);
+                    act(async () => {
+                      let n = 0;
+                      const errs: string[] = [];
+                      for (const c of clearAttempts) {
+                        const r = await addAttemptAuto(c.pid, c.siteId, c.slug);
+                        if (r.error) errs.push(`${c.title}: ${r.error}`);
+                        else n += r.count ?? 0;
+                      }
+                      return { error: errs.length ? `Added ${n} variants; ${errs.length} failed — ${errs.slice(0, 3).join(" · ")}` : null, count: n };
+                    }, (n) => `Added ${n} variants on Shopify (clear attempts) and linked them.`);
+                  }}
+                >
+                  Yes, add them
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setConfirmAtt(false)}>
+                  No
+                </Button>
+              </>
+            ) : (
+              <Button size="sm" variant="secondary" disabled={pending} onClick={() => setConfirmAtt(true)}>
+                Add all clear attempts ({clearAttempts.length})
+              </Button>
+            )
+          ) : null}
           {canWrite && shownFixes.length ? (
             confirmAll ? (
               <>
@@ -489,6 +525,21 @@ function MissingBlock({
       <a href={`${g.siteUrl}/product/${g.slug}`} target="_blank" rel="noreferrer" className="text-accent hover:underline">
         {g.productTitle ?? g.slug}
       </a>
+      {g.auto?.ok ? (
+        <div className="flex flex-wrap items-center gap-2 rounded border border-ok/40 bg-surface px-2 py-1">
+          <span className="text-ink">
+            Clear case: add <b>{g.auto.newValue}</b> with the same options as “{g.auto.baseValue}” — {g.auto.items.length} variant{g.auto.items.length === 1 ? "" : "s"} at BB&apos;s prices (
+            {[...new Set(g.auto.items.map((i) => rupees(i.price)))].join(", ")}).
+          </span>
+          {canWrite ? (
+            <Button size="sm" variant="primary" disabled={pending} onClick={() => act(() => addAttemptAuto(l.pid, g.siteId, g.slug), (n) => `Added ${n} variants on Shopify and linked them.`)}>
+              Add it on Zeroinfy
+            </Button>
+          ) : null}
+        </div>
+      ) : g.auto ? (
+        <div className="text-ink-3">Needs a person: {g.auto.why}</div>
+      ) : null}
       {g.options.map((o) => (
         <div key={o.variantId} className="flex flex-wrap items-center gap-2">
           <span className="text-ink">{o.label}</span>

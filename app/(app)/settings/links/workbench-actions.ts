@@ -16,6 +16,7 @@ import {
 import { grantedScopes } from "@/lib/price-check/shopify";
 import { storeVendorOptions } from "@/lib/price-check/vendor-options";
 import { syncLinksWithShopify } from "@/lib/price-check/sync-links";
+import { planAttempt } from "@/lib/price-check/attempt-plan";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
 
@@ -424,6 +425,95 @@ export async function linkPastedProduct(productId: number, link: string, variant
   await supabase.from("link_alternatives").delete().eq("shopify_product_id", productId).in("shopify_variant_id", variantIds.length ? variantIds : [-1]);
   revalidatePath(PATH);
   return { error: null, title: added.title, count: data?.length ?? 0 };
+}
+
+/**
+ * Add another attempt that BB sells as a separate product, copying the options of an
+ * attempt already on the listing, at BB's prices — only when planAttempt finds no doubt.
+ */
+export async function addAttemptAuto(productId: number, siteId: string, slug: string): Promise<{ error: string | null; count?: number; value?: string }> {
+  const viewer = await requireUser();
+  if (viewer.profile?.role !== "super_admin") return { error: "Only a super admin can change Shopify listings." };
+  const supabase = await createClient();
+  const [{ data: links }, { data: sib }, { data: opts }] = await Promise.all([
+    supabase.from("vendor_variant_links").select("shopify_variant_id, shopify_variant_title, status, vendor_product_slug, vendor_variant_id, vendor_variant_label, keep_price").eq("shopify_product_id", productId),
+    supabase.from("listing_vendor_products").select("product_title, attempts").eq("shopify_product_id", productId).eq("vendor_site_id", siteId).eq("product_slug", slug).maybeSingle(),
+    supabase.from("vendor_options").select("variant_id, label, price, state").eq("vendor_site_id", siteId).eq("product_slug", slug),
+  ]);
+  const plan = planAttempt(
+    (links ?? []).map((l) => ({ ...l, shopify_variant_id: Number(l.shopify_variant_id) })),
+    sib?.attempts ?? null,
+    (opts ?? []).map((o) => ({ ...o, price: o.price == null ? null : Number(o.price) })),
+  );
+  if (!plan.ok) return { error: plan.why };
+
+  let product: ShopifyProductForEdit;
+  try {
+    product = await getProductForEdit(productId);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+  const opt = product.options[plan.attemptIndex];
+  if (!opt) return { error: "The listing's options changed — refresh it." };
+  if (opt.values.includes(plan.newValue)) return { error: `"${plan.newValue}" is already on the listing.` };
+  const byId = new Map(product.variants.map((v) => [v.id, v]));
+  const variants = [];
+  for (const it of plan.items) {
+    const b = byId.get(it.baseVariantId);
+    if (!b || b.selected[opt.name] !== plan.baseValue) return { error: "The listing changed on Shopify since the last refresh — refresh it and try again." };
+    variants.push({
+      options: { ...b.selected, [opt.name]: plan.newValue },
+      price: it.price,
+      compareAtPrice: null,
+      inventoryPolicy: b.inventoryPolicy,
+      taxable: b.taxable,
+      tracked: b.tracked,
+      requiresShipping: b.requiresShipping,
+    });
+  }
+  if (product.variants.length + variants.length > 2048) return { error: "That would exceed Shopify's 2,048 variants per product." };
+
+  let created: { id: number; title: string }[];
+  try {
+    created = await createVariants(productId, variants);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await logChange(supabase, viewer.userId, productId, product.title, "add_attempt", { slug, plan }, false, msg);
+    return { error: msg };
+  }
+  await logChange(supabase, viewer.userId, productId, product.title, "add_attempt", { slug, plan, created }, true);
+
+  const now = new Date().toISOString();
+  const { error: linkErr } = await supabase.from("vendor_variant_links").upsert(
+    created.map((v, i) => {
+      const it = plan.items.find((x) => x.newTitle === v.title) ?? plan.items[i];
+      return {
+      shopify_product_id: productId,
+      shopify_variant_id: v.id,
+      shopify_product_title: product.title,
+      shopify_product_handle: product.handle,
+      shopify_variant_title: v.title,
+      vendor_site_id: siteId,
+      vendor_product_slug: slug,
+      vendor_product_title: sib?.product_title ?? null,
+      vendor_variant_id: it.vendorVariantId,
+      vendor_variant_label: it.vendorLabel.slice(0, 500),
+      status: "approved",
+      confidence: "high",
+      reason: `Added automatically: same options as "${plan.baseValue}", at BB's ${sib?.attempts ?? ""} prices.`,
+      suggested_by: "calman",
+      suggested_at: now,
+      reviewed_by: viewer.userId,
+      reviewed_at: now,
+      shopify_price: it.price,
+      shopify_seen_at: now,
+      };
+    }),
+    { onConflict: "shopify_variant_id" },
+  );
+  revalidatePath(PATH);
+  if (linkErr) return { error: `Added ${created.length} variants on Shopify, but linking them failed: ${linkErr.message}`, count: created.length };
+  return { error: null, count: created.length, value: plan.newValue };
 }
 
 async function superAdmin() {

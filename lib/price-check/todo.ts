@@ -1,6 +1,7 @@
 import "server-only";
 
 import { fetchAllRows } from "@/lib/paged";
+import { planAttempt, type AttemptPlan } from "@/lib/price-check/attempt-plan";
 import { attemptHasPassed, covers, fmtDates, vendorBatchDates, ziBatchDates } from "@/lib/price-check/batch-dates";
 import { expectedZeroinfyPrice, priceOk } from "@/lib/price-check/rules";
 import type { createClient } from "@/lib/supabase/server";
@@ -51,7 +52,7 @@ export type PriceFix = {
   confirmed: boolean;
 };
 export type MissingOpt = { siteId: string; slug: string; productTitle: string | null; variantId: string; label: string; price: number | null; expected: number | null };
-export type MissingGroup = { siteId: string; siteName: string; siteUrl: string; slug: string; productTitle: string | null; attempts: string | null; kind: "batch" | "attempt"; options: MissingOpt[] };
+export type MissingGroup = { siteId: string; siteName: string; siteUrl: string; slug: string; productTitle: string | null; attempts: string | null; kind: "batch" | "attempt"; options: MissingOpt[]; auto: AttemptPlan | null };
 export type AttemptChoice = { siteId: string; siteUrl: string; slug: string; productTitle: string | null; attempts: string | null; price: number | null; label: string | null };
 /** A linked BB option whose batch dates differ from the Zeroinfy variant's, with the option of the same BB product that matches. */
 export type BatchMismatch = { linkId: string; variantId: number; variantTitle: string; ziDates: string; currentLabel: string; siteId: string; slug: string; productTitle: string | null; suggestId: string; suggestLabel: string; suggestPrice: number | null };
@@ -244,7 +245,15 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
             price: o.price == null ? null : Number(o.price),
             expected: o.price == null ? null : expectedZeroinfyPrice(Number(o.price), first.shopify_product_title).price,
           }));
-        if (options.length) item.missing.push({ siteId, siteName: s?.name ?? "", siteUrl: s?.website_url ?? "", slug, productTitle: p.title, attempts: p.attempts, kind: p.kind, options });
+        const auto =
+          p.kind === "attempt"
+            ? planAttempt(
+                ls.map((l) => ({ ...l, shopify_variant_id: Number(l.shopify_variant_id) })),
+                p.attempts,
+                (optsByProduct.get(p.pk) ?? []).map((o) => ({ variant_id: o.variant_id, label: o.label, price: o.price == null ? null : Number(o.price), state: o.state })),
+              )
+            : null;
+        if (options.length) item.missing.push({ siteId, siteName: s?.name ?? "", siteUrl: s?.website_url ?? "", slug, productTitle: p.title, attempts: p.attempts, kind: p.kind, options, auto });
       }
 
       // 6. Vendor dropped a linked option.
