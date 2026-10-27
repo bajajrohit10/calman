@@ -66,7 +66,13 @@ export function TodoView({ todo, canWrite }: { todo: Todo; canWrite: boolean }) 
   const [pending, start] = useTransition();
 
   const shown = useMemo(
-    () => todo.listings.filter((l) => has(l, filter) && (!q.trim() || l.title.toLowerCase().includes(q.trim().toLowerCase()))),
+    () => {
+      const needle = q.trim().toLowerCase();
+      // Under "Add on Zeroinfy" the search also matches BB option names (e.g. "pendrive").
+      const hit = (l: TodoListing) =>
+        l.title.toLowerCase().includes(needle) || (filter === "missing" && l.missing.some((g) => g.options.some((o) => o.label.toLowerCase().includes(needle))));
+      return todo.listings.filter((l) => has(l, filter) && (!needle || hit(l)));
+    },
     [todo, filter, q],
   );
   const shownFixes = shown.flatMap((l) => l.priceFixes.map((f) => toFix(l, f)));
@@ -134,7 +140,7 @@ export function TodoView({ todo, canWrite }: { todo: Todo; canWrite: boolean }) 
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-2 text-[12px]">
-          <Input className="h-[26px] w-[260px]" value={q} placeholder="Search listing…" onChange={(e) => setQ(e.target.value)} />
+          <Input className="h-[26px] w-[260px]" value={q} placeholder={filter === "missing" ? "Search listing or BB option (e.g. pendrive)…" : "Search listing…"} onChange={(e) => setQ(e.target.value)} />
           <span className="text-ink-3">
             Zeroinfy prices read {when(todo.shopifyReadAt)} · BB read {when(todo.vendorReadAt)}
           </span>
