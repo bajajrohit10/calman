@@ -104,14 +104,14 @@ type UserError = { field: string[] | null; message: string };
 const errText = (e: UserError[]) => e.map((x) => x.message).join("; ");
 
 /** Add a new option to the product; every existing variant takes `existingValue`. */
-export async function addOption(productId: number, name: string, existingValue: string): Promise<void> {
+export async function addOption(productId: number, name: string, existingValue: string, position?: number): Promise<void> {
   const data: { productOptionsCreate: { userErrors: UserError[] } } = await adminQuery(
     `mutation O($id: ID!, $options: [OptionCreateInput!]!) {
       productOptionsCreate(productId: $id, options: $options, variantStrategy: LEAVE_AS_IS) {
         userErrors { field message }
       }
     }`,
-    { id: gid(productId), options: [{ name, values: [{ name: existingValue }] }] },
+    { id: gid(productId), options: [{ name, values: [{ name: existingValue }], ...(position ? { position } : {}) }] },
   );
   if (data.productOptionsCreate.userErrors.length) throw new Error(`Shopify: ${errText(data.productOptionsCreate.userErrors)}`);
 }
@@ -126,13 +126,19 @@ export type NewVariant = {
   requiresShipping: boolean;
 };
 
-export async function createVariants(productId: number, vs: NewVariant[]): Promise<{ id: number; title: string }[]> {
+export async function createVariants(
+  productId: number,
+  vs: NewVariant[],
+): Promise<{ id: number; title: string; selected: Record<string, string> }[]> {
   const data: {
-    productVariantsBulkCreate: { productVariants: { id: string; title: string }[] | null; userErrors: UserError[] };
+    productVariantsBulkCreate: {
+      productVariants: { id: string; title: string; selectedOptions: { name: string; value: string }[] }[] | null;
+      userErrors: UserError[];
+    };
   } = await adminQuery(
     `mutation V($id: ID!, $variants: [ProductVariantsBulkInput!]!) {
       productVariantsBulkCreate(productId: $id, variants: $variants) {
-        productVariants { id title }
+        productVariants { id title selectedOptions { name value } }
         userErrors { field message }
       }
     }`,
@@ -150,7 +156,11 @@ export async function createVariants(productId: number, vs: NewVariant[]): Promi
   );
   const r = data.productVariantsBulkCreate;
   if (r.userErrors.length) throw new Error(`Shopify: ${errText(r.userErrors)}`);
-  return (r.productVariants ?? []).map((v) => ({ id: num(v.id), title: v.title }));
+  return (r.productVariants ?? []).map((v) => ({
+    id: num(v.id),
+    title: v.title,
+    selected: Object.fromEntries((v.selectedOptions ?? []).map((o) => [o.name, o.value])),
+  }));
 }
 
 /** Set price / compare-at on existing variants of one product. */
@@ -211,4 +221,13 @@ export async function renameOptionValue(productId: number, optionId: string, val
     { id: gid(productId), o: { id: optionId }, v: [{ id: valueId, name }] },
   );
   if (data.productOptionUpdate.userErrors.length) throw new Error(`Shopify: ${errText(data.productOptionUpdate.userErrors)}`);
+}
+
+/** Delete an option that no longer tells variants apart (it has one value left). */
+export async function deleteOption(productId: number, optionId: string): Promise<void> {
+  const data: { productOptionsDelete: { userErrors: UserError[] } } = await adminQuery(
+    `mutation X($id: ID!, $o: [ID!]!) { productOptionsDelete(productId: $id, options: $o, strategy: DEFAULT) { userErrors { field message } } }`,
+    { id: gid(productId), o: [optionId] },
+  );
+  if (data.productOptionsDelete.userErrors.length) throw new Error(`Shopify: ${errText(data.productOptionsDelete.userErrors)}`);
 }

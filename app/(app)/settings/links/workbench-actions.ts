@@ -7,6 +7,7 @@ import { readEdportalProduct, type EdportalVariant } from "@/lib/price-check/edp
 import {
   addOption,
   createVariants,
+  deleteOption,
   deleteVariants,
   getProductForEdit,
   renameOptionValue,
@@ -671,6 +672,191 @@ export async function renameValue(productId: number, optionName: string, from: s
       .update({ status: "no_match", vendor_product_slug: null, vendor_variant_id: null, vendor_variant_label: null, reason: `Renamed ${from} → ${name} in Calman — pick the BB option in Batches & options.` })
       .in("shopify_variant_id", affected);
   }
+  await resnapshot(supabase, productId);
+  revalidatePath(PATH);
+  return { error: null };
+}
+
+/* ------------------------------------------- add in Zeroinfy's own layout -- */
+
+export type ZAddPlan = {
+  productId: number;
+  siteId: string;
+  slug: string;
+  vendorProductTitle: string | null;
+  /** Options to create first, at their place in Zeroinfy's layout (Mode → Attempt → batches). */
+  newOptions: { name: string; position: number; currentValue: string }[];
+  rows: {
+    options: Record<string, string>;
+    price: number;
+    compareAtPrice: number | null;
+    vendorVariantId: string | null;
+    vendorVariantLabel: string | null;
+  }[];
+};
+
+const keyOf = (names: string[], o: Record<string, string>) => names.map((n) => (o[n] ?? "").trim().toLowerCase()).join("\u0001");
+
+/**
+ * Add BB options to a listing as Zeroinfy variants: create any new options (e.g.
+ * "IDT Batch" for a combo whose IDT batch varies), then the variants, then link
+ * each to its BB option, approved. Super admin only; logged either way.
+ */
+export async function addVariantsFromVendor(plan: ZAddPlan): Promise<{ error: string | null; count?: number }> {
+  const viewer = await superAdmin();
+  if (!viewer) return { error: "Only a super admin can change Shopify listings." };
+  const supabase = await createClient();
+  if (!plan.rows.length) return { error: "Pick at least one variant to add." };
+
+  let product: ShopifyProductForEdit;
+  try {
+    product = await getProductForEdit(plan.productId);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+  const current = product.options.map((o) => o.name);
+  const newOpts = plan.newOptions.map((n) => ({ ...n, name: n.name.trim(), currentValue: n.currentValue.trim() })).sort((a, b) => a.position - b.position);
+  for (const n of newOpts) {
+    if (!n.name) return { error: "Name every new option." };
+    if (current.some((c) => c.toLowerCase() === n.name.toLowerCase())) return { error: `The listing already has an option "${n.name}".` };
+    if (!n.currentValue) return { error: `Say what the current variants are called in "${n.name}".` };
+  }
+  if (new Set(newOpts.map((n) => n.name.toLowerCase())).size !== newOpts.length) return { error: "Two new options have the same name." };
+  if (current.length + newOpts.length > 3) return { error: "Shopify allows at most 3 options per product." };
+
+  const layout = [...current];
+  for (const n of newOpts) layout.splice(Math.max(0, Math.min(n.position - 1, layout.length)), 0, n.name);
+
+  // Every row needs a value for every option, and must be new.
+  const taken = new Set(
+    product.variants.map((v) => keyOf(layout, { ...v.selected, ...Object.fromEntries(newOpts.map((n) => [n.name, n.currentValue])) })),
+  );
+  const rows: (ZAddPlan["rows"][number] & { options: Record<string, string> })[] = [];
+  for (const r of plan.rows) {
+    const options: Record<string, string> = {};
+    for (const n of layout) {
+      const val = (r.options[n] ?? "").trim();
+      if (!val) return { error: `Give ${n} a value on every row.` };
+      if (val.length > 255) return { error: `"${val.slice(0, 40)}…" is too long for Shopify (255 characters).` };
+      options[n] = val;
+    }
+    if (!(r.price > 0) || r.price > 1_000_000) return { error: "Enter a sensible price on every row." };
+    if (r.compareAtPrice != null && r.compareAtPrice < r.price) return { error: "Compare-at can't be below the price." };
+    const k = keyOf(layout, options);
+    if (taken.has(k)) return { error: `“${layout.map((n) => options[n]).join(" / ")}” is already on the listing (or twice in this list).` };
+    taken.add(k);
+    rows.push({ ...r, options });
+  }
+  if (product.variants.length + rows.length > 2048) return { error: "That would exceed Shopify's 2,048 variants per product." };
+
+  // Stock/tax settings from the current variant that shares most option values.
+  const sibling = (o: Record<string, string>) =>
+    [...product.variants].sort((a, b) => current.filter((n) => b.selected[n] === o[n]).length - current.filter((n) => a.selected[n] === o[n]).length)[0];
+
+  let created: { id: number; title: string; selected: Record<string, string> }[];
+  try {
+    for (const n of newOpts) await addOption(plan.productId, n.name, n.currentValue, n.position);
+    created = await createVariants(
+      plan.productId,
+      rows.map((r) => {
+        const s = sibling(r.options);
+        return {
+          options: r.options,
+          price: r.price,
+          compareAtPrice: r.compareAtPrice,
+          inventoryPolicy: s.inventoryPolicy,
+          taxable: s.taxable,
+          tracked: s.tracked,
+          requiresShipping: s.requiresShipping,
+        };
+      }),
+    );
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await logChange(supabase, viewer.userId, plan.productId, product.title, "add_variants_zeroinfy_format", plan, false, msg);
+    await resnapshot(supabase, plan.productId);
+    return { error: newOpts.length ? `${msg} (check the listing: a new option may have been created before this failed — reload).` : msg };
+  }
+  await logChange(supabase, viewer.userId, plan.productId, product.title, "add_variants_zeroinfy_format", { plan, created }, true);
+
+  const now = new Date().toISOString();
+  const links = created.flatMap((v) => {
+    const r = rows.find((x) => keyOf(layout, x.options) === keyOf(layout, v.selected));
+    if (!r?.vendorVariantId) return [];
+    return [
+      {
+        shopify_product_id: plan.productId,
+        shopify_variant_id: v.id,
+        shopify_product_title: product.title,
+        shopify_product_handle: product.handle,
+        shopify_variant_title: v.title,
+        vendor_site_id: plan.siteId,
+        vendor_product_slug: plan.slug,
+        vendor_product_title: plan.vendorProductTitle,
+        vendor_variant_id: r.vendorVariantId,
+        vendor_variant_label: (r.vendorVariantLabel ?? "").slice(0, 500),
+        status: "approved",
+        confidence: "high",
+        reason: "Added to the listing from Calman (Zeroinfy layout) to match this BB option.",
+        suggested_by: "calman",
+        suggested_at: now,
+        reviewed_by: viewer.userId,
+        reviewed_at: now,
+        shopify_price: r.price,
+        shopify_compare_at: r.compareAtPrice,
+        shopify_seen_at: now,
+      },
+    ];
+  });
+  const { error: linkErr } = links.length ? await supabase.from("vendor_variant_links").upsert(links, { onConflict: "shopify_variant_id" }) : { error: null };
+  // New options rename every current variant ("… / Batch 1"): refresh titles.
+  if (newOpts.length) await resnapshot(supabase, plan.productId);
+  revalidatePath(PATH);
+  if (linkErr) return { error: `Added ${created.length} variants on Shopify, but linking them failed: ${linkErr.message}`, count: created.length };
+  return { error: null, count: created.length };
+}
+
+/** Remove one option value: deletes every variant that has it (e.g. a batch that's no longer sold). */
+export async function removeOptionValue(productId: number, optionName: string, value: string): Promise<{ error: string | null; count?: number }> {
+  const viewer = await superAdmin();
+  if (!viewer) return { error: "Only a super admin can remove options." };
+  let product: ShopifyProductForEdit;
+  try {
+    product = await getProductForEdit(productId);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+  const o = product.options.find((x) => x.name === optionName);
+  if (!o || !o.values.includes(value)) return { error: "That option value is no longer on the listing — reload." };
+  if (o.values.length === 1) return { error: `“${value}” is the only ${optionName} — remove the whole option instead.` };
+  const ids = product.variants.filter((v) => v.selected[optionName] === value).map((v) => v.id);
+  return removeVariants(productId, ids);
+}
+
+/** Remove an option that has a single value left (it no longer tells variants apart). */
+export async function removeOption(productId: number, optionName: string): Promise<{ error: string | null }> {
+  const viewer = await superAdmin();
+  if (!viewer) return { error: "Only a super admin can remove options." };
+  const supabase = await createClient();
+  let product: ShopifyProductForEdit;
+  try {
+    product = await getProductForEdit(productId);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+  const o = product.options.find((x) => x.name === optionName);
+  if (!o) return { error: "That option is no longer on the listing — reload." };
+  if (o.values.length !== 1) return { error: `${optionName} still has ${o.values.length} values — remove the values you don't sell first, so one is left.` };
+  if (product.options.length === 1) return { error: "A listing needs at least one option." };
+  const req = { option: optionName, value: o.values[0] };
+  try {
+    await deleteOption(productId, o.id);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await logChange(supabase, viewer.userId, productId, product.title, "delete_option", req, false, msg);
+    return { error: msg };
+  }
+  await logChange(supabase, viewer.userId, productId, product.title, "delete_option", req, true);
   await resnapshot(supabase, productId);
   revalidatePath(PATH);
   return { error: null };

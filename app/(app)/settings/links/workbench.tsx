@@ -6,12 +6,16 @@ import { useRouter } from "next/navigation";
 import { Button, CELL, ErrorNote, Input, Select, TABLE_HEAD_ROW, cx } from "@/components/ui";
 import type { EdportalVariant } from "@/lib/price-check/edportal";
 
+import { draftFromVendor, finalLayout } from "@/lib/price-check/zeroinfy-format";
+
 import {
-  addToShopify,
+  addVariantsFromVendor,
   addVendorProductByUrl,
   editVariant,
   markOwnOption,
   loadWorkbench,
+  removeOption,
+  removeOptionValue,
   removeVariants,
   renameValue,
   retargetLink,
@@ -29,15 +33,7 @@ import { setKeepPrice } from "./todo-actions";
 const rupees = (n: number | null | undefined) => (n == null ? "—" : `₹${n.toLocaleString("en-IN")}`);
 
 /** Default Zeroinfy price from the general BB offer rule; the person checks it against the site's instructions. */
-function rulePrice(vendorPrice: number | null): number {
-  if (vendorPrice == null) return 0;
-  return vendorPrice; // Same as BB (offer ended 27 Oct 2026); see lib/price-check/rules.ts
-}
-
-function splitOpt(o: string): [string, string] {
-  const i = o.indexOf(": ");
-  return i < 0 ? ["", o] : [o.slice(0, i).trim(), o.slice(i + 2).trim()];
-}
+// Default Zeroinfy price = BB's price (offer ended 27 Oct 2026), compare-at = BB's MRP; see lib/price-check/rules.ts.
 
 export function Workbench({
   productId,
@@ -365,7 +361,7 @@ export function Workbench({
       })}
 
       {adding ? (
-        <AddForm
+        <ZAddForm
           wb={data}
           vp={adding.vp}
           gap={adding.v}
@@ -382,7 +378,12 @@ export function Workbench({
   );
 }
 
-function AddForm({
+/**
+ * Add BB options to the listing in Zeroinfy's layout: Mode of Delivery → Attempt →
+ * batch recording(s). Drafted from the closest option the listing already sells;
+ * every value, price and new option can be edited before Shopify is changed.
+ */
+function ZAddForm({
   wb,
   vp,
   gap,
@@ -400,113 +401,190 @@ function AddForm({
   const [confirm, setConfirm] = useState(false);
   const p = wb.product;
 
-  // The vendor option most of the listing is linked to: what the current variants are.
-  const base = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const l of wb.links) if (l.vendor_product_slug === vp.slug && l.vendor_variant_id) counts.set(l.vendor_variant_id, (counts.get(l.vendor_variant_id) ?? 0) + 1);
-    const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-    return vp.variants.find((v) => v.id === top) ?? null;
-  }, [wb, vp]);
+  // The other BB options of this product the listing doesn't sell: can be added in the same go.
+  const gaps = useMemo(() => {
+    const linked = new Set(wb.links.map((l) => `${l.vendor_product_slug}|${l.vendor_variant_id}`));
+    const ignored = new Set(wb.ignored);
+    return vp.variants.filter((v) => v.id === gap.id || (!linked.has(`${vp.slug}|${v.id}`) && !ignored.has(`${vp.slug}|${v.id}`) && Number(v.price ?? 0) > 0));
+  }, [wb, vp, gap]);
+  const [picked, setPicked] = useState<string[]>([gap.id]);
 
-  // What differs between the missing option and the one already sold.
-  const diff = useMemo(() => {
-    const b = new Map((base?.options ?? []).map(splitOpt));
-    const parts = gap.options.map(splitOpt).filter(([k, v]) => b.get(k) !== v);
-    return { keys: parts.map(([k]) => k).filter(Boolean), newVals: parts.map(([, v]) => v), oldVals: parts.map(([k]) => b.get(k) ?? "") };
-  }, [base, gap]);
+  const draft = useMemo(
+    () =>
+      draftFromVendor(
+        {
+          options: p.options,
+          variants: p.variants,
+          links: wb.links,
+          vendorVariants: new Map(wb.vendors.map((x) => [x.slug, x.variants])),
+          slug: vp.slug,
+          attempt: vp.sibling && vp.attempts !== "added by hand" ? vp.attempts : null,
+        },
+        gaps.filter((g) => picked.includes(g.id)),
+      ),
+    [p, wb, vp, gaps, picked],
+  );
 
-  const canNew = p.options.length < 3;
-  // Another attempt of the course: goes into the listing's Attempt option (or a new one).
-  const attemptOpt = p.options.find((o) => /attempt/i.test(o.name));
-  const isAttempt = vp.sibling;
-  const guessExisting = isAttempt
-    ? attemptOpt ?? p.options[0]
-    : p.options.find((o) => /batch/i.test(o.name)) ?? p.options.find((o) => /attempt/i.test(o.name)) ?? p.options[0];
-  const [kind, setKind] = useState<"new" | "existing">(isAttempt ? (attemptOpt || !canNew ? "existing" : "new") : canNew ? "new" : "existing");
-  const [optName, setOptName] = useState(isAttempt ? "Attempt" : diff.keys.length ? `${diff.keys.join(" & ")} Batch` : "Batch");
-  const [existingOpt, setExistingOpt] = useState(guessExisting?.name ?? "");
-  const [existingValue, setExistingValue] = useState(isAttempt ? "Current attempt" : diff.oldVals.join(" | ") || "Current batch");
-  const extra = isAttempt && gap.options.length > 1 ? ` (${gap.options.map((o) => o.split(": ").slice(1).join(": ")).join(", ")})` : "";
-  const [newValue, setNewValue] = useState(isAttempt ? `${vp.attempts ?? "Next attempt"}${extra}` : diff.newVals.join(" | ") || gap.title);
-  const [price, setPrice] = useState(String(rulePrice(gap.price)));
-  const [compareAt, setCompareAt] = useState(gap.price != null ? String(gap.price) : "");
+  // The person's edits, kept across re-drafts (by BB option key / BB variant id).
+  const [optEdit, setOptEdit] = useState<Record<string, { name?: string; currentValue?: string; position?: number; drop?: boolean }>>({});
+  const [rowEdit, setRowEdit] = useState<Record<string, { options?: Record<string, string>; price?: string; compareAt?: string }>>({});
 
-  const targetName = kind === "new" ? optName.trim() : existingOpt;
-  const others = p.options.filter((o) => o.name !== targetName);
-  const [combine, setCombine] = useState<Record<string, string[]>>(() => Object.fromEntries(p.options.map((o) => [o.name, o.values])));
-  const count = others.reduce((n, o) => n * (combine[o.name]?.length ?? 0), 1);
+  const newOptions = draft.newOptions
+    .filter((n) => !optEdit[n.key]?.drop)
+    .map((n) => ({ ...n, draftName: n.name, name: optEdit[n.key]?.name ?? n.name, currentValue: optEdit[n.key]?.currentValue ?? n.currentValue, position: optEdit[n.key]?.position ?? n.position }));
+  const layout = finalLayout(p.options, newOptions);
+  const draftNameOf = (name: string) => newOptions.find((n) => n.name === name)?.draftName ?? name;
+  const valuesOf = (name: string) => p.options.find((o) => o.name === name)?.values ?? [];
+
+  const rows = draft.rows.map((r) => {
+    const e = rowEdit[r.vendorVariantId] ?? {};
+    const options = Object.fromEntries(layout.map((n) => [n, e.options?.[n] ?? r.options[draftNameOf(n)] ?? ""]));
+    return {
+      ...r,
+      options,
+      priceText: e.price ?? String(r.price || ""),
+      compareText: e.compareAt ?? (r.compareAtPrice != null ? String(r.compareAtPrice) : ""),
+    };
+  });
+  const setRow = (id: string, patch: { options?: Record<string, string>; price?: string; compareAt?: string }) =>
+    setRowEdit((x) => ({ ...x, [id]: { ...x[id], ...patch, options: { ...x[id]?.options, ...patch.options } } }));
+
+  const submit = () =>
+    start(async () => {
+      setError(null);
+      const r = await addVariantsFromVendor({
+        productId: p.id,
+        siteId: vp.siteId,
+        slug: vp.slug,
+        vendorProductTitle: vp.title,
+        newOptions: newOptions.map(({ name, position, currentValue }) => ({ name, position, currentValue })),
+        rows: rows.map((x) => ({
+          options: x.options,
+          price: Number(x.priceText),
+          compareAtPrice: x.compareText.trim() ? Number(x.compareText) : null,
+          vendorVariantId: x.vendorVariantId,
+          vendorVariantLabel: x.vendorVariantLabel,
+        })),
+      });
+      if (r.error) {
+        setConfirm(false);
+        setError(r.error);
+      } else onDone(r.count ?? 0);
+    });
 
   return (
     <div className="flex flex-col gap-2 rounded-md border border-accent/40 bg-surface p-3 text-[12px]">
       <div className="font-semibold text-ink">
         Add to Zeroinfy: {gap.title} <span className="font-normal text-ink-3">({vp.siteName} {rupees(gap.price)})</span>
       </div>
+      <p className="text-ink-3">
+        Drafted in Zeroinfy&apos;s layout — Mode of Delivery, then Attempt, then batch recording(s) — from the closest option this listing already sells.
+        Check every value before going ahead.
+      </p>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="flex items-center gap-1">
-          <input type="radio" checked={kind === "new"} disabled={!canNew} onChange={() => setKind("new")} />
-          New option on the listing
-        </label>
-        <label className="flex items-center gap-1">
-          <input type="radio" checked={kind === "existing"} onChange={() => setKind("existing")} />
-          New value of an existing option
-        </label>
-        {!canNew ? <span className="text-ink-3">(the listing already has 3 options, Shopify&apos;s maximum)</span> : null}
-      </div>
-
-      {kind === "new" ? (
-        <div className="grid grid-cols-[170px_1fr] items-center gap-2">
-          <span className="text-ink-3">Option name</span>
-          <Input className="h-[26px]" value={optName} onChange={(e) => setOptName(e.target.value)} />
-          <span className="text-ink-3">Current variants become</span>
-          <Input className="h-[26px]" value={existingValue} onChange={(e) => setExistingValue(e.target.value)} />
-          <span className="text-ink-3">New batch is called</span>
-          <Input className="h-[26px]" value={newValue} onChange={(e) => setNewValue(e.target.value)} />
-        </div>
-      ) : (
-        <div className="grid grid-cols-[170px_1fr] items-center gap-2">
-          <span className="text-ink-3">Option</span>
-          <Select className="h-[26px]" value={existingOpt} onChange={(e) => setExistingOpt(e.target.value)}>
-            {p.options.map((o) => (
-              <option key={o.name} value={o.name}>
-                {o.name} ({o.values.join(", ")})
-              </option>
-            ))}
-          </Select>
-          <span className="text-ink-3">New value</span>
-          <Input className="h-[26px]" value={newValue} onChange={(e) => setNewValue(e.target.value)} />
-        </div>
-      )}
-
-      {others.map((o) => (
-        <div key={o.name} className="flex flex-wrap items-center gap-2">
-          <span className="w-[170px] text-ink-3">With {o.name}</span>
-          {o.values.map((val) => (
-            <label key={val} className="flex items-center gap-1">
+      {gaps.length > 1 ? (
+        <div className="flex flex-col gap-0.5">
+          <span className="text-ink-3">BB options to add ({vp.title ?? vp.slug}):</span>
+          {gaps.map((g) => (
+            <label key={g.id} className="flex items-center gap-1">
               <input
                 type="checkbox"
-                checked={combine[o.name]?.includes(val) ?? false}
-                onChange={(e) =>
-                  setCombine((c) => ({
-                    ...c,
-                    [o.name]: e.target.checked ? [...(c[o.name] ?? []), val] : (c[o.name] ?? []).filter((x) => x !== val),
-                  }))
-                }
+                checked={picked.includes(g.id)}
+                onChange={(e) => setPicked((x) => (e.target.checked ? [...x, g.id] : x.filter((y) => y !== g.id)))}
               />
-              {val}
+              {g.title} <span className="text-ink-3">{rupees(g.price)}</span>
             </label>
           ))}
         </div>
-      ))}
+      ) : null}
 
-      <div className="grid grid-cols-[170px_160px_1fr] items-center gap-2">
-        <span className="text-ink-3">Price (each new variant)</span>
-        <Input className="h-[26px]" inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value)} />
-        <span className="text-ink-3">Default: same as the BB price.</span>
-        <span className="text-ink-3">Compare-at price</span>
-        <Input className="h-[26px]" inputMode="numeric" value={compareAt} onChange={(e) => setCompareAt(e.target.value)} />
-        <span className="text-ink-3">Default: the vendor&apos;s price.</span>
+      {draft.newOptions.length ? (
+        <div className="flex flex-col gap-1 rounded border border-line p-2">
+          <span className="font-semibold text-ink-2">New option{draft.newOptions.length === 1 ? "" : "s"} on the listing</span>
+          {draft.newOptions.map((n) => {
+            const e = optEdit[n.key] ?? {};
+            const set = (patch: typeof e) => setOptEdit((x) => ({ ...x, [n.key]: { ...x[n.key], ...patch } }));
+            return (
+              <div key={n.key} className="flex flex-wrap items-center gap-2">
+                <span className="text-ink-3">BB&apos;s “{n.key}” varies →</span>
+                <Input className="h-[24px] w-[160px]" value={e.name ?? n.name} disabled={e.drop} onChange={(ev) => set({ name: ev.target.value })} />
+                <span className="text-ink-3">position</span>
+                <Select className="h-[24px] w-[60px]" value={String(e.position ?? n.position)} disabled={e.drop} onChange={(ev) => set({ position: Number(ev.target.value) })}>
+                  {[1, 2, 3].slice(0, p.options.length + draft.newOptions.length).map((i) => (
+                    <option key={i} value={i}>
+                      {i}
+                    </option>
+                  ))}
+                </Select>
+                <span className="text-ink-3">current {p.variants.length} variants become</span>
+                <Input className="h-[24px] w-[220px]" value={e.currentValue ?? n.currentValue} disabled={e.drop} onChange={(ev) => set({ currentValue: ev.target.value })} />
+                <label className="flex items-center gap-1 text-ink-3">
+                  <input type="checkbox" checked={!!e.drop} onChange={(ev) => set({ drop: ev.target.checked })} />
+                  don&apos;t add
+                </label>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-[12px]">
+          <thead>
+            <tr className={TABLE_HEAD_ROW}>
+              {layout.map((n) => (
+                <th key={n} className={CELL}>
+                  {n}
+                  {newOptions.some((x) => x.name === n) ? <span className="ml-1 text-accent">(new)</span> : null}
+                </th>
+              ))}
+              <th className={CELL}>Price</th>
+              <th className={CELL}>Compare-at</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.vendorVariantId} className="border-b border-line align-top last:border-0">
+                {layout.map((n) => (
+                  <td key={n} className={CELL}>
+                    <Input
+                      className={cx("h-[24px] min-w-[140px]", valuesOf(n).includes(r.options[n]) ? "" : "border-accent")}
+                      list={`z-${r.vendorVariantId}-${n}`}
+                      value={r.options[n]}
+                      title={valuesOf(n).includes(r.options[n]) ? "Existing value" : "New value — created on Shopify"}
+                      onChange={(e) => setRow(r.vendorVariantId, { options: { [n]: e.target.value } })}
+                    />
+                    <datalist id={`z-${r.vendorVariantId}-${n}`}>
+                      {valuesOf(n).map((x) => (
+                        <option key={x} value={x} />
+                      ))}
+                    </datalist>
+                  </td>
+                ))}
+                <td className={CELL}>
+                  <Input className="h-[24px] w-[90px]" inputMode="numeric" value={r.priceText} onChange={(e) => setRow(r.vendorVariantId, { price: e.target.value })} />
+                </td>
+                <td className={CELL}>
+                  <Input className="h-[24px] w-[90px]" inputMode="numeric" value={r.compareText} onChange={(e) => setRow(r.vendorVariantId, { compareAt: e.target.value })} />
+                </td>
+              </tr>
+            ))}
+            {rows.map((r) =>
+              r.notes.length ? (
+                <tr key={`${r.vendorVariantId}-n`}>
+                  <td colSpan={layout.length + 2} className="px-2 text-[11px] text-warn">
+                    {r.vendorVariantLabel}: {r.notes.join(" ")}
+                  </td>
+                </tr>
+              ) : null,
+            )}
+          </tbody>
+        </table>
       </div>
+      <p className="text-ink-3">
+        Values outlined in colour are new on Shopify. Price defaults to BB&apos;s price, compare-at to BB&apos;s MRP. Stock and tax settings are copied from
+        the closest current variant.
+      </p>
 
       {wb.instructions.map((i) => (
         <details key={i.site} className="text-ink-3">
@@ -515,44 +593,16 @@ function AddForm({
         </details>
       ))}
 
-      <p className="text-ink-3">
-        Creates <b className="text-ink">{count}</b> variant{count === 1 ? "" : "s"} on Shopify
-        {kind === "new" ? `, adds the option "${optName.trim()}" (all ${p.variants.length} current variants become "${existingValue.trim()}")` : ""}, and links them to
-        this {vp.siteName} option. Stock and tax settings are copied from the matching current variant.
-      </p>
       {error ? <ErrorNote>{error}</ErrorNote> : null}
-
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {confirm ? (
           <>
-            <span className="text-ink-2">This changes the live listing on zeroinfy.in. Go ahead?</span>
-            <Button
-              size="sm"
-              variant="primary"
-              disabled={pending}
-              onClick={() =>
-                start(async () => {
-                  setError(null);
-                  const r = await addToShopify({
-                    productId: p.id,
-                    siteId: vp.siteId,
-                    slug: vp.slug,
-                    vendorProductTitle: vp.title,
-                    vendorVariantId: gap.id,
-                    vendorVariantLabel: gap.title,
-                    target: kind === "new" ? { kind: "new", option: optName.trim(), existingValue: existingValue.trim() } : { kind: "existing", option: existingOpt },
-                    newValue: newValue.trim(),
-                    combine,
-                    price: Number(price),
-                    compareAtPrice: compareAt.trim() ? Number(compareAt) : null,
-                  });
-                  if (r.error) {
-                    setConfirm(false);
-                    setError(r.error);
-                  } else onDone(r.count ?? 0);
-                })
-              }
-            >
+            <span className="text-ink-2">
+              Creates {rows.length} variant{rows.length === 1 ? "" : "s"}
+              {newOptions.length ? ` and the option${newOptions.length === 1 ? "" : "s"} ${newOptions.map((n) => `"${n.name}"`).join(", ")}` : ""} on the live
+              zeroinfy.in listing. Go ahead?
+            </span>
+            <Button size="sm" variant="primary" disabled={pending} onClick={submit}>
               {pending ? "Working…" : "Yes, change Shopify"}
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setConfirm(false)}>
@@ -561,8 +611,8 @@ function AddForm({
           </>
         ) : (
           <>
-            <Button size="sm" variant="primary" disabled={pending || count < 1} onClick={() => setConfirm(true)}>
-              Create {count} variant{count === 1 ? "" : "s"} on Shopify
+            <Button size="sm" variant="primary" disabled={pending || !rows.length} onClick={() => setConfirm(true)}>
+              Create {rows.length} variant{rows.length === 1 ? "" : "s"} on Shopify
             </Button>
             <Button size="sm" variant="ghost" onClick={onCancel}>
               Cancel
@@ -574,10 +624,11 @@ function AddForm({
   );
 }
 
-/** Rename an option value on every variant (e.g. "May-26" → "May-27"). */
+/** Rename or remove an option value on every variant (e.g. "May-26" → "May-27"); remove a one-value option. */
 function OptionsEditor({ wb, onDone, onError }: { wb: WB; onDone: (msg: string) => void; onError: (e: string) => void }) {
   const [pending, start] = useTransition();
   const [edit, setEdit] = useState<{ option: string; from: string; to: string } | null>(null);
+  const [drop, setDrop] = useState<{ option: string; value: string } | null>(null);
   return (
     <div className="flex flex-col gap-1 text-[12px]">
       {wb.product.options.map((o) => (
@@ -609,17 +660,69 @@ function OptionsEditor({ wb, onDone, onError }: { wb: WB; onDone: (msg: string) 
                 </Button>
               </form>
             ) : (
-              <button
-                key={val}
-                type="button"
-                title="Rename this value on every variant"
-                className="rounded border border-line-2 bg-surface px-2 py-[1px] text-ink-2 hover:bg-surface-2"
-                onClick={() => setEdit({ option: o.name, from: val, to: val })}
-              >
-                {val} ✎
-              </button>
+              <span key={val} className="inline-flex items-center rounded border border-line-2 bg-surface text-ink-2">
+                <button
+                  type="button"
+                  title="Rename this value on every variant"
+                  className="px-2 py-[1px] hover:bg-surface-2"
+                  onClick={() => setEdit({ option: o.name, from: val, to: val })}
+                >
+                  {val} ✎
+                </button>
+                {o.values.length > 1 ? (
+                  drop && drop.option === o.name && drop.value === val ? (
+                    <span className="flex items-center gap-1 px-1">
+                      <span className="text-danger">Delete its {wb.product.variants.filter((v) => v.selected[o.name] === val).length} variant(s)?</span>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        disabled={pending}
+                        onClick={() =>
+                          start(async () => {
+                            const r = await removeOptionValue(wb.product.id, o.name, val);
+                            setDrop(null);
+                            if (r.error) onError(r.error);
+                            else onDone(`Removed “${val}” from ${o.name} (${r.count} variant${r.count === 1 ? "" : "s"} deleted on Shopify).`);
+                          })
+                        }
+                      >
+                        Yes
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setDrop(null)}>
+                        No
+                      </Button>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      title={`Remove “${val}”: deletes every variant with it`}
+                      className="border-l border-line-2 px-1.5 py-[1px] text-ink-3 hover:bg-danger-soft hover:text-danger"
+                      onClick={() => setDrop({ option: o.name, value: val })}
+                    >
+                      ✕
+                    </button>
+                  )
+                ) : null}
+              </span>
             ),
           )}
+          {o.values.length === 1 && wb.product.options.length > 1 ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={pending}
+              title="Only one value left: the option no longer tells variants apart"
+              onClick={() =>
+                start(async () => {
+                  const r = await removeOption(wb.product.id, o.name);
+                  if (r.error) onError(r.error);
+                  else onDone(`Removed the option ${o.name} from the listing.`);
+                })
+              }
+            >
+              Remove option
+            </Button>
+          ) : null}
         </div>
       ))}
     </div>
