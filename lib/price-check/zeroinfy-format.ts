@@ -139,15 +139,43 @@ function targetOption(ctx: Ctx, base: Base, key: string, was: string, now: strin
   if (sameClass.length === 1) return sameClass[0];
   if (sameClass.length > 1) {
     // e.g. key "IDT" → option "IDT Batch".
-    const k = norm(key).split(" ")[0];
-    return sameClass.find((o) => norm(o.name).split(" ").includes(k)) ?? null;
+    const ks = subjectWords(key);
+    return sameClass.find((o) => norm(o.name).split(" ").some((w) => ks.includes(w))) ?? null;
   }
   return null;
 }
 
 const title = (s: string) => s.replace(/\b[a-z]/g, (c) => c.toUpperCase());
+/** BB names subjects in full ("Indirect Tax"); Zeroinfy options often use the short form ("IDT"). */
+const SUBJECT_SHORT: Record<string, string> = {
+  "direct tax": "dt",
+  "direct taxes": "dt",
+  "income tax": "dt",
+  "indirect tax": "idt",
+  "indirect taxes": "idt",
+  gst: "idt",
+  "financial reporting": "fr",
+  "strategic financial management": "sfm",
+  "advanced financial management": "afm",
+  "advanced auditing": "audit",
+  auditing: "audit",
+  "corporate law": "law",
+  "corporate laws": "law",
+  "cost and management accounting": "cost",
+  "financial management": "fm",
+  "strategic management": "sm",
+  "integrated business solutions": "ibs",
+};
+function subjectWords(key: string): string[] {
+  const n = norm(key);
+  const out = [n.split(" ")[0], n.replace(/ /g, "")];
+  if (SUBJECT_SHORT[n]) out.push(SUBJECT_SHORT[n]);
+  return out;
+}
+
 function newOptionName(key: string) {
-  const k = key.trim() || "Batch";
+  const short = SUBJECT_SHORT[norm(key)];
+  const k = short ? short.toUpperCase() : key.trim() || "Batch";
   return /batch|record|attempt|mode|delivery/i.test(k) ? title(k) : `${k} Batch`;
 }
 

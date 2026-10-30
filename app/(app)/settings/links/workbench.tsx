@@ -33,6 +33,15 @@ import { setKeepPrice } from "./todo-actions";
 const rupees = (n: number | null | undefined) => (n == null ? "—" : `₹${n.toLocaleString("en-IN")}`);
 
 /** Default Zeroinfy price from the general BB offer rule; the person checks it against the site's instructions. */
+/**
+ * A BB option as people read it: its option values ("DT: Batch 2 (Live Oct 2026) · IDT: Batch 1 (Recorded June 2026)"),
+ * not BB's variant title, which repeats the product name and gets cut off in a dropdown.
+ */
+function optionText(v: EdportalVariant): string {
+  const parts = v.options.map((o) => o.trim()).filter((o) => o && !/^:\s*$/.test(o));
+  return parts.length ? parts.join(" · ") : v.title;
+}
+
 // Default Zeroinfy price = BB's price (offer ended 27 Oct 2026), compare-at = BB's MRP; see lib/price-check/rules.ts.
 
 export function Workbench({
@@ -83,7 +92,7 @@ export function Workbench({
   const allOptions = useMemo(
     () =>
       (data?.vendors ?? []).flatMap((vp) =>
-        vp.variants.map((v) => ({ key: `${vp.slug}|${v.id}`, vp, v, label: `${v.title} — ${rupees(v.price)}` })),
+        vp.variants.map((v) => ({ key: `${vp.slug}|${v.id}`, vp, v, label: `${optionText(v)} — ${rupees(v.price)}` })),
       ),
     [data],
   );
@@ -218,6 +227,7 @@ export function Workbench({
                   {link ? (
                     <Select
                       className="h-[26px] w-full max-w-[560px]"
+                      title={allOptions.find((o) => o.key === current)?.v.title ?? link.vendor_variant_label ?? ""}
                       value={own || allOptions.some((o) => o.key === current) ? current : ""}
                       disabled={pending || !allOptions.length}
                       onChange={(e) => {
@@ -241,17 +251,31 @@ export function Workbench({
                       }}
                     >
                       {own || allOptions.some((o) => o.key === current) ? null : <option value="">{link.vendor_variant_label ?? (link.status === "no_match" ? "— not linked: pick the BB option" : "— (not on vendor site any more)")}</option>}
-                      {allOptions.map((o) => (
-                        <option key={o.key} value={o.key}>
-                          {data.vendors.length > 1 ? `${o.vp.title ?? o.vp.slug}: ` : ""}
-                          {o.label}
-                        </option>
+                      {data.vendors.map((vp) => (
+                        <optgroup key={vp.slug} label={`${vp.title ?? vp.slug}${vp.sibling && vp.attempts && vp.attempts !== "added by hand" ? ` (${vp.attempts})` : ""}`}>
+                          {allOptions
+                            .filter((o) => o.vp.slug === vp.slug)
+                            .map((o) => (
+                              <option key={o.key} value={o.key} title={o.v.title}>
+                                {o.label}
+                              </option>
+                            ))}
+                        </optgroup>
                       ))}
                       <option value="__own">★ Zeroinfy-only option (BB doesn&apos;t sell it — e.g. without books) — keep, don&apos;t check price</option>
                     </Select>
                   ) : (
                     <span className="text-ink-3">Not linked yet</span>
                   )}
+                  {(() => {
+                    const o = allOptions.find((x) => x.key === current);
+                    return o ? (
+                      <div className="mt-0.5 max-w-[560px] text-[11px] leading-snug text-ink-3">
+                        {data.vendors.length > 1 ? <span className="text-ink-2">{o.vp.title ?? o.vp.slug} · </span> : null}
+                        {optionText(o.v)}
+                      </div>
+                    ) : null;
+                  })()}
                   {link && link.vendor_variant_id && link.status !== "no_match" ? (
                     <label className="mt-0.5 flex items-center gap-1 text-[11px] text-ink-3" title="For a variant priced differently on purpose, e.g. Google Drive + hard copy linked to BB's Drive-only option">
                       <input
@@ -342,7 +366,7 @@ export function Workbench({
             </div>
             {gaps.map((g) => (
               <div key={g.id} className="flex flex-wrap items-center gap-2 text-[12px]">
-                <span className="text-ink-2">{g.title}</span>
+                <span className="text-ink-2" title={g.title}>{optionText(g)}</span>
                 <span className="text-ink-3">{rupees(g.price)}</span>
                 {data.canWrite ? (
                   <Button size="sm" variant="secondary" disabled={pending} onClick={() => setAdding({ vp, v: g })}>
