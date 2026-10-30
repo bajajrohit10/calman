@@ -9,6 +9,8 @@ import { LinksView, type LinkRow } from "./links-view";
 import { TodoView } from "./todo-view";
 
 export const metadata = { title: "Links · Calman" };
+// AI description updates can take up to a minute.
+export const maxDuration = 120;
 
 const STATUSES = ["suggested", "approved", "rejected", "no_match"] as const;
 type Status = (typeof STATUSES)[number];

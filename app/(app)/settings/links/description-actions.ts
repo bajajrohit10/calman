@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 
 import { aiConfigured, askClaude, parseJsonReply } from "@/lib/ai/claude";
 import { isAdmin, requireUser } from "@/lib/auth";
-import { applyEdits, decode, encode, sectionOf, segments, type Edit } from "@/lib/price-check/description";
+import { applyEdits, changedLines, checkRewrite, decode, encode, sectionOf, segments, splitInfo, type Edit } from "@/lib/price-check/description";
 import { getDescription, getProductForEdit, setDescription } from "@/lib/price-check/shopify-edit";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
@@ -247,4 +247,92 @@ export async function descriptionVersion(logId: string): Promise<{ error: string
   const { data } = await supabase.from("shopify_change_log").select("request").eq("id", logId).maybeSingle();
   const r = (data?.request ?? {}) as { before?: string; after?: string };
   return { error: null, before: r.before, after: r.after };
+}
+
+/* ------------------------------------------------ AI rewrite of Product Info -- */
+
+const REWRITE = `You maintain product descriptions for Zeroinfy, an Indian CA-exam course store that resells BB Virtuals courses.
+You get FACTS (what the listing sells now: its variants and the BB course options they resell — the source of truth) and the PRODUCT INFO part of the description as HTML.
+Bring every attempt and batch-recording detail in line with the FACTS, using your judgement:
+- Attempts the course is for (e.g. "May 27 and onwards", "Nov 26, May 27 and Nov 27") — in the intro sentence(s) and anywhere else they appear.
+- The "Batch Recording" row: one entry per batch the variants sell now, with that batch's recording month / live dates and schedule as the BB options state them. Remove batches that are no longer sold (rows, cells, list items), add batches that are new, renumber "Batch 1/2" if needed.
+- Rows that depend on the batch (e.g. validity or views "DT Batch 1: 9 Months") — drop entries for batches no longer sold; keep the rest exactly. If a new batch's validity/views are unknown, don't invent them.
+Keep the format EXACTLY: same tags, classes, inline styles, colours, table layout and wording style. Copy an existing row/cell/list item's markup when adding one. Do not change hours, books, prices, links, phone numbers, faculty text or anything not about attempts/batches. Never add new kinds of tags, scripts or styles.
+If something is outdated but the FACTS don't say what it should be, leave it and mention it in the note.
+Reply in exactly this form:
+<<<HTML
+(the full updated PRODUCT INFO html)
+HTML>>>
+CHANGES:
+- (one line per change, plain English)
+NOTE: (anything the person must check, or "none")`;
+
+export type Rewrite = { hash: string; before: string; after: string; removed: string[]; added: string[]; changes: string[]; note: string | null };
+
+/** Ask Claude to rewrite the Product Info part so its attempts and recordings match the listing. Nothing is saved. */
+export async function rewriteDescription(productId: number): Promise<{ error: string | null; data?: Rewrite }> {
+  const viewer = await admin();
+  if (!viewer) return { error: "Only a manager or super admin can do this." };
+  if (!aiConfigured()) return { error: "AI is not set up yet: add ANTHROPIC_API_KEY in Vercel → calman → Settings → Environment Variables, then redeploy." };
+  const supabase = await createClient();
+  let d: { html: string };
+  let facts: string;
+  try {
+    [d, facts] = await Promise.all([getDescription(productId), factsFor(supabase, productId)]);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+  const { info, tail } = splitInfo(d.html);
+  let reply: string;
+  try {
+    reply = await askClaude(REWRITE, `FACTS\n${facts}\n\nPRODUCT INFO HTML\n${info}`, 12000);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+  const m = reply.match(/<<<HTML\s*([\s\S]*?)\s*HTML>>>/);
+  if (!m) return { error: "The AI reply wasn't in the expected form — try again." };
+  // Keep the section's own trailing whitespace so the join with System is unchanged.
+  const newInfo = m[1].trim() + (info.match(/\s*$/)?.[0] ?? "");
+  const bad = checkRewrite(info, newInfo);
+  if (bad) return { error: `${bad} Nothing was changed — try again, or edit the lines by hand.` };
+  const after = newInfo + tail;
+  const changes = (reply.split(/CHANGES:/)[1] ?? "").split(/NOTE:/)[0].split("\n").map((l) => l.replace(/^\s*-\s*/, "").trim()).filter(Boolean);
+  const note = (reply.split(/NOTE:/)[1] ?? "").trim();
+  const diff = changedLines(d.html, after);
+  return {
+    error: null,
+    data: { hash: hash(d.html), before: d.html, after, removed: diff.removed, added: diff.added, changes, note: note && !/^none\.?$/i.test(note) ? note : null },
+  };
+}
+
+/** Save a reviewed rewrite on Shopify (only the Product Info part may differ). Old version kept for Undo. */
+export async function saveRewrite(productId: number, readHash: string, after: string, changes: string[]): Promise<{ error: string | null }> {
+  const viewer = await requireUser();
+  if (viewer.profile?.role !== "super_admin") return { error: "Only a super admin can change Shopify listings." };
+  const supabase = await createClient();
+  let d: { title: string; html: string };
+  try {
+    d = await getDescription(productId);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+  if (hash(d.html) !== readHash) return { error: "The description changed on Shopify since the suggestion was made — ask for a new one." };
+  const cur = splitInfo(d.html);
+  if (!after.endsWith(cur.tail)) return { error: "Only the Product Info part can change here." };
+  const bad = checkRewrite(cur.info, after.slice(0, after.length - cur.tail.length));
+  if (bad) return { error: bad };
+  const req = { before: d.html, after, edits: changes.map((c) => ({ change: c })), via: "ai_rewrite" };
+  try {
+    await setDescription(productId, after);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await supabase.from("shopify_change_log").insert({ actor: viewer.userId, shopify_product_id: productId, shopify_product_title: d.title, action: "update_description", request: req as unknown as Json, ok: false, error: msg.slice(0, 2000) });
+    return { error: msg };
+  }
+  const { error } = await supabase
+    .from("shopify_change_log")
+    .insert({ actor: viewer.userId, shopify_product_id: productId, shopify_product_title: d.title, action: "update_description", request: req as unknown as Json, ok: true });
+  revalidatePath(PATH);
+  if (error) return { error: `Saved on Shopify, but the old version could not be kept for undo: ${error.message}` };
+  return { error: null };
 }

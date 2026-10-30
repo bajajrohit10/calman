@@ -91,3 +91,59 @@ export function sectionOf(html: string): Map<number, string> {
   });
   return out;
 }
+
+/**
+ * The Product Info part of a description: from the start up to the second tab
+ * heading (usually "System"). Attempts and recordings live here; System, Demo
+ * and About the Faculty are left alone.
+ */
+export function splitInfo(html: string): { head: string; info: string; tail: string } {
+  const hs = [...html.matchAll(/<h5\b/gi)].map((m) => m.index!);
+  if (hs.length < 2) return { head: "", info: html, tail: "" };
+  // Keep a comment that labels the next tab (<!-- SYSTEM REQUIREMENTS -->) with that tab.
+  let end = hs[1];
+  const before = html.slice(0, end);
+  const c = before.match(/<!--[^>]*-->\s*$/);
+  if (c) end -= c[0].length;
+  return { head: "", info: html.slice(0, end), tail: html.slice(end) };
+}
+
+const tagNames = (html: string) => new Set([...html.matchAll(/<\s*([a-z][a-z0-9]*)/gi)].map((m) => m[1].toLowerCase()));
+
+/** Checks an AI-rewritten section stays in the same format: no new kinds of tags, no scripts, sensible size. */
+export function checkRewrite(oldHtml: string, newHtml: string): string | null {
+  if (!newHtml.trim()) return "The rewrite came back empty.";
+  if (/<\s*(script|style|iframe|object|embed|form|input)\b/i.test(newHtml) && !/<\s*(script|style|iframe|object|embed|form|input)\b/i.test(oldHtml)) return "The rewrite added scripts or embeds.";
+  if (/\son[a-z]+\s*=/i.test(newHtml) || /javascript:/i.test(newHtml)) return "The rewrite added script attributes.";
+  const oldT = tagNames(oldHtml);
+  const extra = [...tagNames(newHtml)].filter((t) => !oldT.has(t));
+  if (extra.length) return `The rewrite used tags the description doesn't (${extra.join(", ")}).`;
+  const r = newHtml.length / Math.max(1, oldHtml.length);
+  if (r < 0.4 || r > 1.8) return "The rewrite changed the size of the description too much.";
+  return null;
+}
+
+/** Lines removed / added between two versions (text pieces, in order), for a quick review. */
+export function changedLines(oldHtml: string, newHtml: string): { removed: string[]; added: string[] } {
+  const a = segments(oldHtml).map((s) => decode(s.text).replace(/\s+/g, " ").trim()).filter(Boolean);
+  const b = segments(newHtml).map((s) => decode(s.text).replace(/\s+/g, " ").trim()).filter(Boolean);
+  // LCS on lines.
+  const n = a.length;
+  const m = b.length;
+  const L: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const removed: string[] = [];
+  const added: string[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) {
+      i++;
+      j++;
+    } else if (L[i + 1][j] >= L[i][j + 1]) removed.push(a[i++]);
+    else added.push(b[j++]);
+  }
+  while (i < n) removed.push(a[i++]);
+  while (j < m) added.push(b[j++]);
+  return { removed, added };
+}

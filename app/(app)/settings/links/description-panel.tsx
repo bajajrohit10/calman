@@ -5,7 +5,16 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { Button, ErrorNote, Textarea, cx } from "@/components/ui";
 import { applyEdits, encode, pieces } from "@/lib/price-check/description";
 
-import { descriptionVersion, draftDescription, revertDescription, saveDescription, type DescDraft } from "./description-actions";
+import {
+  descriptionVersion,
+  draftDescription,
+  revertDescription,
+  rewriteDescription,
+  saveDescription,
+  saveRewrite,
+  type DescDraft,
+  type Rewrite,
+} from "./description-actions";
 
 /**
  * "Description" panel on a Links product card: bring the attempt / batch-recording
@@ -23,15 +32,33 @@ export function DescriptionPanel({ productId, onClose }: { productId: number; on
   const [confirm, setConfirm] = useState(false);
   const [undo, setUndo] = useState<{ id: string; changedSince: boolean } | null>(null);
   const [old, setOld] = useState<{ id: string; html: string } | null>(null);
+  const [rw, setRw] = useState<Rewrite | null>(null);
+  const [rwBusy, setRwBusy] = useState(false);
+  const [rwConfirm, setRwConfirm] = useState(false);
 
-  function load(ai: boolean) {
+  async function rewrite() {
+    setRwBusy(true);
+    setRw(null);
+    setRwConfirm(false);
+    const r = await rewriteDescription(productId);
+    setRwBusy(false);
+    if (r.error) setError(r.error);
+    else {
+      setError(null);
+      setRw(r.data!);
+    }
+  }
+
+  /** Read the description (no AI for single lines); on first open, also ask AI for a rewrite. */
+  function load(first: boolean) {
     start(async () => {
-      const r = await draftDescription(productId, ai);
+      const r = await draftDescription(productId, false);
       if (r.error) return setError(r.error);
       setError(null);
       setData(r.data!);
       setText(Object.fromEntries(r.data!.segments.map((s) => [s.i, s.suggestion ?? s.text])));
       setUse(Object.fromEntries(r.data!.segments.map((s) => [s.i, s.suggestion != null])));
+      if (first && r.data!.aiAvailable) await rewrite();
     });
   }
   useEffect(() => load(true), [productId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -71,11 +98,11 @@ export function DescriptionPanel({ productId, onClose }: { productId: number; on
         <span className="text-[11.5px] text-ink-3">Only attempt and batch-recording text changes; the layout stays as it is.</span>
         <div className="ml-auto flex items-center gap-1">
           {data.aiAvailable ? (
-            <Button size="sm" variant="secondary" disabled={pending} onClick={() => (setConfirm(false), load(true))} title="Read the description again and ask AI for fresh suggestions">
-              {pending ? "Checking…" : "✨ Suggest again"}
+            <Button size="sm" variant="secondary" disabled={pending || rwBusy} onClick={() => start(rewrite)} title="Ask AI to update the attempts and batch recordings in Product Info">
+              {rwBusy ? "AI is updating…" : rw ? "✨ Try again" : "✨ Update with AI"}
             </Button>
           ) : null}
-          <Button size="sm" variant="ghost" disabled={pending} onClick={() => (setConfirm(false), load(false))}>
+          <Button size="sm" variant="ghost" disabled={pending} onClick={() => (setConfirm(false), setRw(null), load(false))}>
             ↻ Check again
           </Button>
           <Button size="sm" variant="ghost" onClick={onClose}>
@@ -88,17 +115,115 @@ export function DescriptionPanel({ productId, onClose }: { productId: number; on
       {ok ? <div className="rounded-md border border-ok/35 bg-ok-soft px-3 py-2 text-[12.5px] text-ok">{ok}</div> : null}
       {!data.aiAvailable ? (
         <div className="rounded-md border border-warn/40 px-3 py-2 text-warn">
-          AI suggestions are off (ANTHROPIC_API_KEY isn&apos;t set in Vercel). The attempt and recording lines are listed below to edit by hand.
+          AI is not switched on yet, so Calman can&apos;t rewrite the description by itself. Add ANTHROPIC_API_KEY in Vercel → calman → Settings →
+          Environment Variables and redeploy. Until then the attempt and recording lines are listed below to edit by hand.
         </div>
       ) : null}
       {data.aiError ? <ErrorNote>AI suggestions failed: {data.aiError}. Edit the lines by hand, or try again.</ErrorNote> : null}
       {data.aiNote ? <div className="rounded-md border border-warn/40 px-3 py-2 text-warn">AI note: {data.aiNote}</div> : null}
+
+      {rwBusy ? (
+        <div className="rounded-md border border-accent/40 bg-surface px-3 py-2 text-ink-2">
+          ✨ AI is reading the description and the listing&apos;s variants and updating the attempts and batch recordings… (about 20–60 seconds)
+        </div>
+      ) : null}
+      {rw ? (
+        <div className="flex flex-col gap-2 rounded-md border border-accent/40 bg-surface p-3">
+          <div className="font-semibold text-ink">AI&apos;s update of Product Info — check it before saving</div>
+          {rw.changes.length ? (
+            <ul className="list-disc pl-5 text-ink-2">
+              {rw.changes.map((c, k) => (
+                <li key={k}>{c}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-ink-3">AI found nothing to change.</p>
+          )}
+          {rw.note ? <div className="rounded border border-warn/40 px-2 py-1 text-warn">Check: {rw.note}</div> : null}
+          {rw.removed.length || rw.added.length ? (
+            <details open className="text-[11.5px]">
+              <summary className="cursor-pointer text-ink-3">Exact text changes</summary>
+              <div className="mt-1 grid gap-2 md:grid-cols-2">
+                <div>
+                  <div className="font-semibold text-danger">Removed</div>
+                  {rw.removed.map((l, k) => (
+                    <div key={k} className="text-danger line-through">
+                      {l}
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <div className="font-semibold text-ok">Added</div>
+                  {rw.added.map((l, k) => (
+                    <div key={k} className="text-ok">
+                      {l}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </details>
+          ) : null}
+          <div className="grid gap-2 md:grid-cols-2">
+            <div>
+              <div className="mb-1 text-ink-3">Now on zeroinfy.in</div>
+              <DescFrame html={rw.before} />
+            </div>
+            <div>
+              <div className="mb-1 text-ink-3">After the update</div>
+              <DescFrame html={rw.after} />
+            </div>
+          </div>
+          {data.canWrite && rw.removed.length + rw.added.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {rwConfirm ? (
+                <>
+                  <span className="text-ink-2">Replace the live description on zeroinfy.in with this? (Undo is below.)</span>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    disabled={pending}
+                    onClick={() =>
+                      start(async () => {
+                        const r = await saveRewrite(productId, rw.hash, rw.after, rw.changes);
+                        setRwConfirm(false);
+                        if (r.error) setError(r.error);
+                        else {
+                          setRw(null);
+                          setOk("Description updated on Shopify. Check it on zeroinfy.in — Undo is below if it's not right.");
+                          load(false);
+                        }
+                      })
+                    }
+                  >
+                    {pending ? "Saving…" : "Yes, update Shopify"}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setRwConfirm(false)}>
+                    No
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button size="sm" variant="primary" disabled={pending} onClick={() => setRwConfirm(true)}>
+                    Save this description
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setRw(null)}>
+                    Discard
+                  </Button>
+                </>
+              )}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <details className="text-ink-3">
         <summary className="cursor-pointer">What the listing sells now (the description is checked against this)</summary>
         <pre className="mt-1 whitespace-pre-wrap font-sans text-[11.5px]">{data.facts}</pre>
       </details>
 
+      <details open={!data.aiAvailable} className="flex flex-col gap-2">
+      <summary className="cursor-pointer text-ink-2">{data.aiAvailable ? "Or edit the lines by hand" : "Edit the lines by hand"}</summary>
+      <div className="mt-2 flex flex-col gap-3">
       {data.segments.length ? (
         [...bySection.entries()].map(([sec, segs]) => (
           <div key={sec} className="flex flex-col gap-1">
@@ -181,6 +306,8 @@ export function DescriptionPanel({ productId, onClose }: { productId: number; on
       ) : (
         <span className="text-ink-3">A super admin can save these changes.</span>
       )}
+      </div>
+      </details>
 
       {data.history.length ? (
         <div className="flex flex-col gap-1 border-t border-line pt-2">
