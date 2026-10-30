@@ -231,3 +231,22 @@ export async function deleteOption(productId: number, optionId: string): Promise
   );
   if (data.productOptionsDelete.userErrors.length) throw new Error(`Shopify: ${errText(data.productOptionsDelete.userErrors)}`);
 }
+
+/** A listing's description (HTML), as it is on Shopify now. */
+export async function getDescription(productId: number): Promise<{ title: string; handle: string; html: string }> {
+  const data: { product: { title: string; handle: string; descriptionHtml: string } | null } = await adminQuery(
+    `query D($id: ID!) { product(id: $id) { title handle descriptionHtml } }`,
+    { id: gid(productId) },
+  );
+  if (!data.product) throw new Error("That product is no longer on Shopify.");
+  return { title: data.product.title, handle: data.product.handle, html: data.product.descriptionHtml ?? "" };
+}
+
+/** Replace a listing's description. */
+export async function setDescription(productId: number, html: string): Promise<void> {
+  const data: { productUpdate: { userErrors: UserError[] } } = await adminQuery(
+    `mutation S($p: ProductUpdateInput!) { productUpdate(product: $p) { userErrors { field message } } }`,
+    { p: { id: gid(productId), descriptionHtml: html } },
+  );
+  if (data.productUpdate.userErrors.length) throw new Error(`Shopify: ${errText(data.productUpdate.userErrors)}`);
+}
