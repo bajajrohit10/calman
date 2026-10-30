@@ -13,7 +13,6 @@ import {
   setVariantStatus,
 } from "./actions";
 import { importPlan } from "./todo-actions";
-import { DescriptionPanel } from "./description-panel";
 import { Workbench } from "./workbench";
 
 export type LinkRow = {
@@ -213,7 +212,6 @@ function ProductCard({
   const [rejecting, setRejecting] = useState(false);
   const [why, setWhy] = useState("");
   const [bench, setBench] = useState(false);
-  const [desc, setDesc] = useState(false);
   const reasons = [...new Set(group.rows.map((r) => r.reason).filter(Boolean))] as string[];
   const notes = [...new Set(group.rows.map((r) => r.review_note).filter(Boolean))] as string[];
   const targets = [...new Set(group.rows.map((r) => r.vendor_product_title ?? r.vendor_product_slug).filter(Boolean))];
@@ -240,9 +238,6 @@ function ProductCard({
         <div className="ml-auto flex items-center gap-1">
           <Button size="sm" variant={bench ? "primary" : "ghost"} onClick={() => setBench((b) => !b)}>
             Batches &amp; options
-          </Button>
-          <Button size="sm" variant={desc ? "primary" : "ghost"} onClick={() => setDesc((b) => !b)} title="Update attempt / batch-recording text in the description">
-            Description
           </Button>
           {status === "suggested" ? (
             rejecting ? (
@@ -303,7 +298,6 @@ function ProductCard({
       ))}
 
       {bench ? <Workbench productId={group.pid} onClose={() => setBench(false)} /> : null}
-      {desc ? <DescriptionPanel productId={group.pid} onClose={() => setDesc(false)} /> : null}
 
       <table className="w-full text-[12px]">
         <thead>

@@ -9,7 +9,6 @@ import type { MissingGroup, PriceFix, Todo, TodoListing } from "@/lib/price-chec
 import { finishRefresh, ignoreGap, refreshVendorOptions, vendorProductsToRefresh } from "./gap-actions";
 import { answerAttempt, confirmListing, dismissChoices, fixPrices, ignoreOptions, refreshListing, refreshShopify, setKeepPrice, shopifyProductsToRefresh, type PriceFixIn } from "./todo-actions";
 import { CausesView } from "./causes-view";
-import { DescriptionPanel } from "./description-panel";
 import { Workbench } from "./workbench";
 import { addAttemptAuto, linkPastedProduct, removeVariants, retargetLink } from "./workbench-actions";
 
@@ -231,7 +230,6 @@ function ListingCard({
   act: (fn: () => Promise<{ error: string | null; count?: number }>, done: (n: number) => string) => void;
 }) {
   const [bench, setBench] = useState<null | { slug: string; variantId: string } | "open">(null);
-  const [desc, setDesc] = useState(false);
   return (
     <section className={cx(CARD, "flex flex-col gap-2 p-3 text-[12px]")}>
       <div className="flex flex-wrap items-center gap-2">
@@ -254,9 +252,6 @@ function ListingCard({
         </Button>
         <Button size="sm" variant={bench ? "primary" : "ghost"} onClick={() => setBench(bench ? null : "open")}>
           Batches &amp; options
-        </Button>
-        <Button size="sm" variant={desc ? "primary" : "ghost"} onClick={() => setDesc(!desc)} title="Update attempt / batch-recording text in the description">
-          Description
         </Button>
       </div>
 
@@ -502,7 +497,6 @@ function ListingCard({
         </Block>
       ) : null}
 
-      {desc ? <DescriptionPanel productId={l.pid} onClose={() => setDesc(false)} /> : null}
       {bench ? (
         <Workbench key={bench === "open" ? "open" : `${bench.slug}|${bench.variantId}`} productId={l.pid} focus={bench === "open" ? undefined : bench} onClose={() => setBench(null)} />
       ) : null}
