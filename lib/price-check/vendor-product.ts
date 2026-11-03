@@ -58,9 +58,9 @@ export async function readVendorProduct(site: OptionSite, slug: string): Promise
       slug,
       title: r.title,
       variants: r.variants.map((v) => ({
-        id: vsmartId(v.label),
-        title: v.label,
-        options: vsmartOptions(v.label),
+        id: v.id ? `vs_${v.id}` : vsmartId(v.label),
+        title: v.parts?.length ? v.parts.join(", ") : v.label,
+        options: v.parts?.length ? v.parts : vsmartOptions(v.label),
         price: v.price,
         mrp: v.mrp,
         status: "active",

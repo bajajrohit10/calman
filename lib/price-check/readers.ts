@@ -41,6 +41,10 @@ export type SiteForRead = {
 };
 
 export type VariantPrice = {
+  /** The site's own id for the option, when it has one (Vsmart). */
+  id?: string;
+  /** The option's parts, "Group: Value", when the site gives them (Vsmart). */
+  parts?: string[];
   label: string;
   /** What the vendor charges, in rupees, on the site's price basis. */
   price: number;
@@ -200,7 +204,7 @@ type VsmartLoader = {
   product?: {
     title: string;
     priceWithTax: number;
-    variantProperties?: { name: string; priceWithTax: number; stockLevel?: string }[];
+    variantProperties?: { id?: string; name: string; priceWithTax: number; stockLevel?: string; options?: { name: string; group?: { name: string } }[] }[];
     offers?: { code?: string; discountType?: string; discountAmount?: number }[] | null;
   };
 };
@@ -241,21 +245,30 @@ async function readVsmart(site: SiteForRead, url: URL): Promise<ReadResult> {
   }
 
   const raw = p.variantProperties?.length
-    ? p.variantProperties.map((v) => ({ label: v.name, paise: v.priceWithTax }))
-    : [{ label: "Default", paise: p.priceWithTax }];
+    ? p.variantProperties
+        .filter((v) => v.stockLevel !== "OUT_OF_STOCK")
+        .map((v) => ({
+          id: v.id,
+          parts: (v.options ?? []).map((o) => (o.group?.name ? `${o.group.name}: ${o.name}` : o.name)),
+          label: v.name,
+          paise: v.priceWithTax,
+        }))
+    : [{ id: undefined, parts: [] as string[], label: "Default", paise: p.priceWithTax }];
 
-  const variants: VariantPrice[] = raw.map(({ label, paise }) => {
+  const variants: VariantPrice[] = raw.map(({ id, parts, label, paise }) => {
     const listed = paise / 100;
     if (site.price_basis === "after_auto_coupon") {
       const shown = listed - VSMART_DISPLAY_OFFSET - coupon;
       return {
+        id,
+        parts,
         label,
         price: shown,
         mrp: listed,
         derivation: `₹${listed} − ₹${VSMART_DISPLAY_OFFSET}${coupon ? ` − ₹${coupon} auto coupon (${fixedOffers.map((o) => o.code).join(", ")})` : ""}`,
       };
     }
-    return { label, price: listed, mrp: null, derivation: "stored price, no coupon applied" };
+    return { id, parts, label, price: listed, mrp: null, derivation: "stored price, no coupon applied" };
   });
 
   return { ok: true, title: p.title, variants, notes };
