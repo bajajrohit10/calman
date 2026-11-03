@@ -195,8 +195,8 @@ export function Workbench({
           });
         }}
       >
-        <span className="text-ink-2">Right BB product not in the list?</span>
-        <Input className="h-[26px] w-[420px] max-w-full" value={paste} placeholder="Paste the BB product link (https://www.bbvirtuals.com/product/…)" onChange={(e) => setPaste(e.target.value)} />
+        <span className="text-ink-2">Right vendor product not in the list?</span>
+        <Input className="h-[26px] w-[420px] max-w-full" value={paste} placeholder="Paste the vendor product link (bbvirtuals.com/product/… or vsmartacademy.com/courses2/product/…)" onChange={(e) => setPaste(e.target.value)} />
         <Button size="sm" variant="secondary" type="submit" disabled={pending || !paste.trim()}>
           Use this product
         </Button>

@@ -129,6 +129,8 @@ export type NewVariant = {
 export async function createVariants(
   productId: number,
   vs: NewVariant[],
+  /** Option name → Shopify option id, for names Shopify may not match by text (e.g. a trailing space). */
+  optionIds?: Record<string, string>,
 ): Promise<{ id: number; title: string; selected: Record<string, string> }[]> {
   const data: {
     productVariantsBulkCreate: {
@@ -145,7 +147,7 @@ export async function createVariants(
     {
       id: gid(productId),
       variants: vs.map((v) => ({
-        optionValues: Object.entries(v.options).map(([optionName, name]) => ({ optionName, name })),
+        optionValues: Object.entries(v.options).map(([optionName, name]) => (optionIds?.[optionName] ? { optionId: optionIds[optionName], name } : { optionName, name })),
         price: v.price.toFixed(2),
         compareAtPrice: v.compareAtPrice == null ? null : v.compareAtPrice.toFixed(2),
         inventoryPolicy: v.inventoryPolicy,

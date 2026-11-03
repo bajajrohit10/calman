@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { isAdmin, requireUser } from "@/lib/auth";
 import { getProductForEdit, updatePrices } from "@/lib/price-check/shopify-edit";
 import { syncLinksWithShopify } from "@/lib/price-check/sync-links";
-import { readEdportalProduct } from "@/lib/price-check/edportal";
+import { canListOptions, readVendorProduct } from "@/lib/price-check/vendor-product";
 import { storeVendorOptions } from "@/lib/price-check/vendor-options";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
@@ -69,9 +69,9 @@ export async function refreshListing(pid: number): Promise<{ error: string | nul
   const [{ data: links }, { data: sibs }, { data: sites }] = await Promise.all([
     supabase.from("vendor_variant_links").select("vendor_site_id, vendor_product_slug, vendor_product_title").eq("shopify_product_id", pid).not("vendor_product_slug", "is", null),
     supabase.from("listing_vendor_products").select("vendor_site_id, product_slug, product_title").eq("shopify_product_id", pid),
-    supabase.from("vendor_sites").select("id, website_url, read_method"),
+    supabase.from("vendor_sites").select("id, website_url, read_method, platform_key, price_basis"),
   ]);
-  const url = new Map((sites ?? []).filter((s) => s.read_method === "edportal_feed").map((s) => [s.id, s.website_url]));
+  const url = new Map((sites ?? []).filter(canListOptions).map((s) => [s.id, s]));
   const seen = new Map<string, { siteId: string; slug: string; title: string | null }>();
   for (const l of links ?? []) seen.set(`${l.vendor_site_id}|${l.vendor_product_slug}`, { siteId: l.vendor_site_id, slug: l.vendor_product_slug!, title: l.vendor_product_title });
   for (const x of sibs ?? []) seen.set(`${x.vendor_site_id}|${x.product_slug}`, { siteId: x.vendor_site_id, slug: x.product_slug, title: x.product_title });
@@ -81,7 +81,7 @@ export async function refreshListing(pid: number): Promise<{ error: string | nul
     [...seen.values()].map(async (it) => {
       const base = url.get(it.siteId);
       if (!base) return;
-      const v = await readEdportalProduct(new URL(base).origin, it.slug);
+      const v = await readVendorProduct(base, it.slug);
       if (!v.ok) {
         if (/HTTP 404|No variant data/.test(v.reason)) await storeVendorOptions(supabase, it.siteId, it.slug, it.title, []);
         failed.push(`${it.title ?? it.slug}: ${v.reason}`);

@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 
 import { isAdmin, requireUser } from "@/lib/auth";
-import { readEdportalProduct, type EdportalVariant } from "@/lib/price-check/edportal";
+import type { EdportalVariant } from "@/lib/price-check/edportal";
+import { canListOptions, readVendorProduct, slugFromLink } from "@/lib/price-check/vendor-product";
 import {
   addOption,
   createVariants,
@@ -101,7 +102,7 @@ export async function loadWorkbench(productId: number): Promise<{ error: string 
   const siteIds = [...new Set([...(links ?? []).map((l) => l.vendor_site_id), ...(sibs ?? []).map((x) => x.vendor_site_id)])];
   const { data: sites } = await supabase
     .from("vendor_sites")
-    .select("id, name, website_url, read_method, instructions")
+    .select("id, name, website_url, read_method, platform_key, price_basis, instructions")
     .in("id", siteIds.length ? siteIds : ["00000000-0000-0000-0000-000000000000"]);
   const siteById = new Map((sites ?? []).map((s) => [s.id, s]));
 
@@ -121,11 +122,11 @@ export async function loadWorkbench(productId: number): Promise<{ error: string 
     const site = siteById.get(v.siteId);
     if (!site) continue;
     const base = { slug: v.slug, title: v.title, attempts: v.attempts, sibling: v.sibling, siteId: v.siteId, siteName: site.name, siteUrl: site.website_url };
-    if (site.read_method !== "edportal_feed") {
-      vendors.push({ ...base, variants: [], error: "Batch options can only be read for course-platform sites so far." });
+    if (!canListOptions(site)) {
+      vendors.push({ ...base, variants: [], error: "Batch options can only be read for course-platform sites and Vsmart so far." });
       continue;
     }
-    const r = await readEdportalProduct(new URL(site.website_url).origin, v.slug);
+    const r = await readVendorProduct(site, v.slug);
     // Keep the "Missing on Zeroinfy" snapshot in step with what the panel shows.
     if (r.ok) await storeVendorOptions(supabase, v.siteId, v.slug, v.title, r.variants);
     vendors.push({ ...base, variants: r.ok ? r.variants : [], error: r.ok ? null : r.reason });
@@ -364,12 +365,9 @@ export async function addVendorProductByUrl(productId: number, link: string): Pr
   } catch {
     return { error: "That isn't a link. Copy the product page address from bbvirtuals.com." };
   }
-  const m = u.pathname.match(/\/product\/([^/?#]+)/);
-  if (!m) return { error: "That isn't a product page (the address should contain /product/…)." };
-  const slug = decodeURIComponent(m[1]);
   const host = u.hostname.replace(/^www\./, "");
   const supabase = await createClient();
-  const { data: sites } = await supabase.from("vendor_sites").select("id, name, website_url, read_method");
+  const { data: sites } = await supabase.from("vendor_sites").select("id, name, website_url, read_method, platform_key, price_basis");
   const site = (sites ?? []).find((s) => {
     try {
       return new URL(s.website_url).hostname.replace(/^www\./, "") === host;
@@ -378,10 +376,12 @@ export async function addVendorProductByUrl(productId: number, link: string): Pr
     }
   });
   if (!site) return { error: `${host} isn't one of the vendor sites in Settings → Vendors.` };
-  if (site.read_method !== "edportal_feed") return { error: `Options can't be read from ${site.name} yet.` };
-  const r = await readEdportalProduct(new URL(site.website_url).origin, slug);
+  if (!canListOptions(site)) return { error: `Options can't be read from ${site.name} yet.` };
+  const slug = slugFromLink(site, u);
+  if (!slug) return { error: "That isn't a product page (the address should contain /product/…)." };
+  const r = await readVendorProduct(site, slug);
   if (!r.ok) return { error: `Couldn't read that page: ${r.reason}` };
-  const title = r.title?.replace(/\s*[|–-]\s*BB Virtuals.*$/i, "") ?? slug;
+  const title = r.title?.replace(/\s*[|–-]\s*(BB Virtuals|Vsmart Academy).*$/i, "") ?? slug;
   await storeVendorOptions(supabase, site.id, slug, title, r.variants);
   const { error } = await supabase
     .from("listing_vendor_products")
@@ -756,6 +756,8 @@ export async function addVariantsFromVendor(plan: ZAddPlan): Promise<{ error: st
   let created: { id: number; title: string; selected: Record<string, string> }[];
   try {
     for (const n of newOpts) await addOption(plan.productId, n.name, n.currentValue, n.position);
+    // Existing options by id: a name with a stray space ("Audit ") isn't found by name.
+    const ids = Object.fromEntries(product.options.map((o) => [o.name, o.id]));
     created = await createVariants(
       plan.productId,
       rows.map((r) => {
@@ -770,6 +772,7 @@ export async function addVariantsFromVendor(plan: ZAddPlan): Promise<{ error: st
           requiresShipping: s.requiresShipping,
         };
       }),
+      ids,
     );
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

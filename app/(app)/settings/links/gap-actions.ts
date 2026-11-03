@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { isAdmin, requireUser } from "@/lib/auth";
-import { readEdportalProduct } from "@/lib/price-check/edportal";
+import { canListOptions, readVendorProduct } from "@/lib/price-check/vendor-product";
 import { storeVendorOptions } from "@/lib/price-check/vendor-options";
 import { createClient } from "@/lib/supabase/server";
 
@@ -26,7 +26,7 @@ export async function vendorProductsToRefresh(): Promise<{ error: string | null;
   if (!(await gate())) return { error: DENIED };
   const supabase = await createClient();
   const { data: sites } = await supabase.from("vendor_sites").select("id, read_method");
-  const readable = new Set((sites ?? []).filter((s) => s.read_method === "edportal_feed").map((s) => s.id));
+  const readable = new Set((sites ?? []).filter(canListOptions).map((s) => s.id));
   const seen = new Map<string, { siteId: string; slug: string; title: string | null }>();
   for (let from = 0; ; from += 1000) {
     const { data, error } = await supabase
@@ -60,14 +60,14 @@ export async function refreshVendorOptions(
   if (!(await gate())) return { error: DENIED };
   if (items.length > 10) return { error: "At most 10 per call." };
   const supabase = await createClient();
-  const { data: sites } = await supabase.from("vendor_sites").select("id, website_url, read_method");
-  const url = new Map((sites ?? []).filter((s) => s.read_method === "edportal_feed").map((s) => [s.id, s.website_url]));
+  const { data: sites } = await supabase.from("vendor_sites").select("id, website_url, read_method, platform_key, price_basis");
+  const url = new Map((sites ?? []).filter(canListOptions).map((s) => [s.id, s]));
   const failed: string[] = [];
   let count = 0;
   for (const it of items) {
     const base = url.get(it.siteId);
     if (!base) continue;
-    const r = await readEdportalProduct(new URL(base).origin, it.slug);
+    const r = await readVendorProduct(base, it.slug);
     if (!r.ok) {
       // A product page that has disappeared: every option of it is gone.
       if (/HTTP 404|No variant data/.test(r.reason)) await storeVendorOptions(supabase, it.siteId, it.slug, it.title, []);
