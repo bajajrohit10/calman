@@ -17,7 +17,8 @@ import { removeVariants } from "./workbench-actions";
 
 const rupees = (n: number | null | undefined) => (n == null ? "—" : `₹${n.toLocaleString("en-IN")}`);
 
-export function CausesView({ todo, canWrite }: { todo: Todo; canWrite: boolean }) {
+export function CausesView({ todo, canWrite, vendor = "BB" }: { todo: Todo; canWrite: boolean; vendor?: string }) {
+  const V = vendor;
   const router = useRouter();
   const [pending, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
@@ -55,7 +56,7 @@ export function CausesView({ todo, canWrite }: { todo: Todo; canWrite: boolean }
       {c.optionTypes.map((t) => (
         <Row key={t.key}>
           <div className="text-ink">
-            BB sells <b>{t.count}</b> “{t.label}” option{t.count === 1 ? "" : "s"} you don&apos;t have, on {t.listings.length} listing{t.listings.length === 1 ? "" : "s"}.{" "}
+            {V} sells <b>{t.count}</b> “{t.label}” option{t.count === 1 ? "" : "s"} you don&apos;t have, on {t.listings.length} listing{t.listings.length === 1 ? "" : "s"}.{" "}
             <b>Does Zeroinfy sell {t.label.replace(/ \(.*\)$/, "")}?</b>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -152,7 +153,7 @@ export function CausesView({ todo, canWrite }: { todo: Todo; canWrite: boolean }
             >
               Yes — confirm all {g.listings.length}
             </Button>
-            <span className="text-ink-3">If not, open them one by one under “4. Confirm BB match”.</span>
+            <span className="text-ink-3">If not, open them one by one under “4. Confirm {V} match”.</span>
             <Preview open={open} setOpen={setOpen} id={`c-${g.reason}`}>
               {g.listings.map((l) => (
                 <div key={l.pid} className="py-0.5">
@@ -167,7 +168,7 @@ export function CausesView({ todo, canWrite }: { todo: Todo; canWrite: boolean }
       {c.priceDown.count ? (
         <Row>
           <div className="text-ink">
-            BB is now <b>cheaper</b> than Zeroinfy on <b>{c.priceDown.count}</b> variants ({c.priceDown.listings.length} listings). <b>Lower ours to BB&apos;s price?</b>
+            {V} is now <b>cheaper</b> than Zeroinfy on <b>{c.priceDown.count}</b> variants ({c.priceDown.listings.length} listings). <b>Lower ours to {V}&apos;s price?</b>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {canWrite ? (
@@ -183,14 +184,14 @@ export function CausesView({ todo, canWrite }: { todo: Todo; canWrite: boolean }
                     const r = await fixPrices(items);
                     if (r.error) return r;
                     return setRule("price_down", "all", "follow_bb", "");
-                  }, `Lowered ${c.priceDown.count} prices to BB's.`)
+                  }, `Lowered ${c.priceDown.count} prices to ${V}'s.`)
                 }
               >
                 Yes — lower them all
               </Button>
             ) : null}
-            <Button size="sm" variant="ghost" disabled={pending} onClick={() => run(() => setRule("price_down", "all", "keep_ours", ""), "Rule saved: when BB is cheaper, Zeroinfy keeps its price.")}>
-              No — keep ours when BB is cheaper
+            <Button size="sm" variant="ghost" disabled={pending} onClick={() => run(() => setRule("price_down", "all", "keep_ours", ""), `Rule saved: when ${V} is cheaper, Zeroinfy keeps its price.`)}>
+              No — keep ours when {V} is cheaper
             </Button>
             <Preview open={open} setOpen={setOpen} id="down">
               {c.priceDown.listings.map((l) => (
@@ -212,7 +213,7 @@ export function CausesView({ todo, canWrite }: { todo: Todo; canWrite: boolean }
                 <tr key={r.id} className="border-b border-line last:border-0">
                   <td className="py-1 pr-2">{r.label}</td>
                   <td className="py-1 pr-2 font-semibold">
-                    {r.answer === "never_sell" ? "Never sell — hidden" : r.answer === "sell" ? "We sell these" : r.answer === "keep_ours" ? "Keep ours" : "Follow BB"}
+                    {r.answer === "never_sell" ? "Never sell — hidden" : r.answer === "sell" ? "We sell these" : r.answer === "keep_ours" ? "Keep ours" : `Follow ${V}`}
                   </td>
                   <td className="py-1 pr-2 text-ink-3">{r.settles ? `settles ${r.settles} now` : ""}</td>
                   <td className="py-1 pr-2 text-ink-3">{new Date(r.decidedAt).toLocaleDateString("en-IN", { dateStyle: "medium" })}</td>

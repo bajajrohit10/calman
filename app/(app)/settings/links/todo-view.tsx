@@ -136,7 +136,7 @@ export function TodoView({ todo, canWrite, vendor = "BB", vendorSite = "bbvirtua
       {note ? <ErrorNote>{note}</ErrorNote> : null}
       {ok ? <div className="rounded-md border border-ok/35 bg-ok-soft px-3 py-2 text-[12.5px] text-ok">{ok}</div> : null}
 
-      <CausesView todo={todo} canWrite={canWrite} />
+      <CausesView todo={todo} canWrite={canWrite} vendor={V} />
 
       <div className={cx(CARD, "flex flex-col gap-2 p-3")}>
         <div className="flex flex-wrap items-center gap-1">
