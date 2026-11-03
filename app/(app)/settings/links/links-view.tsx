@@ -1,5 +1,6 @@
 "use client";
 
+import { productUrl } from "@/lib/price-check/vendor-groups";
 import { useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
@@ -317,7 +318,7 @@ function ProductCard({
                 <td className={cx(CELL, "max-w-[320px]")}>{r.shopify_variant_title ?? "Default"}</td>
                 <td className={cx(CELL, "max-w-[340px]")}>
                   {r.vendor_product_slug && site ? (
-                    <a href={`${site}/product/${r.vendor_product_slug}`} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+                    <a href={productUrl(site, r.vendor_product_slug)} target="_blank" rel="noreferrer" className="text-accent hover:underline">
                       {r.vendor_product_title ?? r.vendor_product_slug}
                     </a>
                   ) : (

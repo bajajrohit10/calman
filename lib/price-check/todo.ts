@@ -5,6 +5,7 @@ import { OPTION_TYPES, optionType } from "@/lib/price-check/option-types";
 import { planAttempt, type AttemptPlan } from "@/lib/price-check/attempt-plan";
 import { attemptHasPassed, covers, fmtDates, vendorBatchDates, vendorBooks, withoutBooksPart, ziBatchDates, ziBooks } from "@/lib/price-check/batch-dates";
 import { expectedZeroinfyPrice, priceOk } from "@/lib/price-check/rules";
+import { productUrl } from "@/lib/price-check/vendor-groups";
 import type { createClient } from "@/lib/supabase/server";
 
 /**
@@ -108,7 +109,8 @@ function rows<T>(supabase: Supa, table: string, cols: string, filter?: (q: any) 
   });
 }
 
-export async function computeTodo(supabase: Supa): Promise<Todo> {
+/** `siteIds`: only these vendor sites (one tab of the Links page); all when omitted. */
+export async function computeTodo(supabase: Supa, siteIds?: string[]): Promise<Todo> {
   const empty = { listings: [], vendorReadAt: null, shopifyReadAt: null, counts: { attempt: 0, confirm: 0, price: 0, missing: 0, past: 0, dropped: 0, batch: 0 }, causes: { optionTypes: [], past: { count: 0, listings: [] }, confirm: [], priceDown: { count: 0, listings: [] } }, rules: [] };
   const [L, O, S, A, D] = await Promise.all([
     rows<Link>(
@@ -124,6 +126,10 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
   ]);
   const err = L.error ?? O.error ?? S.error ?? A.error ?? D.error;
   if (err) return { error: err, ...empty };
+  if (siteIds) {
+    const keep = new Set(siteIds);
+    for (const R of [L, O, S, A, D] as { rows: { vendor_site_id: string }[] }[]) R.rows = R.rows.filter((r) => keep.has(r.vendor_site_id));
+  }
 
   const { data: sites } = await supabase.from("vendor_sites").select("id, name, website_url");
   const { data: ruleRows, error: ruleErr } = await supabase.from("price_check_rules").select("id, kind, key, answer, decided_at");
@@ -208,7 +214,7 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
         if (l.shopify_price == null || !l.vendor_variant_id || l.keep_price) continue;
         const o = opt.get(`${l.vendor_site_id}|${l.vendor_product_slug}|${l.vendor_variant_id}`);
         if (!o || o.state !== "live" || o.price == null || Number(o.price) <= 0) continue;
-        const e = expectedZeroinfyPrice(Number(o.price), l.shopify_product_title);
+        const e = expectedZeroinfyPrice(Number(o.price), l.shopify_product_title, site.get(l.vendor_site_id)?.name);
         if (!priceOk(Number(l.shopify_price), e.price)) {
           if (keepWhenLower && e.price < Number(l.shopify_price)) {
             hit("price_down|all");
@@ -224,7 +230,7 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
             expected: e.price,
             rule: e.rule,
             vendorLabel: o.label,
-            vendorUrl: `${site.get(l.vendor_site_id)?.website_url ?? ""}/product/${l.vendor_product_slug}`,
+            vendorUrl: productUrl(site.get(l.vendor_site_id)?.website_url ?? "", l.vendor_product_slug),
             vendorTitle: l.vendor_product_title,
             confirmed: l.status === "approved",
           });
@@ -238,7 +244,7 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
       const prods = new Map<string, { title: string; url: string }>();
       for (const l of pending) {
         if (!l.vendor_product_slug) continue;
-        prods.set(l.vendor_product_slug, { title: l.vendor_product_title ?? l.vendor_product_slug, url: `${site.get(l.vendor_site_id)?.website_url ?? ""}/product/${l.vendor_product_slug}` });
+        prods.set(l.vendor_product_slug, { title: l.vendor_product_title ?? l.vendor_product_slug, url: productUrl(site.get(l.vendor_site_id)?.website_url ?? "", l.vendor_product_slug) });
       }
       item.confirm = {
         reasons: [...new Set(pending.map((l) => (l.reason ?? "").split("'.").slice(-1)[0].trim()).filter(Boolean))].slice(0, 3),
@@ -277,7 +283,7 @@ export async function computeTodo(supabase: Supa): Promise<Todo> {
             variantId: o.variant_id,
             label: o.label,
             price: o.price == null ? null : Number(o.price),
-            expected: o.price == null ? null : expectedZeroinfyPrice(Number(o.price), first.shopify_product_title).price,
+            expected: o.price == null ? null : expectedZeroinfyPrice(Number(o.price), first.shopify_product_title, site.get(siteId)?.name).price,
           }));
         const auto =
           p.kind === "attempt"

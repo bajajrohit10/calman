@@ -32,7 +32,9 @@ export function facultiesIn(title: string): string[] {
 
 export type Expected = { price: number; rule: string };
 
-export function expectedZeroinfyPrice(vendorPrice: number, zeroinfyTitle: string): Expected {
+export function expectedZeroinfyPrice(vendorPrice: number, zeroinfyTitle: string, vendorName = "BB Virtuals"): Expected {
+  // Vsmart: the price after its automatic coupon, no other rule (decided 22 Oct 2026).
+  if (/vsmart/i.test(vendorName)) return { price: vendorPrice, rule: "Same as Vsmart (after its auto coupon)" };
   if (!OFFER_RULES_ACTIVE) return { price: vendorPrice, rule: "Same as BB" };
   if (vendorPrice <= 4000) return { price: vendorPrice, rule: "₹4,000 or below: same as BB" };
   const f = facultiesIn(zeroinfyTitle);

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { Button, CARD, ErrorNote, Input, cx } from "@/components/ui";
 import type { MissingGroup, PriceFix, Todo, TodoListing } from "@/lib/price-check/todo";
+import { productUrl } from "@/lib/price-check/vendor-groups";
 
 import { finishRefresh, ignoreGap, refreshVendorOptions, vendorProductsToRefresh } from "./gap-actions";
 import { answerAttempt, confirmListing, dismissChoices, fixPrices, ignoreOptions, refreshListing, refreshShopify, setKeepPrice, shopifyProductsToRefresh, type PriceFixIn } from "./todo-actions";
@@ -55,7 +56,13 @@ function has(l: TodoListing, f: Filter) {
 
 const toFix = (l: TodoListing, f: PriceFix): PriceFixIn => ({ pid: l.pid, title: l.title, linkId: f.linkId, variantId: f.variantId, price: f.expected, compareAt: Math.max(f.compareAt ?? 0, f.vendorPrice) });
 
-export function TodoView({ todo, canWrite }: { todo: Todo; canWrite: boolean }) {
+/** The vendor this view is about ("BB", "Vsmart"); set by TodoView for its children. */
+let V = "BB";
+let VSITE = "bbvirtuals.com";
+
+export function TodoView({ todo, canWrite, vendor = "BB", vendorSite = "bbvirtuals.com" }: { todo: Todo; canWrite: boolean; vendor?: string; vendorSite?: string }) {
+  V = vendor;
+  VSITE = vendorSite;
   const router = useRouter();
   const [filter, setFilter] = useState<Filter>("all");
   const [q, setQ] = useState("");
@@ -97,7 +104,7 @@ export function TodoView({ todo, canWrite }: { todo: Todo; canWrite: boolean }) 
     const v = await vendorProductsToRefresh();
     if (v.items) {
       for (let i = 0; i < v.items.length; i += 8) {
-        setBusy(`Reading BB pages… ${Math.min(i + 8, v.items.length)} / ${v.items.length}`);
+        setBusy(`Reading ${V} pages… ${Math.min(i + 8, v.items.length)} / ${v.items.length}`);
         const r = await refreshVendorOptions(v.items.slice(i, i + 8));
         if (r.error) {
           setNote(r.error);
@@ -135,14 +142,14 @@ export function TodoView({ todo, canWrite }: { todo: Todo; canWrite: boolean }) 
         <div className="flex flex-wrap items-center gap-1">
           {FILTERS.map((f) => (
             <Button key={f.key} size="sm" variant={filter === f.key ? "primary" : "secondary"} onClick={() => setFilter(f.key)}>
-              {f.label} ({f.count(todo)})
+              {f.label.replace(/\bBB\b/, V)} ({f.count(todo)})
             </Button>
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-2 text-[12px]">
-          <Input className="h-[26px] w-[260px]" value={q} placeholder={filter === "missing" ? "Search listing or BB option (e.g. pendrive)…" : "Search listing…"} onChange={(e) => setQ(e.target.value)} />
+          <Input className="h-[26px] w-[260px]" value={q} placeholder={filter === "missing" ? `Search listing or ${V} option (e.g. pendrive)…` : "Search listing…"} onChange={(e) => setQ(e.target.value)} />
           <span className="text-ink-3">
-            Zeroinfy prices read {when(todo.shopifyReadAt)} · BB read {when(todo.vendorReadAt)}
+            Zeroinfy prices read {when(todo.shopifyReadAt)} · {V} read {when(todo.vendorReadAt)}
           </span>
           <Button size="sm" variant="secondary" className="ml-auto" disabled={!!busy} onClick={refreshAll}>
             {busy ?? "Refresh everything (~5 min)"}
@@ -209,7 +216,7 @@ export function TodoView({ todo, canWrite }: { todo: Todo; canWrite: boolean }) 
         </div>
       </div>
 
-      <p className="text-[12px] text-ink-3">Work through the filters in number order: settle the BB link and batch first, add or remove variants, fix prices last. {shown.length} listings. Zeroinfy price = BB price (BB&apos;s offer ended 27 Oct).</p>
+      <p className="text-[12px] text-ink-3">Work through the filters in number order: settle the {V} link and batch first, add or remove variants, fix prices last. {shown.length} listings. {V === "BB" ? "Zeroinfy price = BB price (BB’s offer ended 27 Oct)." : `Zeroinfy price = ${V}’s price after its automatic coupon.`}</p>
 
       {shown.map((l) => (
         <ListingCard key={l.pid} l={l} canWrite={canWrite} pending={pending} act={act} />
@@ -245,8 +252,8 @@ function ListingCard({
           variant="ghost"
           className="ml-auto"
           disabled={pending}
-          title="Re-read this listing from Shopify and its BB products from bbvirtuals.com"
-          onClick={() => act(() => refreshListing(l.pid), () => "Refreshed this listing from Shopify and BB.")}
+          title={`Re-read this listing from Shopify and its ${V} products from ${VSITE}`}
+          onClick={() => act(() => refreshListing(l.pid), () => `Refreshed this listing from Shopify and ${V}.`)}
         >
           ↻ Refresh
         </Button>
@@ -256,9 +263,9 @@ function ListingCard({
       </div>
 
       {l.attemptQuestion ? (
-        <Block tone="accent" title="Which BB product do these variants resell?">
+        <Block tone="accent" title={`Which ${V} product do these variants resell?`}>
           <p className="text-ink-3">
-            More than one BB product matches by name (subjects, batch type, teachers, attempt), or the titles disagree. Open them on BB (↗), then pick the one that is the same course. Any BB attempt you don&apos;t sell
+            More than one {V} product matches by name (subjects, batch type, teachers, attempt), or the titles disagree. Open them on {V} (↗), then pick the one that is the same course. Any {V} attempt you don&apos;t sell
             will show up under “Add on Zeroinfy”.
           </p>
           {l.attemptQuestion.map((g, gi) => (
@@ -282,13 +289,13 @@ function ListingCard({
                     >
                       This one
                     </Button>
-                    <a href={`${c.siteUrl}/product/${c.slug}`} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+                    <a href={productUrl(c.siteUrl, c.slug)} target="_blank" rel="noreferrer" className="text-accent hover:underline">
                       {c.productTitle ?? c.slug} ↗
                     </a>
                     <span className="text-ink-3">
-                      {c.attempts} · BB {rupees(c.price)}
+                      {c.attempts} · {V} {rupees(c.price)}
                     </span>
-                    {c.label ? <div className="basis-full pl-[86px] text-[11.5px] text-ink-2">BB batch: {c.label}</div> : null}
+                    {c.label ? <div className="basis-full pl-[86px] text-[11.5px] text-ink-2">{V} batch: {c.label}</div> : null}
                   </div>
                 ))}
                 <PasteLink
@@ -300,7 +307,7 @@ function ListingCard({
                         if (!r.error) setBench("open");
                         return r;
                       },
-                      (n) => `Linked ${n} variants to that BB product. Now pick the matching BB option for each one below.`,
+                      (n) => `Linked ${n} variants to that ${V} product. Now pick the matching ${V} option for each one below.`,
                     )
                   }
                 />
@@ -320,12 +327,12 @@ function ListingCard({
       ) : null}
 
       {l.unlinked.length ? (
-        <Block tone="accent" title={`Not linked to BB yet (${l.unlinked.length})`}>
+        <Block tone="accent" title={`Not linked to ${V} yet (${l.unlinked.length})`}>
           <p className="text-ink-2">
             {l.unlinked.slice(0, 6).map((v) => v.title).join(" · ")}
             {l.unlinked.length > 6 ? " …" : ""}
           </p>
-          <p className="text-ink-3">Pick the BB option each one resells in Batches &amp; options. If BB doesn&apos;t sell it (e.g. without books), choose “Zeroinfy-only option”. If the BB product isn&apos;t listed, paste its link there.</p>
+          <p className="text-ink-3">Pick the {V} option each one resells in Batches &amp; options. If {V} doesn&apos;t sell it (e.g. without books), choose “Zeroinfy-only option”. If the {V} product isn&apos;t listed, paste its link there.</p>
           <Button size="sm" variant="secondary" className="self-start" onClick={() => setBench("open")}>
             Link in Batches &amp; options
           </Button>
@@ -333,7 +340,7 @@ function ListingCard({
       ) : null}
 
       {l.batchMismatch.length ? (
-        <Block tone="warn" title="Batch or books don't match the linked BB option">
+        <Block tone="warn" title={`Batch or books don't match the linked ${V} option`}>
           {l.batchMismatch.map((b) => (
             <div key={b.linkId} className="flex flex-col gap-1 border-t border-line pt-1 first:border-0 first:pt-0">
               <div className="text-ink">
@@ -341,14 +348,14 @@ function ListingCard({
               </div>
               <div className="text-ink-3">Linked now: {b.currentLabel || "—"}</div>
               <div className="text-ink-2">
-                Same BB product, {b.why === "books" ? "matching books (E-Book / without books = without Hard Copy)" : "matching batches"}: <b>{b.suggestLabel}</b> · BB {rupees(b.suggestPrice)}
+                Same {V} product, {b.why === "books" ? "matching books (E-Book / without books = without Hard Copy)" : "matching batches"}: <b>{b.suggestLabel}</b> · {V} {rupees(b.suggestPrice)}
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button
                   size="sm"
                   variant="secondary"
                   disabled={pending}
-                  onClick={() => act(() => retargetLink(b.linkId, b.slug, b.suggestId, b.suggestLabel, b.productTitle), () => "Switched to the BB option with the same batches.")}
+                  onClick={() => act(() => retargetLink(b.linkId, b.slug, b.suggestId, b.suggestLabel, b.productTitle), () => `Switched to the ${V} option with the same batches.`)}
                 >
                   Switch to this option
                 </Button>
@@ -368,7 +375,7 @@ function ListingCard({
       ) : null}
 
       {l.confirm ? (
-        <Block tone="warn" title={`Confirm the BB match (${l.confirm.count} variants)`}>
+        <Block tone="warn" title={`Confirm the ${V} match (${l.confirm.count} variants)`}>
           {l.confirm.products.map((p) => (
             <a key={p.url} href={p.url} target="_blank" rel="noreferrer" className="text-accent hover:underline">
               Linked to: {p.title} ↗
@@ -397,7 +404,7 @@ function ListingCard({
       {l.pastAttempts.length ? <PastBlock l={l} canWrite={canWrite} pending={pending} act={act} openBench={() => setBench("open")} /> : null}
 
       {l.dropped.length ? (
-        <Block tone="danger" title="BB no longer lists the option these variants are linked to">
+        <Block tone="danger" title={`${V} no longer lists the option these variants are linked to`}>
           {l.dropped.map((d) => (
             <div key={d.label} className="flex flex-col gap-1 border-t border-line pt-1 first:border-0 first:pt-0">
               <div className="text-ink-2">
@@ -406,7 +413,7 @@ function ListingCard({
               {d.replacement ? (
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-ink">
-                    BB now sells instead: <b>{d.replacement.changed}</b> · BB {rupees(d.replacement.price)}
+                    {V} now sells instead: <b>{d.replacement.changed}</b> · {V} {rupees(d.replacement.price)}
                   </span>
                   <Button
                     size="sm"
@@ -426,7 +433,7 @@ function ListingCard({
                   </Button>
                 </div>
               ) : (
-                <span className="text-ink-3">No single replacement on BB — re-point or remove these variants in Batches &amp; options.</span>
+                <span className="text-ink-3">No single replacement on {V} — re-point or remove these variants in Batches &amp; options.</span>
               )}
             </div>
           ))}
@@ -444,11 +451,11 @@ function ListingCard({
                     Zeroinfy <b>{rupees(f.current)}</b> → should be <b>{rupees(f.expected)}</b>
                   </td>
                   <td className="py-1 pr-2 text-ink-3">
-                    BB {rupees(f.vendorPrice)} · {f.rule}
-                    {!f.confirmed ? " · BB match not confirmed yet" : ""}
+                    {V} {rupees(f.vendorPrice)} · {f.rule}
+                    {!f.confirmed ? ` · ${V} match not confirmed yet` : ""}
                     <div className="truncate max-w-[420px]" title={f.vendorLabel}>
                       <a href={f.vendorUrl} target="_blank" rel="noreferrer" className="text-accent hover:underline">
-                        {f.vendorTitle ?? "BB product"} ↗
+                        {f.vendorTitle ?? `${V} product`} ↗
                       </a>{" "}
                       · {f.vendorLabel}
                     </div>
@@ -463,7 +470,7 @@ function ListingCard({
                       size="sm"
                       variant="ghost"
                       disabled={pending}
-                      title="Our price is different on purpose (e.g. includes books). Stop checking this variant against BB."
+                      title={`Our price is different on purpose (e.g. includes books). Stop checking this variant against ${V}.`}
                       onClick={() => act(() => setKeepPrice([f.linkId], true, ""), () => "Our price is kept for this variant.")}
                     >
                       Keep our price
@@ -484,14 +491,14 @@ function ListingCard({
                 size="sm"
                 variant="ghost"
                 disabled={pending}
-                title="All these prices are different on purpose: stop checking them against BB"
+                title={`All these prices are different on purpose: stop checking them against ${V}`}
                 onClick={() => act(() => setKeepPrice(l.priceFixes.map((f) => f.linkId), true, ""), (n) => `Kept our price for ${n} variants.`)}
               >
                 Keep our price for all {l.priceFixes.length}
               </Button>
             ) : null}
             <Button size="sm" variant="ghost" onClick={() => setBench("open")}>
-              Wrong BB option? Change it
+              Wrong {V} option? Change it
             </Button>
           </div>
         </Block>
@@ -521,16 +528,16 @@ function MissingBlock({
 }) {
   const [why, setWhy] = useState("");
   const [hiding, setHiding] = useState<string | "all" | null>(null);
-  const title = g.kind === "attempt" ? `BB also sells this for ${g.attempts ?? "another attempt"} — not on Zeroinfy` : "New batch / mode on BB — not on Zeroinfy";
+  const title = g.kind === "attempt" ? `${V} also sells this for ${g.attempts ?? "another attempt"} — not on Zeroinfy` : `New batch / mode on ${V} — not on Zeroinfy`;
   return (
     <Block tone="ok" title={title}>
-      <a href={`${g.siteUrl}/product/${g.slug}`} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+      <a href={productUrl(g.siteUrl, g.slug)} target="_blank" rel="noreferrer" className="text-accent hover:underline">
         {g.productTitle ?? g.slug}
       </a>
       {g.auto?.ok ? (
         <div className="flex flex-wrap items-center gap-2 rounded border border-ok/40 bg-surface px-2 py-1">
           <span className="text-ink">
-            Clear case: add <b>{g.auto.newValue}</b> with the same options as “{g.auto.baseValue}” — {g.auto.items.length} variant{g.auto.items.length === 1 ? "" : "s"} at BB&apos;s prices (
+            Clear case: add <b>{g.auto.newValue}</b> with the same options as “{g.auto.baseValue}” — {g.auto.items.length} variant{g.auto.items.length === 1 ? "" : "s"} at {V}&apos;s prices (
             {[...new Set(g.auto.items.map((i) => rupees(i.price)))].join(", ")}).
           </span>
           {canWrite ? (
@@ -546,7 +553,7 @@ function MissingBlock({
         <div key={o.variantId} className="flex flex-wrap items-center gap-2">
           <span className="text-ink">{o.label}</span>
           <span className="text-ink-3">
-            BB {rupees(o.price)} → add at {rupees(o.expected)}
+            {V} {rupees(o.price)} → add at {rupees(o.expected)}
           </span>
           {canWrite ? (
             <Button size="sm" variant="secondary" disabled={pending} onClick={() => onAdd(o.variantId)}>
@@ -593,9 +600,9 @@ function PasteLink({ pending, onUse }: { pending: boolean; onUse: (link: string)
       }}
     >
       <span className="text-ink-2">Found the right one yourself?</span>
-      <Input className="h-[26px] w-[420px] max-w-full" value={link} placeholder="Paste the BB product link" onChange={(e) => setLink(e.target.value)} />
+      <Input className="h-[26px] w-[420px] max-w-full" value={link} placeholder={`Paste the ${V} product link`} onChange={(e) => setLink(e.target.value)} />
       <Button size="sm" variant="secondary" type="submit" disabled={pending || !link.trim()}>
-        Use this BB product
+        Use this {V} product
       </Button>
     </form>
   );
@@ -655,7 +662,7 @@ function PastBlock({
   return (
     <Block tone="muted" title={`Options for exams that have passed (${l.pastAttempts.length})`}>
       <p className="text-ink-3">
-        BB no longer sells these: {l.pastAttempts.slice(0, 6).map((v) => v.title).join(" · ")}
+        {V} no longer sells these: {l.pastAttempts.slice(0, 6).map((v) => v.title).join(" · ")}
         {l.pastAttempts.length > 6 ? " …" : ""}
       </p>
       <div className="flex flex-wrap items-center gap-2">
