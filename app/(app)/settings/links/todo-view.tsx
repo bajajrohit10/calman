@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { createContext, useContext, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button, CARD, ErrorNote, Input, cx } from "@/components/ui";
@@ -56,13 +56,12 @@ function has(l: TodoListing, f: Filter) {
 
 const toFix = (l: TodoListing, f: PriceFix): PriceFixIn => ({ pid: l.pid, title: l.title, linkId: f.linkId, variantId: f.variantId, price: f.expected, compareAt: Math.max(f.compareAt ?? 0, f.vendorPrice) });
 
-/** The vendor this view is about ("BB", "Vsmart"); set by TodoView for its children. */
-let V = "BB";
-let VSITE = "bbvirtuals.com";
+/** The vendor this view is about ("BB", "Vsmart"), for the wording of every block. */
+const VendorCtx = createContext({ V: "BB", VSITE: "bbvirtuals.com" });
 
 export function TodoView({ todo, canWrite, vendor = "BB", vendorSite = "bbvirtuals.com" }: { todo: Todo; canWrite: boolean; vendor?: string; vendorSite?: string }) {
-  V = vendor;
-  VSITE = vendorSite;
+  const V = vendor;
+  const VSITE = vendorSite;
   const router = useRouter();
   const [filter, setFilter] = useState<Filter>("all");
   const [q, setQ] = useState("");
@@ -131,6 +130,7 @@ export function TodoView({ todo, canWrite, vendor = "BB", vendorSite = "bbvirtua
   }
 
   return (
+    <VendorCtx.Provider value={{ V, VSITE }}>
     <div className="flex flex-col gap-3">
       {todo.error ? <ErrorNote>{todo.error}</ErrorNote> : null}
       {note ? <ErrorNote>{note}</ErrorNote> : null}
@@ -222,6 +222,7 @@ export function TodoView({ todo, canWrite, vendor = "BB", vendorSite = "bbvirtua
         <ListingCard key={l.pid} l={l} canWrite={canWrite} pending={pending} act={act} />
       ))}
     </div>
+    </VendorCtx.Provider>
   );
 }
 
@@ -237,6 +238,7 @@ function ListingCard({
   act: (fn: () => Promise<{ error: string | null; count?: number }>, done: (n: number) => string) => void;
 }) {
   const [bench, setBench] = useState<null | { slug: string; variantId: string } | "open">(null);
+  const { V, VSITE } = useContext(VendorCtx);
   return (
     <section className={cx(CARD, "flex flex-col gap-2 p-3 text-[12px]")}>
       <div className="flex flex-wrap items-center gap-2">
@@ -528,6 +530,7 @@ function MissingBlock({
 }) {
   const [why, setWhy] = useState("");
   const [hiding, setHiding] = useState<string | "all" | null>(null);
+  const { V } = useContext(VendorCtx);
   const title = g.kind === "attempt" ? `${V} also sells this for ${g.attempts ?? "another attempt"} — not on Zeroinfy` : `New batch / mode on ${V} — not on Zeroinfy`;
   return (
     <Block tone="ok" title={title}>
@@ -591,6 +594,7 @@ function MissingBlock({
 
 function PasteLink({ pending, onUse }: { pending: boolean; onUse: (link: string) => void }) {
   const [link, setLink] = useState("");
+  const { V } = useContext(VendorCtx);
   return (
     <form
       className="flex flex-wrap items-center gap-2"
@@ -659,6 +663,7 @@ function PastBlock({
   openBench: () => void;
 }) {
   const [confirm, setConfirm] = useState(false);
+  const { V } = useContext(VendorCtx);
   return (
     <Block tone="muted" title={`Options for exams that have passed (${l.pastAttempts.length})`}>
       <p className="text-ink-3">
