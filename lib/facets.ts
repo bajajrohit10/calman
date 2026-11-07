@@ -134,6 +134,12 @@ export async function loadEnquiriesCalledByFacets(f: EnquiryFilters): Promise<Lo
       // §86. Same basis as the list, or the facet totals disagree with it and
       // facetsAgreeWithList throws them away.
       p_basis: f.basis ?? undefined,
+    // §89. Same reason as p_basis above: facets that disagree with the list get
+    // thrown away by facetsAgreeWithList, so every filter the list applies has
+    // to be applied here too.
+    p_competitor_ids: f.competitorIds?.length ? f.competitorIds : undefined,
+    p_competitor_other: f.competitorOther ?? undefined,
+    p_institute_ids: f.instituteIds?.length ? f.instituteIds : undefined,
       p_importance: f.importance?.length ? f.importance : undefined,
       p_created_from: clean(f.createdFrom),
       p_created_to: clean(f.createdTo),

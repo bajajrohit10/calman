@@ -17,7 +17,11 @@ export type MasterTable =
   | "contents"
   | "terms"
   | "whatsapp_templates"
-  | "holidays";
+  | "holidays"
+  // §89. Not one of the tabs on this screen: it has its own page, because the
+  // typed-name clean-up beside it is not something the generic editor does.
+  // Here so the shared actions will write to it — TABLES is the allowlist.
+  | "competitors";
 
 export type FieldKind =
   | "text"
@@ -205,7 +209,32 @@ export const LISTS: ListSpec[] = [
   },
 ];
 
-export const TABLES = Object.fromEntries(LISTS.map((l) => [l.table, l]));
+/**
+ * §89. Competitors, editable by the same engine from its own page.
+ *
+ * Add, rename, deactivate and reorder are exactly what this editor does, and
+ * a second implementation of them on /settings/competitors would be four more
+ * ways for the two to disagree. Kept out of LISTS so it does not also appear
+ * as a tab here.
+ */
+export const COMPETITORS_LIST: ListSpec = {
+  key: "competitors",
+  label: "Competitors",
+  table: "competitors",
+  pk: "id",
+  blurb:
+    "Where students go when they do not buy from us. A counsellor picks one on every competitor loss, and the Competitors report is built on them — so merge duplicates rather than adding spellings.",
+  fields: [NAME],
+  orderBy: [
+    { column: "sort_order", ascending: true },
+    { column: "name", ascending: true },
+  ],
+  reorderable: true,
+};
+
+export const TABLES = Object.fromEntries(
+  [...LISTS, COMPETITORS_LIST].map((l) => [l.table, l]),
+);
 
 export function listByKey(key: string | undefined): ListSpec {
   return LISTS.find((l) => l.key === key) ?? LISTS[0];

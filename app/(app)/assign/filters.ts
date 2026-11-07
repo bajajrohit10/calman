@@ -254,6 +254,12 @@ export function parseEnquiriesParams(
       // §86. Carried by a click-through from an analytics cell, so the count line
       // here equals the figure that was clicked. Anything unrecognised is no filter.
       basis: (["closed", "open", "any"] as const).find((b) => b === str(get, "basis")) ?? null,
+      // §89. Which competitor took the lead. `competitor` is a list like every
+      // other multi-select; `competitorOther` is the one typed name an
+      // "Other: …" analytics row clicks through to.
+      competitorIds: many(get, "competitor"),
+      competitorOther: str(get, "competitorOther"),
+      instituteIds: many(get, "institute"),
       importance: many(get, "importance"),
       createdFrom: span.from,
       createdTo: span.to,

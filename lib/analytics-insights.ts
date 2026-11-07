@@ -1,5 +1,6 @@
 import {
   COMPETITOR_MIN_CLOSED,
+  COMPETITOR_TOP_MIN,
   COMPETITOR_VS_TEAM,
   CONVERSION_MIN_CLOSED,
   CONVERSION_TOP_N,
@@ -11,9 +12,11 @@ import {
 } from "@/lib/analytics-thresholds";
 import {
   change,
+  competitorLabel,
   conversion,
   pointsChange,
   type AnalyticsScope,
+  type CompetitorRow,
   type CourseRow,
   type TeacherRow,
 } from "@/lib/analytics-shape";
@@ -48,7 +51,12 @@ export type Bullet = {
 
 export type Heads = {
   demand: { bullets: Bullet[]; note: string | null };
-  competitor: { bullets: Bullet[]; teamLine: string | null };
+  competitor: {
+    bullets: Bullet[];
+    teamLine: string | null;
+    /** §89. "Most went to Lecturewaala — 18 of 31", or nothing. */
+    topLine: { text: string; href: string } | null;
+  };
   conversion: { best: Bullet[]; weakest: Bullet[]; teamLine: string | null };
   housekeeping: Bullet[];
 };
@@ -61,6 +69,8 @@ export function buildHeads(input: {
   scope: AnalyticsScope;
   teachers: TeacherRow[];
   courses: CourseRow[];
+  /** §89. One row per competitor, for the line under this head. */
+  competitors: CompetitorRow[];
   query: string;
 }): Heads {
   const { scope, query } = input;
@@ -146,6 +156,29 @@ export function buildHeads(input: {
       };
     });
 
+  /*
+   * §89. And who the losses went to, which until now the head could not say.
+   *
+   * One line rather than a bullet per competitor: the head's question is "are
+   * we losing more than usual to somebody", and the answer a manager acts on is
+   * the name at the top of the list. The rest of the list is the Competitors
+   * tab, which this links to.
+   */
+  const topCompetitor = [...input.competitors]
+    .filter((r) => r.lostLeads >= COMPETITOR_TOP_MIN)
+    .sort((a, b) => b.lostLeads - a.lostLeads)[0];
+  const topLine = topCompetitor
+    ? {
+        text:
+          `Most went to ${competitorLabel(topCompetitor)} — ` +
+          `${topCompetitor.lostLeads} of ${now.lostCompetitor}` +
+          (now.lostCompetitor > 0
+            ? ` (${Math.round((topCompetitor.lostLeads / now.lostCompetitor) * 100)}%)`
+            : ""),
+        href: link("competitors"),
+      }
+    : null;
+
   // -------------------------------------------------------------------------
   // Head 3. Conversion: best and weakest, against the team's own rate.
   // -------------------------------------------------------------------------
@@ -225,6 +258,7 @@ export function buildHeads(input: {
     },
     competitor: {
       bullets: competitor,
+      topLine,
       teamLine:
         now.closed > 0
           ? `Team: ${now.lostCompetitor} of ${now.closed} closed lost to a competitor (${pct(teamCompetitor)})` +

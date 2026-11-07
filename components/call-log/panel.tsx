@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 
 import { Badge, Button, ErrorNote, Input, Select, Textarea, cx } from "@/components/ui";
+import { CompetitorField, type CompetitorFields } from "./competitor-field";
 import {
   InterestLineRows,
   LineFields,
@@ -68,6 +69,14 @@ export type PanelMasters = {
   contents: Master[];
   terms: Master[];
   sources: Master[];
+  /**
+   * §89. The competitor list, for the picker a competitor loss needs.
+   *
+   * Optional because every screen that mounts this panel has to pass it and
+   * they are added one at a time; an absent list shows an empty select with
+   * "Other" still available rather than breaking the save.
+   */
+  competitors?: Master[];
 };
 
 export type PanelItem = {
@@ -701,6 +710,16 @@ export function CallLogPanel({
    */
   const [creditedTo, setCreditedTo] = useState("");
   /**
+   * §89. Which competitor took the lead, on a competitor loss.
+   *
+   * Two pieces of state because the control has two halves: a listed
+   * competitor, or OTHER plus a name. They are mutually exclusive by
+   * construction — picking a competitor clears the typed name and vice versa —
+   * which is the same "exactly one" the column constraint enforces.
+   */
+  const [competitorId, setCompetitorId] = useState("");
+  const [competitorOther, setCompetitorOther] = useState("");
+  /**
    * What the call will write. The defaults line stands in when nobody named a
    * teacher, so it counts everywhere a line counts: what gets saved, whether
    * this enquiry will still have no interest against it, and the prompts that
@@ -729,7 +748,14 @@ export function CallLogPanel({
   // Purchased is stricter still: there must be something *open* to tick, or a
   // new line to tick, not merely an item somewhere in the history.
   const needsAnItem = purchased && openItems.length === 0 && filledLines.length === 0;
-  const blocksSave = needsAnItem || (outcome === "competitor" && willHaveNoItems);
+  // §89. And a competitor loss has to say which competitor. Same hard block as
+  // the missing teacher beside it, for the same reason: the Competitor report
+  // is built on this column, and a loss recorded without it is a row that says
+  // "we lost, to nobody".
+  const needsCompetitor =
+    outcome === "competitor" && !competitorId && !competitorOther.trim();
+  const blocksSave =
+    needsAnItem || (outcome === "competitor" && willHaveNoItems) || needsCompetitor;
   const softPrompt = outcome === "follow_up" && willHaveNoItems && askedAboutItems;
   /**
    * §33.2. A ticket without an issue type cannot be saved, and the server has
@@ -824,6 +850,21 @@ export function CallLogPanel({
     counsellorName,
   };
 
+  /**
+   * §89. What the competitor picker needs, grouped for the same reason the
+   * credit block is: two layouts, one control, and §77's lesson that a field
+   * added to one layout only is a field that is missing in production.
+   */
+  const competitorFields: CompetitorFields = {
+    show: outcome === "competitor",
+    competitors: masters.competitors ?? [],
+    competitorId,
+    setCompetitorId,
+    competitorOther,
+    setCompetitorOther,
+    missing: outcome === "competitor" && !competitorId && !competitorOther.trim(),
+  };
+
   function focusInterests() {
     firstTeacherRef.current?.focus();
     firstTeacherRef.current?.scrollIntoView({ block: "center" });
@@ -878,6 +919,12 @@ export function CallLogPanel({
     if (next === "competitor" && items.length === 0) {
       focusInterests();
     }
+    // §89. A competitor chosen and then abandoned is not an answer about the
+    // outcome that actually got saved.
+    if (next !== "competitor") {
+      setCompetitorId("");
+      setCompetitorOther("");
+    }
   }
 
   /**
@@ -889,6 +936,8 @@ export function CallLogPanel({
     isDirty: () =>
       discussion.trim().length > 0 ||
       outcomeState !== "" ||
+      competitorId !== "" ||
+      competitorOther.trim().length > 0 ||
       newLines.some(hasDetail) ||
       (isFirstCall &&
         (studentName !== (enquiry.studentName ?? "") ||
@@ -1000,6 +1049,12 @@ export function CallLogPanel({
         issueCategory: asAfterSale ? issueCategory : null,
         // §77.3. Null unless somebody else was named; null means the caller.
         creditedTo: outcome === "purchased" ? creditedTo || null : null,
+        // §89. One of the two, or neither when the outcome is not a loss. The
+        // action re-checks it: the panel is one caller, and the report is built
+        // on what lands in the table.
+        competitorId: outcome === "competitor" ? competitorId || null : null,
+        competitorOther:
+          outcome === "competitor" ? competitorOther.trim() || null : null,
         ...(asAfterSale
           ? {
               ticketOrderId: orderId.trim() || null,
@@ -1274,6 +1329,7 @@ export function CallLogPanel({
           ticketFields={ticketFields}
           purchaseBlock={purchaseBlock}
           creditFields={creditFields}
+          competitorFields={competitorFields}
           followUpDate={followUpDate}
           setFollowUpDate={setFollowUpDate}
           pending={pending}
@@ -1375,6 +1431,8 @@ export function CallLogPanel({
           </label>
 
           <CreditToField {...creditFields} wide />
+          {/* §89. Beside the outcome that needs it, in both layouts. */}
+          <CompetitorField {...competitorFields} wide />
 
           {asAfterSale ? (
             <label className="flex min-w-[180px] flex-col gap-1">
@@ -1746,6 +1804,7 @@ function FirstCallFields({
   ticketFields,
   purchaseBlock,
   creditFields,
+  competitorFields,
   issueCategory,
   setIssueCategory,
   issueRef,
@@ -1804,6 +1863,7 @@ function FirstCallFields({
   purchaseBlock: PurchaseBlockProps;
   /** §79: the same picker the compact window gets. */
   creditFields: CreditFields;
+  competitorFields: CompetitorFields;
   issueCategory: IssueCategory | "";
   setIssueCategory: (v: IssueCategory | "") => void;
   issueRef: React.RefObject<HTMLSelectElement | null>;
@@ -2184,6 +2244,9 @@ function FirstCallFields({
 
       {/* §79. Beside Outcome, exactly as in the compact window. */}
       <CreditToField {...creditFields} />
+
+      {/* §89. The same control the compact window carries. */}
+      <CompetitorField {...competitorFields} />
 
       {/* §54.2. A date the team is not working says so, rather than being
           silently moved on save. Manual picking still allows any date — a

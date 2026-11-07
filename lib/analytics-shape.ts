@@ -226,6 +226,44 @@ export type AnalyticsEvent = {
   scope: "current" | "comparison";
 };
 
+/**
+ * §89. One row of the Competitors tab.
+ *
+ * `rowKey` comes from SQL rather than being composed here, because the same key
+ * groups the breakdown rows and the two have to agree about what one row is: a
+ * listed competitor by id, a typed name by its text, and — until the §89
+ * backfill runs — the leads that name neither.
+ */
+export type CompetitorRow = {
+  rowKey: string;
+  competitorId: string | null;
+  competitorName: string | null;
+  otherName: string | null;
+  lostLeads: number;
+  prevLostLeads: number;
+};
+
+/** §89. One line of a competitor row's expansion. */
+export type CompetitorSplit = {
+  rowKey: string;
+  grain: "teacher" | "institute";
+  dimId: string | null;
+  dimName: string;
+  leads: number;
+};
+
+/** What a competitor row is called, wherever it is shown. */
+export function competitorLabel(r: {
+  competitorName: string | null;
+  otherName: string | null;
+}): string {
+  if (r.competitorName) return r.competitorName;
+  if (r.otherName) return `Other: ${r.otherName}`;
+  // Pre-backfill, and after it only if something writes a competitor loss
+  // without one. Named rather than blank so it cannot be mistaken for a total.
+  return "Not recorded";
+}
+
 /** §82.2: text, enquiries, purchased — the three things this block is read for. */
 export type ProductRow = {
   product: string;

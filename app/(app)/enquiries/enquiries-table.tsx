@@ -10,6 +10,7 @@ import { loadPanelEnquiry, type PanelPayload } from "@/components/call-log/actio
 import { useConfirmLeave } from "@/components/unsaved-guard";
 import { CallLogPanel, type PanelMasters } from "@/components/call-log/panel";
 import { ExportButton } from "@/components/export-button";
+import { MultiSelect } from "@/components/multi-select";
 import {
   CommonFilterFields,
   Labelled,
@@ -217,6 +218,17 @@ export function EnquiriesTable({
             </Select>
           </Labelled>
 
+          {/* §89. Beside the reason it qualifies. A multi-select like the
+              others, so "SLD or CAPoint" is one question. */}
+          <Labelled label="Competitor">
+            <MultiSelect
+              name="competitor"
+              options={masters.competitors ?? []}
+              values={multi?.competitor ?? []}
+              anyLabel="Any"
+            />
+          </Labelled>
+
           <Labelled label="Close reason">
             <Select name="closeReason" defaultValue={selected.closeReason}>
               <option value="">Any</option>
@@ -388,7 +400,11 @@ export function EnquiriesTable({
                       </Badge>
                       {r.lost_reason ? (
                         <span className="text-[11px] text-ink-3">
+                          {/* §89. "went to a competitor · SLD". The reason on
+                              its own was the whole of what the list could say
+                              about a competitor loss; now it names them. */}
                           {LOST_REASON_LABELS[r.lost_reason]}
+                          {r.competitor_name ? ` · ${r.competitor_name}` : null}
                         </span>
                       ) : null}
                       {r.close_reason ? (

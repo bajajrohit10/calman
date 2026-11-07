@@ -8,6 +8,8 @@ import type {
   ExperimentResult,
   AnalyticsFilters,
   AnalyticsScope,
+  CompetitorRow,
+  CompetitorSplit,
   CourseRow,
   InstituteRow,
   ProductRow,
@@ -59,6 +61,12 @@ export async function loadAnalytics(f: AnalyticsFilters): Promise<{
   products: ProductRow[];
   events: AnalyticsEvent[];
   experiments: Experiment[];
+  /**
+   * §89. One row per competitor. In the main batch rather than with the tab,
+   * because the Competitor head in "What stands out" names the top one and that
+   * panel is on every tab.
+   */
+  competitors: CompetitorRow[];
   /** Wall time in ms for the whole batch, for the timing note the brief asks for. */
   timings: Record<string, number>;
 }> {
@@ -78,7 +86,7 @@ export async function loadAnalytics(f: AnalyticsFilters): Promise<{
   const started = Date.now();
 
   // Together: they read the same window and none of them needs another's answer.
-  const [scope, teachers, institutes, courses, products, events, experiments] =
+  const [scope, teachers, institutes, courses, products, events, experiments, competitors] =
     await Promise.all([
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     supabase.rpc("analytics_scope", a as any),
@@ -107,8 +115,10 @@ export async function loadAnalytics(f: AnalyticsFilters): Promise<{
     } as any),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     supabase.rpc("analytics_experiments", {} as any),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    supabase.rpc("analytics_by_competitor", a as any),
   ]);
-  const timings: Record<string, number> = { "all five": Date.now() - started };
+  const timings: Record<string, number> = { "all eight": Date.now() - started };
 
   const firstError =
     scope.error?.message ??
@@ -118,6 +128,7 @@ export async function loadAnalytics(f: AnalyticsFilters): Promise<{
     products.error?.message ??
     events.error?.message ??
     experiments.error?.message ??
+    competitors.error?.message ??
     null;
 
   return {
@@ -129,10 +140,77 @@ export async function loadAnalytics(f: AnalyticsFilters): Promise<{
     products: (products.data ?? []) as unknown as ProductRow[],
     events: (events.data ?? []) as unknown as AnalyticsEvent[],
     experiments: (experiments.data ?? []) as unknown as Experiment[],
+    competitors: competitorRows(competitors.data),
     timings,
   };
 }
 
+
+/**
+ * §89. The Competitors tab: one row per competitor, and the breakdown rows.
+ *
+ * Loaded on its own for the same reason the experiment results are — three of
+ * the four tabs have no use for either — and both in one batch because the
+ * expansion is opened by a click on a row that is already on screen, and a
+ * read per click would make the first open of each row feel broken.
+ */
+function competitorRows(data: unknown): CompetitorRow[] {
+  type Raw = {
+    row_key: string;
+    competitor_id: string | null;
+    competitor_name: string | null;
+    other_name: string | null;
+    lost_leads: number;
+    prev_lost_leads: number;
+  };
+  return ((data ?? []) as Raw[]).map((r) => ({
+    rowKey: r.row_key,
+    competitorId: r.competitor_id,
+    competitorName: r.competitor_name,
+    otherName: r.other_name,
+    lostLeads: Number(r.lost_leads ?? 0),
+    prevLostLeads: Number(r.prev_lost_leads ?? 0),
+  }));
+}
+
+/**
+ * §89. The breakdown rows behind the Competitors tab's expansions.
+ *
+ * Only that tab reads them, and all of them come back in one call rather than
+ * one per expanded row: the row is already on screen when it is clicked, and a
+ * read per click would make the first open of each row feel broken.
+ */
+export async function loadCompetitorSplits(f: AnalyticsFilters): Promise<{
+  error: string | null;
+  splits: CompetitorSplit[];
+}> {
+  const supabase = await createClient();
+  const a = args(f);
+  // The splits describe the current window only, so no comparison arguments.
+  const { data, error } = await supabase.rpc("analytics_competitor_splits", {
+    ...a,
+    p_cmp_from: undefined,
+    p_cmp_to: undefined,
+  } as never);
+
+  type Raw = {
+    row_key: string;
+    grain: string;
+    dim_id: string | null;
+    dim_name: string;
+    leads: number;
+  };
+  return {
+    error: error?.message ?? null,
+    splits: ((data ?? []) as unknown as Raw[]).map((r) => ({
+      rowKey: r.row_key,
+      grain: r.grain === "institute" ? ("institute" as const) : ("teacher" as const),
+      dimId: r.dim_id,
+      dimName: r.dim_name,
+      leads: Number(r.leads ?? 0),
+    })),
+  };
+}
 
 /**
  * §84.3. One experiment's result, for the Experiments tab.

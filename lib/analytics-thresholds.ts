@@ -47,6 +47,15 @@ export const DEMAND_MIN_ENQUIRIES = 10;
 export const COMPETITOR_VS_TEAM = 1.5;
 
 /**
+ * §89. The top competitor is named only once it has taken this many leads.
+ *
+ * Five, matching the floor beside it: a competitor with two losses is noise in
+ * the same way a teacher with two closed calls is, and naming one in a
+ * headline would send somebody after a pattern that is not there yet.
+ */
+export const COMPETITOR_TOP_MIN = 5;
+
+/**
  * Five closed calls before the share is allowed to mean anything. One of two
  * closed is 50% and tells you nothing; this is the smallest denominator that is
  * not actively misleading, and it is low on purpose because a teacher losing

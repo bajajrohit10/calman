@@ -9,6 +9,9 @@ import { ROLE_LABELS, type Role } from "@/lib/roles";
 const TABS = [
   { href: "/settings/users", label: "Users" },
   { href: "/settings/master-lists", label: "Master lists" },
+  // §89. Its own tab rather than a master list, because the typed-name
+  // clean-up on it is not something the master-list engine does.
+  { href: "/settings/competitors", label: "Competitors" },
   { href: "/settings/offers", label: "Offers" },
   { href: "/settings/holidays", label: "Holidays" },
   // Price check, Brief 1: vendor websites behind the Shopify vendor names.

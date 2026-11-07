@@ -40,6 +40,8 @@ export type EnquiryRow = {
   last_discussion: string | null;
   assigned_to_name: string | null;
   assigned_date: string | null;
+  /** §89: the listed competitor's name, or the one somebody typed. */
+  competitor_name: string | null;
   total_count: number;
 };
 
@@ -73,6 +75,20 @@ export type EnquiryFilters = {
    * this codebase sends it any more.
    */
   sourceIds?: string[] | null;
+  /** §89. Several at once, the same shape as the other multi-selects. */
+  competitorIds?: string[] | null;
+  /**
+   * §89. One typed name, exactly. The analytics click-through for an
+   * "Other: Harkesh Goyal" row has to open that row and nothing else, and a
+   * substring match would also open "Harkesh Goyal classes".
+   */
+  competitorOther?: string | null;
+  /**
+   * §89. Click-through only, like competitorOther: the Competitors tab's "By
+   * institute" cell knows which institute it means, and the filter bar has no
+   * institute question to ask.
+   */
+  instituteIds?: string[] | null;
   importance?: string[] | null;
   createdFrom?: string | null;
   createdTo?: string | null;
@@ -114,6 +130,9 @@ export async function loadEnquiries(
     p_term_id: clean(f.termId),
     p_source_ids: f.sourceIds?.length ? f.sourceIds : undefined,
     p_basis: f.basis ?? undefined,
+    p_competitor_ids: f.competitorIds?.length ? f.competitorIds : undefined,
+    p_competitor_other: clean(f.competitorOther),
+    p_institute_ids: f.instituteIds?.length ? f.instituteIds : undefined,
     p_importance: f.importance?.length ? f.importance : undefined,
     p_created_from: clean(f.createdFrom),
     p_created_to: clean(f.createdTo),

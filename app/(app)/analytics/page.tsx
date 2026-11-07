@@ -6,7 +6,11 @@ import { loadMasters } from "@/lib/masters";
 import { showsAnalytics } from "@/lib/roles";
 import { logServerTiming } from "@/lib/server-timing";
 import { createClient } from "@/lib/supabase/server";
-import { loadAnalytics, loadExperimentResults } from "@/lib/analytics";
+import {
+  loadAnalytics,
+  loadCompetitorSplits,
+  loadExperimentResults,
+} from "@/lib/analytics";
 import { buildHeads } from "@/lib/analytics-insights";
 import {
   RANGE_PRESETS,
@@ -171,6 +175,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
         scope: data.scope,
         teachers: data.teachers,
         courses: data.courses,
+        competitors: data.competitors,
         query: query.toString(),
       })
     : null;
@@ -180,7 +185,9 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
       ? "products"
       : one(sp.tab) === "experiments"
         ? "experiments"
-        : "teachers";
+        : one(sp.tab) === "competitors"
+          ? "competitors"
+          : "teachers";
 
   // §84.3. Only the tab that shows them pays for them: four windows per experiment
   // is four reads, and the other two tabs have no use for any of it.
@@ -188,6 +195,13 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
     tab === "experiments"
       ? (await loadExperimentResults(data.experiments.map((e) => e.id))).results
       : [];
+
+  // §89. The rows come with the main batch — the Competitor head needs the top
+  // one on every tab — but the breakdown behind an expansion only matters here.
+  const splits =
+    tab === "competitors"
+      ? await loadCompetitorSplits(filters)
+      : { error: null, splits: [] };
 
   logServerTiming("/analytics");
 
@@ -212,6 +226,9 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
       events={data.events}
       experiments={data.experiments}
       results={results}
+      competitorRows={data.competitors}
+      competitorSplits={splits.splits}
+      competitorError={splits.error}
       heads={heads}
       timings={data.timings}
       masters={{

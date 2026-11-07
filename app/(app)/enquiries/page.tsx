@@ -130,6 +130,7 @@ export default async function Page({
         clearBasisHref={clearBasisHref}
         multi={{
           source: filters.sourceIds ?? [],
+          competitor: filters.competitorIds ?? [],
           teacher: filters.teacherIds ?? [],
           content: filters.contentIds ?? [],
           stage: filters.stages ?? [],
@@ -143,6 +144,7 @@ export default async function Page({
           contents: masters.contents,
           terms: masters.terms,
           sources: masters.sources,
+          competitors: masters.competitors,
         }}
         panelMasters={{
           teachers: masters.teachers,
@@ -151,6 +153,7 @@ export default async function Page({
           contents: masters.contents,
           terms: masters.terms,
           sources: masters.sources,
+          competitors: masters.competitors,
         }}
         selected={{
           counsellor: one(sp.counsellor) ?? "",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 
 import { Button, ErrorNote, Input, Select, Textarea, cx } from "@/components/ui";
 import {
@@ -16,7 +16,8 @@ import {
 } from "@/lib/enquiry-labels";
 import { istToday } from "@/lib/format";
 
-import { editCall } from "./actions";
+import { editCall, listCompetitors } from "./actions";
+import { CompetitorField } from "./competitor-field";
 
 /**
  * Correcting a call that was logged wrongly (§29.4).
@@ -64,9 +65,25 @@ export function EditCallForm({
   const [discussion, setDiscussion] = useState(call.discussion ?? "");
   const [followUp, setFollowUp] = useState(call.nextFollowUpDate ?? "");
   const [grade, setGrade] = useState<Importance | "">(importance ?? "");
+  // §89. Only the correction that needs it pays for the list.
+  const [competitors, setCompetitors] = useState<{ id: string; name: string }[]>([]);
+  const [competitorId, setCompetitorId] = useState("");
+  const [competitorOther, setCompetitorOther] = useState("");
   const [lead, setLead] = useState<LeadVerification | "">(leadVerification ?? "");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+
+  const wantsCompetitor = outcome === "competitor";
+  useEffect(() => {
+    if (!wantsCompetitor || competitors.length) return;
+    let live = true;
+    listCompetitors().then((rows) => {
+      if (live) setCompetitors(rows);
+    });
+    return () => {
+      live = false;
+    };
+  }, [wantsCompetitor, competitors.length]);
 
   function save() {
     setError(null);
@@ -78,6 +95,8 @@ export function EditCallForm({
         nextFollowUpDate: outcomeTakesDate(outcome) ? followUp || null : null,
         importance: grade,
         leadVerification: lead,
+        competitorId: wantsCompetitor ? competitorId || null : null,
+        competitorOther: wantsCompetitor ? competitorOther.trim() || null : null,
       });
       if (res.error) {
         setError(res.error);
@@ -110,6 +129,17 @@ export function EditCallForm({
             ))}
           </Select>
         </label>
+        {/* §89. The same control the call panel carries, from the same module.
+            Applies when the correction makes this the lead's own outcome. */}
+        <CompetitorField
+          show={wantsCompetitor}
+          competitors={competitors}
+          competitorId={competitorId}
+          setCompetitorId={setCompetitorId}
+          competitorOther={competitorOther}
+          setCompetitorOther={setCompetitorOther}
+          missing={false}
+        />
         <label className={cx("flex-col gap-1", outcomeTakesDate(outcome) ? "flex" : "hidden")}>
           <span className="text-[10px] font-semibold uppercase tracking-[0.045em] text-ink-3">
             Follow-up

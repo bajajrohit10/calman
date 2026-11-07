@@ -41,11 +41,13 @@ export type Masters = {
   contents: Master[];
   terms: Master[];
   sources: Master[];
+  /** §89. The competitor list, for the "Which competitor?" picker. */
+  competitors: Master[];
 };
 
 async function readMasters(): Promise<Masters> {
   const supabase = await createClient();
-  const [teachers, institutes, courses, subjects, contents, terms, sources] =
+  const [teachers, institutes, courses, subjects, contents, terms, sources, competitors] =
     await Promise.all([
       supabase
         .from("teachers")
@@ -68,6 +70,12 @@ async function readMasters(): Promise<Masters> {
       supabase.from("contents").select("id, name").eq("is_active", true).order("priority"),
       supabase.from("terms").select("id, name").eq("is_active", true).order("sort_order"),
       supabase.from("sources").select("id, name").eq("is_active", true).order("name"),
+      supabase
+        .from("competitors")
+        .select("id, name")
+        .eq("is_active", true)
+        .order("sort_order")
+        .order("name"),
     ]);
 
   return {
@@ -78,6 +86,7 @@ async function readMasters(): Promise<Masters> {
     contents: contents.data ?? [],
     terms: terms.data ?? [],
     sources: sources.data ?? [],
+    competitors: competitors.data ?? [],
   };
 }
 

@@ -42,6 +42,9 @@ export const EXPORT_COLUMNS = [
   // happen: the student checked out, then the import wrote the row. They are
   // the same instant on most leads and days apart on an abandoned checkout,
   // which is the case the sheet could not previously explain.
+  // §89. Who took the lead, on the lost ones. Blank everywhere else, which is
+  // what "we did not lose this to anybody" looks like in a column.
+  { key: "competitor", label: "Competitor" },
   { key: "arrived_at", label: "Arrived" },
   { key: "created_at", label: "Created" },
   { key: "closed_at", label: "Closed" },

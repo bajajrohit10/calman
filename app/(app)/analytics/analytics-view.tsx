@@ -1,14 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { Fragment, useCallback, useMemo, useState } from "react";
 
-import { Button, Input, PageHeader, Select, cx } from "@/components/ui";
+import {
+  Button,
+  ErrorNote,
+  Input,
+  PageHeader,
+  Select,
+  TABLE_HEAD_ROW,
+  cx,
+} from "@/components/ui";
 import { MultiSelect } from "@/components/multi-select";
 import {
   avgSale,
   change,
   closedShares,
+  competitorLabel,
   conversion,
   pointsChange,
   PRESET_LABELS,
@@ -18,6 +27,8 @@ import {
   type AnalyticsScope,
   type Basis,
   type CompareMode,
+  type CompetitorRow,
+  type CompetitorSplit,
   type RangePreset,
   type CourseRow,
   type Experiment,
@@ -560,7 +571,7 @@ export function AnalyticsView(props: {
   preset: RangePreset;
   compareMode: CompareMode;
   query: string;
-  tab: "teachers" | "products" | "experiments";
+  tab: "teachers" | "products" | "experiments" | "competitors";
   by: "teacher" | "institute";
   basis: Basis;
   error: string | null;
@@ -572,6 +583,10 @@ export function AnalyticsView(props: {
   events: AnalyticsEvent[];
   experiments: Experiment[];
   results: ExperimentResult[];
+  /** §89. Empty on every tab but Competitors, which is the only one that reads them. */
+  competitorRows: CompetitorRow[];
+  competitorSplits: CompetitorSplit[];
+  competitorError: string | null;
   heads: HeadsType | null;
   timings: Record<string, number>;
   masters: {
@@ -615,6 +630,32 @@ export function AnalyticsView(props: {
   const listBasis = basis === "total" ? "any" : basis;
   const period =
     `type=purchase&basis=${listBasis}&createdFrom=${filters.from}&createdTo=${filters.to}`;
+
+  /**
+   * §89. A competitor row's own link, and its breakdown's.
+   *
+   * Always basis=closed and lostReason=competitor, whatever the table's basis
+   * control says: a competitor loss is closed by definition, so the Open and
+   * Total views of this table are the same rows, and a link carrying basis=open
+   * would open an empty list beside a cell reading 14.
+   */
+  const listHref = useCallback(
+    (r: { competitorId: string | null; otherName: string | null }, extra?: string) => {
+      const who = r.competitorId
+        ? `competitor=${r.competitorId}`
+        : r.otherName
+          ? `competitorOther=${encodeURIComponent(r.otherName)}`
+          : null;
+      // The pre-backfill "Not recorded" row names neither column, and there is
+      // no filter for "a competitor loss with nothing against it" — so it opens
+      // every competitor loss in the window rather than a wrong subset.
+      const base =
+        `/enquiries?type=purchase&basis=closed&lostReason=competitor` +
+        `&createdFrom=${filters.from}&createdTo=${filters.to}`;
+      return `${base}${who ? `&${who}` : ""}${extra ? `&${extra}` : ""}`;
+    },
+    [filters.from, filters.to],
+  );
 
   const rows: Row[] = useMemo(() => {
     if (tab === "products") {
@@ -891,6 +932,7 @@ export function AnalyticsView(props: {
         {([
           { key: "teachers", label: "Teachers" },
           { key: "products", label: "Products" },
+          { key: "competitors", label: "Competitors" },
           { key: "experiments", label: "Experiments" },
         ] as const).map((t) => (
           <Link
@@ -962,14 +1004,24 @@ export function AnalyticsView(props: {
           data-testid="more-columns"
           className={cx(
             "ml-auto text-[12px] text-ink-2 underline-offset-2 hover:text-ink hover:underline",
-            tab === "experiments" && "hidden",
+            (tab === "experiments" || tab === "competitors") && "hidden",
           )}
         >
           {showMore ? "Fewer columns" : "More columns"}
         </button>
       </div>
 
-      {tab === "experiments" ? (
+      {tab === "competitors" ? (
+        <CompetitorsTable
+          rows={props.competitorRows}
+          splits={props.competitorSplits}
+          error={props.competitorError}
+          closed={scope?.now.closed ?? 0}
+          lostCompetitor={scope?.now.lostCompetitor ?? 0}
+          comparing={Boolean(scope?.prev && filters.cmpFrom && filters.cmpTo)}
+          listHref={listHref}
+        />
+      ) : tab === "experiments" ? (
         <div className="flex flex-col gap-3">
           {props.results.length ? (
             props.results.map((r) => (
@@ -1059,6 +1111,210 @@ export function AnalyticsView(props: {
 }
 
 /** §82.2. Trimmed to the three things this block is read for. */
+/**
+ * §89. Analytics → Competitors.
+ *
+ * One row per competitor, plus one per name somebody typed, plus — until the
+ * backfill runs — one for the losses that name nobody. Three columns, because
+ * three is what the question has: how many, what share of the losses, what
+ * share of everything that closed.
+ *
+ * Both shares are computed against the strip's own figures rather than against
+ * the sum of this table, so a reader comparing the two cannot find them
+ * disagreeing. The first therefore sums to 100% and the second does not — it is
+ * a share of a bigger denominator, which is the point of showing it.
+ */
+function CompetitorsTable({
+  rows,
+  splits,
+  error,
+  closed,
+  lostCompetitor,
+  comparing,
+  listHref,
+}: {
+  rows: CompetitorRow[];
+  splits: CompetitorSplit[];
+  error: string | null;
+  closed: number;
+  lostCompetitor: number;
+  comparing: boolean;
+  listHref: (
+    r: { competitorId: string | null; otherName: string | null },
+    extra?: string,
+  ) => string;
+}) {
+  const [open, setOpen] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState<Record<string, boolean>>({});
+
+  const total = rows.reduce((a, r) => a + r.lostLeads, 0);
+
+  if (error) return <ErrorNote>{error}</ErrorNote>;
+  if (!rows.length) {
+    return (
+      <p className="rounded-lg border border-line bg-surface px-3 py-8 text-center text-[12.5px] text-ink-3 shadow-card">
+        Nothing was lost to a competitor in this window.
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
+        <table className="w-full border-collapse text-[12.5px]" data-testid="competitors-table">
+          <thead>
+            <tr className={TABLE_HEAD_ROW}>
+              <th className="px-2 py-[7px] text-left">Competitor</th>
+              <th className="w-[110px] px-2 py-[7px] text-right">Lost leads</th>
+              <th className="w-[150px] px-2 py-[7px] text-right">% of competitor losses</th>
+              <th className="w-[130px] px-2 py-[7px] text-right">% of closed leads</th>
+              {comparing ? (
+                <th className="w-[110px] px-2 py-[7px] text-right">vs prev</th>
+              ) : null}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => {
+              const label = competitorLabel(r);
+              const expanded = open === r.rowKey;
+              return (
+                <Fragment key={r.rowKey}>
+                  <tr
+                    data-testid={`competitor-row-${r.rowKey}`}
+                    className="border-b border-line last:border-b-0"
+                  >
+                    <td className="px-2 py-[6px]">
+                      <button
+                        type="button"
+                        onClick={() => setOpen(expanded ? null : r.rowKey)}
+                        className="text-left text-ink underline-offset-2 hover:underline"
+                        aria-expanded={expanded}
+                      >
+                        <span className="mr-1 text-ink-3">{expanded ? "▾" : "▸"}</span>
+                        {label}
+                      </button>
+                    </td>
+                    <td className="px-2 py-[6px] text-right tabular-nums">
+                      <Link
+                        href={listHref(r)}
+                        prefetch={false}
+                        className="text-ink underline-offset-2 hover:underline"
+                      >
+                        {r.lostLeads}
+                      </Link>
+                    </td>
+                    <td className="px-2 py-[6px] text-right tabular-nums text-ink-2">
+                      {pctOf(r.lostLeads, lostCompetitor)}
+                    </td>
+                    <td className="px-2 py-[6px] text-right tabular-nums text-ink-2">
+                      {pctOf(r.lostLeads, closed)}
+                    </td>
+                    {comparing ? (
+                      <td className="px-2 py-[6px] text-right tabular-nums text-ink-2">
+                        {r.prevLostLeads === 0 && r.lostLeads === 0
+                          ? "—"
+                          : `${r.prevLostLeads} → ${r.lostLeads}`}
+                      </td>
+                    ) : null}
+                  </tr>
+                  {expanded ? (
+                    <tr className="border-b border-line bg-surface-2/60">
+                      <td colSpan={comparing ? 5 : 4} className="px-2 py-2">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:gap-6">
+                          {(["teacher", "institute"] as const).map((grain) => {
+                            const mine = splits
+                              .filter((x) => x.rowKey === r.rowKey && x.grain === grain)
+                              .sort((a, b) => b.leads - a.leads);
+                            const key = `${r.rowKey}:${grain}`;
+                            const all = showAll[key];
+                            const shown = all ? mine : mine.slice(0, 10);
+                            return (
+                              <div key={grain} className="min-w-[220px] flex-1">
+                                <h4 className="mb-1 text-[11px] font-semibold uppercase tracking-[0.045em] text-ink-3">
+                                  By {grain}
+                                </h4>
+                                {shown.length === 0 ? (
+                                  <p className="text-[12px] text-ink-3">Nothing tagged.</p>
+                                ) : (
+                                  <ul className="flex flex-col gap-[3px]">
+                                    {shown.map((x) => (
+                                      <li
+                                        key={`${x.dimId ?? "none"}`}
+                                        className="flex items-baseline justify-between gap-3"
+                                      >
+                                        <span className="text-ink-2">{x.dimName}</span>
+                                        <Link
+                                          href={listHref(
+                                            r,
+                                            x.dimId
+                                              ? `${grain === "teacher" ? "teacher" : "institute"}=${x.dimId}`
+                                              : undefined,
+                                          )}
+                                          prefetch={false}
+                                          className="tabular-nums text-ink underline-offset-2 hover:underline"
+                                        >
+                                          {x.leads}
+                                        </Link>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                                {mine.length > 10 ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setShowAll((v) => ({ ...v, [key]: !v[key] }))
+                                    }
+                                    className="mt-1 text-[11.5px] text-ink-2 underline-offset-2 hover:text-ink hover:underline"
+                                  >
+                                    {all ? "Show top 10" : `Show all (${mine.length})`}
+                                  </button>
+                                ) : null}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <p className="mt-2 text-[11px] text-ink-3">
+                          A lead naming two teachers appears under both, so these add up to
+                          more than {r.lostLeads}.
+                        </p>
+                      </td>
+                    </tr>
+                  ) : null}
+                </Fragment>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr className="border-t border-line-2 bg-surface-2 font-medium">
+              <td className="px-2 py-[6px] text-ink">Total</td>
+              <td className="px-2 py-[6px] text-right tabular-nums text-ink">{total}</td>
+              <td className="px-2 py-[6px] text-right tabular-nums text-ink-2">
+                {pctOf(total, lostCompetitor)}
+              </td>
+              <td className="px-2 py-[6px] text-right tabular-nums text-ink-2">
+                {pctOf(total, closed)}
+              </td>
+              {comparing ? <td /> : null}
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <p className="text-[11.5px] text-ink-2">
+        {total} lost to a competitor, which is the strip&rsquo;s own{" "}
+        {lostCompetitor} — the shares are computed against that and against the{" "}
+        {closed} closed leads, not against this table.
+      </p>
+    </div>
+  );
+}
+
+/** A share, or a dash where there is no denominator to divide by. */
+function pctOf(n: number, d: number): string {
+  if (!d) return "—";
+  return `${Math.round((n / d) * 100)}%`;
+}
+
 function ProductsTable({ rows }: { rows: ProductRow[] }) {
   return (
     <section className="flex flex-col gap-1.5">
@@ -1128,17 +1384,30 @@ function Head({
   bullets,
   note,
   teamLine,
+  topLine,
   testid,
 }: {
   title: string;
   bullets: Bullet[];
   note?: string | null;
   teamLine?: string | null;
+  /** §89. A headline above the bullets: who most of the losses went to. */
+  topLine?: { text: string; href: string } | null;
   testid: string;
 }) {
   return (
     <section className="flex flex-col gap-1 rounded-lg border border-line bg-surface px-3 py-2.5 shadow-card">
       <h3 className="text-[12px] font-semibold text-ink">{title}</h3>
+      {topLine ? (
+        <Link
+          href={topLine.href}
+          prefetch={false}
+          data-testid={`${testid}-top`}
+          className="text-[12.5px] font-medium leading-relaxed text-ink underline-offset-2 hover:underline"
+        >
+          {topLine.text}
+        </Link>
+      ) : null}
       {bullets.length ? (
         <ul className="flex flex-col gap-0.5" data-testid={testid}>
           {bullets.map((b) => (
@@ -1187,6 +1456,7 @@ function Heads({ heads }: { heads: HeadsType }) {
           title="Competitor losses by teacher"
           bullets={heads.competitor.bullets}
           teamLine={heads.competitor.teamLine}
+          topLine={heads.competitor.topLine}
           testid="head-competitor"
         />
         <section className="flex flex-col gap-1 rounded-lg border border-line bg-surface px-3 py-2.5 shadow-card">

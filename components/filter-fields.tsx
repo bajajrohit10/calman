@@ -33,6 +33,11 @@ export type FilterMasters = {
   contents: FilterMaster[];
   terms: FilterMaster[];
   sources: FilterMaster[];
+  /**
+   * §89. Only the Enquiries bar offers this one, so it is optional: the desk
+   * and New Calls share this type and have no competitor question to ask.
+   */
+  competitors?: FilterMaster[];
 };
 
 /**

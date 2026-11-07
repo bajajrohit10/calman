@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.17"
   }
   accounts: {
     Tables: {
@@ -1387,6 +1387,33 @@ export type Database = {
           },
         ]
       }
+      competitors: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          is_fallback: boolean
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_fallback?: boolean
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_fallback?: boolean
+          name?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
       contents: {
         Row: {
           created_at: string
@@ -1444,6 +1471,8 @@ export type Database = {
           call_type: string
           close_reason: Database["public"]["Enums"]["close_reason"] | null
           closed_at: string | null
+          competitor_id: string | null
+          competitor_other: string | null
           created_at: string
           created_by: string | null
           escalated_to: string | null
@@ -1479,6 +1508,8 @@ export type Database = {
           call_type?: string
           close_reason?: Database["public"]["Enums"]["close_reason"] | null
           closed_at?: string | null
+          competitor_id?: string | null
+          competitor_other?: string | null
           created_at?: string
           created_by?: string | null
           escalated_to?: string | null
@@ -1514,6 +1545,8 @@ export type Database = {
           call_type?: string
           close_reason?: Database["public"]["Enums"]["close_reason"] | null
           closed_at?: string | null
+          competitor_id?: string | null
+          competitor_other?: string | null
           created_at?: string
           created_by?: string | null
           escalated_to?: string | null
@@ -1554,6 +1587,13 @@ export type Database = {
             columns: ["archived_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enquiries_competitor_id_fkey"
+            columns: ["competitor_id"]
+            isOneToOne: false
+            referencedRelation: "competitors"
             referencedColumns: ["id"]
           },
           {
@@ -2097,6 +2137,142 @@ export type Database = {
           },
         ]
       }
+      link_alternatives: {
+        Row: {
+          attempts: string | null
+          id: string
+          product_slug: string
+          product_title: string | null
+          shopify_product_id: number
+          shopify_variant_id: number
+          vendor_price: number | null
+          vendor_site_id: string
+          vendor_variant_id: string
+          vendor_variant_label: string | null
+        }
+        Insert: {
+          attempts?: string | null
+          id?: string
+          product_slug: string
+          product_title?: string | null
+          shopify_product_id: number
+          shopify_variant_id: number
+          vendor_price?: number | null
+          vendor_site_id: string
+          vendor_variant_id: string
+          vendor_variant_label?: string | null
+        }
+        Update: {
+          attempts?: string | null
+          id?: string
+          product_slug?: string
+          product_title?: string | null
+          shopify_product_id?: number
+          shopify_variant_id?: number
+          vendor_price?: number | null
+          vendor_site_id?: string
+          vendor_variant_id?: string
+          vendor_variant_label?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "link_alternatives_vendor_site_id_fkey"
+            columns: ["vendor_site_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      listing_gap_decisions: {
+        Row: {
+          decided_at: string
+          decided_by: string | null
+          decision: string
+          id: string
+          note: string | null
+          product_slug: string
+          shopify_product_id: number
+          variant_id: string
+          vendor_site_id: string
+        }
+        Insert: {
+          decided_at?: string
+          decided_by?: string | null
+          decision?: string
+          id?: string
+          note?: string | null
+          product_slug: string
+          shopify_product_id: number
+          variant_id: string
+          vendor_site_id: string
+        }
+        Update: {
+          decided_at?: string
+          decided_by?: string | null
+          decision?: string
+          id?: string
+          note?: string | null
+          product_slug?: string
+          shopify_product_id?: number
+          variant_id?: string
+          vendor_site_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "listing_gap_decisions_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "listing_gap_decisions_vendor_site_id_fkey"
+            columns: ["vendor_site_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      listing_vendor_products: {
+        Row: {
+          attempts: string | null
+          created_at: string
+          id: string
+          product_slug: string
+          product_title: string | null
+          shopify_product_id: number
+          vendor_site_id: string
+        }
+        Insert: {
+          attempts?: string | null
+          created_at?: string
+          id?: string
+          product_slug: string
+          product_title?: string | null
+          shopify_product_id: number
+          vendor_site_id: string
+        }
+        Update: {
+          attempts?: string | null
+          created_at?: string
+          id?: string
+          product_slug?: string
+          product_title?: string | null
+          shopify_product_id?: number
+          vendor_site_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "listing_vendor_products_vendor_site_id_fkey"
+            columns: ["vendor_site_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       offer_contents: {
         Row: {
           content_id: string
@@ -2374,142 +2550,81 @@ export type Database = {
           reason?: string | null
           shopify_vendor?: string
         }
-        Relationships: []
-      }
-      vendor_site_aliases: {
-        Row: {
-          created_at: string
-          created_by: string | null
-          id: string
-          shopify_vendor: string
-          vendor_site_id: string
-        }
-        Insert: {
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          shopify_vendor: string
-          vendor_site_id: string
-        }
-        Update: {
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          shopify_vendor?: string
-          vendor_site_id?: string
-        }
         Relationships: [
           {
-            foreignKeyName: "vendor_site_aliases_vendor_site_id_fkey"
-            columns: ["vendor_site_id"]
+            foreignKeyName: "price_check_excluded_vendors_created_by_fkey"
+            columns: ["created_by"]
             isOneToOne: false
-            referencedRelation: "vendor_sites"
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
       }
-      link_alternatives: {
+      price_check_rules: {
         Row: {
-          attempts: string | null
-          id: string
-          product_slug: string
-          product_title: string | null
-          shopify_product_id: number
-          shopify_variant_id: number
-          vendor_price: number | null
-          vendor_site_id: string
-          vendor_variant_id: string
-          vendor_variant_label: string | null
-        }
-        Insert: {
-          attempts?: string | null
-          id?: string
-          product_slug: string
-          product_title?: string | null
-          shopify_product_id: number
-          shopify_variant_id: number
-          vendor_price?: number | null
-          vendor_site_id: string
-          vendor_variant_id: string
-          vendor_variant_label?: string | null
-        }
-        Update: {
-          attempts?: string | null
-          id?: string
-          product_slug?: string
-          product_title?: string | null
-          shopify_product_id?: number
-          shopify_variant_id?: number
-          vendor_price?: number | null
-          vendor_site_id?: string
-          vendor_variant_id?: string
-          vendor_variant_label?: string | null
-        }
-        Relationships: []
-      }
-      listing_gap_decisions: {
-        Row: {
+          answer: string
           decided_at: string
           decided_by: string | null
-          decision: string
           id: string
+          key: string
+          kind: string
           note: string | null
-          product_slug: string
-          shopify_product_id: number
-          variant_id: string
-          vendor_site_id: string
         }
         Insert: {
+          answer: string
           decided_at?: string
           decided_by?: string | null
-          decision?: string
           id?: string
+          key: string
+          kind: string
           note?: string | null
-          product_slug: string
-          shopify_product_id: number
-          variant_id: string
-          vendor_site_id: string
         }
         Update: {
+          answer?: string
           decided_at?: string
           decided_by?: string | null
-          decision?: string
           id?: string
+          key?: string
+          kind?: string
           note?: string | null
-          product_slug?: string
-          shopify_product_id?: number
-          variant_id?: string
-          vendor_site_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "price_check_rules_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
-      listing_vendor_products: {
+      profiles: {
         Row: {
-          attempts: string | null
           created_at: string
+          full_name: string
           id: string
-          product_slug: string
-          product_title: string | null
-          shopify_product_id: number
-          vendor_site_id: string
+          is_active: boolean
+          quick_add_tab: string
+          role: Database["public"]["Enums"]["user_role"]
+          theme: string
         }
         Insert: {
-          attempts?: string | null
           created_at?: string
-          id?: string
-          product_slug: string
-          product_title?: string | null
-          shopify_product_id: number
-          vendor_site_id: string
+          full_name: string
+          id: string
+          is_active?: boolean
+          quick_add_tab?: string
+          role: Database["public"]["Enums"]["user_role"]
+          theme?: string
         }
         Update: {
-          attempts?: string | null
           created_at?: string
+          full_name?: string
           id?: string
-          product_slug?: string
-          product_title?: string | null
-          shopify_product_id?: number
-          vendor_site_id?: string
+          is_active?: boolean
+          quick_add_tab?: string
+          role?: Database["public"]["Enums"]["user_role"]
+          theme?: string
         }
         Relationships: []
       }
@@ -2550,255 +2665,15 @@ export type Database = {
           shopify_product_id?: number
           shopify_product_title?: string | null
         }
-        Relationships: []
-      }
-      vendor_options: {
-        Row: {
-          first_seen_at: string
-          id: string
-          label: string
-          last_seen_at: string
-          mrp: number | null
-          price: number | null
-          product_slug: string
-          product_title: string | null
-          state: string
-          variant_id: string
-          vendor_site_id: string
-        }
-        Insert: {
-          first_seen_at?: string
-          id?: string
-          label: string
-          last_seen_at?: string
-          mrp?: number | null
-          price?: number | null
-          product_slug: string
-          product_title?: string | null
-          state?: string
-          variant_id: string
-          vendor_site_id: string
-        }
-        Update: {
-          first_seen_at?: string
-          id?: string
-          label?: string
-          last_seen_at?: string
-          mrp?: number | null
-          price?: number | null
-          product_slug?: string
-          product_title?: string | null
-          state?: string
-          variant_id?: string
-          vendor_site_id?: string
-        }
-        Relationships: []
-      }
-      price_check_rules: {
-        Row: {
-          answer: string
-          decided_at: string
-          decided_by: string | null
-          id: string
-          key: string
-          kind: string
-          note: string | null
-        }
-        Insert: {
-          answer: string
-          decided_at?: string
-          decided_by?: string | null
-          id?: string
-          key: string
-          kind: string
-          note?: string | null
-        }
-        Update: {
-          answer?: string
-          decided_at?: string
-          decided_by?: string | null
-          id?: string
-          key?: string
-          kind?: string
-          note?: string | null
-        }
-        Relationships: []
-      }
-      vendor_variant_links: {
-        Row: {
-          shopify_compare_at: number | null
-          shopify_price: number | null
-          shopify_seen_at: string | null
-          keep_price: boolean
-          confidence: string
-          created_at: string
-          id: string
-          reason: string | null
-          review_note: string | null
-          reviewed_at: string | null
-          reviewed_by: string | null
-          shopify_product_handle: string | null
-          shopify_product_id: number
-          shopify_product_title: string
-          shopify_variant_id: number
-          shopify_variant_title: string | null
-          shopify_vendor: string | null
-          status: string
-          suggested_at: string
-          suggested_by: string
-          vendor_product_slug: string | null
-          vendor_product_title: string | null
-          vendor_site_id: string
-          vendor_variant_id: string | null
-          vendor_variant_label: string | null
-        }
-        Insert: {
-          shopify_compare_at?: number | null
-          shopify_price?: number | null
-          shopify_seen_at?: string | null
-          keep_price?: boolean
-          confidence?: string
-          created_at?: string
-          id?: string
-          reason?: string | null
-          review_note?: string | null
-          reviewed_at?: string | null
-          reviewed_by?: string | null
-          shopify_product_handle?: string | null
-          shopify_product_id: number
-          shopify_product_title: string
-          shopify_variant_id: number
-          shopify_variant_title?: string | null
-          shopify_vendor?: string | null
-          status?: string
-          suggested_at?: string
-          suggested_by?: string
-          vendor_product_slug?: string | null
-          vendor_product_title?: string | null
-          vendor_site_id: string
-          vendor_variant_id?: string | null
-          vendor_variant_label?: string | null
-        }
-        Update: {
-          shopify_compare_at?: number | null
-          shopify_price?: number | null
-          shopify_seen_at?: string | null
-          keep_price?: boolean
-          confidence?: string
-          created_at?: string
-          id?: string
-          reason?: string | null
-          review_note?: string | null
-          reviewed_at?: string | null
-          reviewed_by?: string | null
-          shopify_product_handle?: string | null
-          shopify_product_id?: number
-          shopify_product_title?: string
-          shopify_variant_id?: number
-          shopify_variant_title?: string | null
-          shopify_vendor?: string | null
-          status?: string
-          suggested_at?: string
-          suggested_by?: string
-          vendor_product_slug?: string | null
-          vendor_product_title?: string | null
-          vendor_site_id?: string
-          vendor_variant_id?: string | null
-          vendor_variant_label?: string | null
-        }
         Relationships: [
           {
-            foreignKeyName: "vendor_variant_links_vendor_site_id_fkey"
-            columns: ["vendor_site_id"]
+            foreignKeyName: "shopify_change_log_actor_fkey"
+            columns: ["actor"]
             isOneToOne: false
-            referencedRelation: "vendor_sites"
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
-      }
-      vendor_sites: {
-        Row: {
-          created_at: string
-          created_by: string | null
-          id: string
-          instructions: string | null
-          is_active: boolean
-          last_check_result: string | null
-          last_checked_at: string | null
-          name: string
-          notes: string | null
-          platform_key: string | null
-          price_basis: string
-          read_method: string
-          sitemap_url: string | null
-          status: string
-          website_url: string
-        }
-        Insert: {
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          instructions?: string | null
-          is_active?: boolean
-          last_check_result?: string | null
-          last_checked_at?: string | null
-          name: string
-          notes?: string | null
-          platform_key?: string | null
-          price_basis?: string
-          read_method?: string
-          sitemap_url?: string | null
-          status?: string
-          website_url: string
-        }
-        Update: {
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          instructions?: string | null
-          is_active?: boolean
-          last_check_result?: string | null
-          last_checked_at?: string | null
-          name?: string
-          notes?: string | null
-          platform_key?: string | null
-          price_basis?: string
-          read_method?: string
-          sitemap_url?: string | null
-          status?: string
-          website_url?: string
-        }
-        Relationships: []
-      }
-      profiles: {
-        Row: {
-          created_at: string
-          full_name: string
-          id: string
-          is_active: boolean
-          quick_add_tab: string
-          role: Database["public"]["Enums"]["user_role"]
-          theme: string
-        }
-        Insert: {
-          created_at?: string
-          full_name: string
-          id: string
-          is_active?: boolean
-          quick_add_tab?: string
-          role: Database["public"]["Enums"]["user_role"]
-          theme?: string
-        }
-        Update: {
-          created_at?: string
-          full_name?: string
-          id?: string
-          is_active?: boolean
-          quick_add_tab?: string
-          role?: Database["public"]["Enums"]["user_role"]
-          theme?: string
-        }
-        Relationships: []
       }
       sources: {
         Row: {
@@ -2999,6 +2874,256 @@ export type Database = {
             columns: ["escalated_to"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vendor_options: {
+        Row: {
+          first_seen_at: string
+          id: string
+          label: string
+          last_seen_at: string
+          mrp: number | null
+          price: number | null
+          product_slug: string
+          product_title: string | null
+          state: string
+          variant_id: string
+          vendor_site_id: string
+        }
+        Insert: {
+          first_seen_at?: string
+          id?: string
+          label: string
+          last_seen_at?: string
+          mrp?: number | null
+          price?: number | null
+          product_slug: string
+          product_title?: string | null
+          state?: string
+          variant_id: string
+          vendor_site_id: string
+        }
+        Update: {
+          first_seen_at?: string
+          id?: string
+          label?: string
+          last_seen_at?: string
+          mrp?: number | null
+          price?: number | null
+          product_slug?: string
+          product_title?: string | null
+          state?: string
+          variant_id?: string
+          vendor_site_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendor_options_vendor_site_id_fkey"
+            columns: ["vendor_site_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vendor_site_aliases: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          shopify_vendor: string
+          vendor_site_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          shopify_vendor: string
+          vendor_site_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          shopify_vendor?: string
+          vendor_site_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendor_site_aliases_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendor_site_aliases_vendor_site_id_fkey"
+            columns: ["vendor_site_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vendor_sites: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          instructions: string | null
+          is_active: boolean
+          last_check_result: string | null
+          last_checked_at: string | null
+          name: string
+          notes: string | null
+          platform_key: string | null
+          price_basis: string
+          read_method: string
+          sitemap_url: string | null
+          status: string
+          website_url: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          instructions?: string | null
+          is_active?: boolean
+          last_check_result?: string | null
+          last_checked_at?: string | null
+          name: string
+          notes?: string | null
+          platform_key?: string | null
+          price_basis?: string
+          read_method?: string
+          sitemap_url?: string | null
+          status?: string
+          website_url: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          instructions?: string | null
+          is_active?: boolean
+          last_check_result?: string | null
+          last_checked_at?: string | null
+          name?: string
+          notes?: string | null
+          platform_key?: string | null
+          price_basis?: string
+          read_method?: string
+          sitemap_url?: string | null
+          status?: string
+          website_url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendor_sites_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vendor_variant_links: {
+        Row: {
+          confidence: string
+          created_at: string
+          id: string
+          keep_price: boolean
+          reason: string | null
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          shopify_compare_at: number | null
+          shopify_price: number | null
+          shopify_product_handle: string | null
+          shopify_product_id: number
+          shopify_product_title: string
+          shopify_seen_at: string | null
+          shopify_variant_id: number
+          shopify_variant_title: string | null
+          shopify_vendor: string | null
+          status: string
+          suggested_at: string
+          suggested_by: string
+          vendor_product_slug: string | null
+          vendor_product_title: string | null
+          vendor_site_id: string
+          vendor_variant_id: string | null
+          vendor_variant_label: string | null
+        }
+        Insert: {
+          confidence?: string
+          created_at?: string
+          id?: string
+          keep_price?: boolean
+          reason?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          shopify_compare_at?: number | null
+          shopify_price?: number | null
+          shopify_product_handle?: string | null
+          shopify_product_id: number
+          shopify_product_title: string
+          shopify_seen_at?: string | null
+          shopify_variant_id: number
+          shopify_variant_title?: string | null
+          shopify_vendor?: string | null
+          status?: string
+          suggested_at?: string
+          suggested_by?: string
+          vendor_product_slug?: string | null
+          vendor_product_title?: string | null
+          vendor_site_id: string
+          vendor_variant_id?: string | null
+          vendor_variant_label?: string | null
+        }
+        Update: {
+          confidence?: string
+          created_at?: string
+          id?: string
+          keep_price?: boolean
+          reason?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          shopify_compare_at?: number | null
+          shopify_price?: number | null
+          shopify_product_handle?: string | null
+          shopify_product_id?: number
+          shopify_product_title?: string
+          shopify_seen_at?: string | null
+          shopify_variant_id?: number
+          shopify_variant_title?: string | null
+          shopify_vendor?: string | null
+          status?: string
+          suggested_at?: string
+          suggested_by?: string
+          vendor_product_slug?: string | null
+          vendor_product_title?: string | null
+          vendor_site_id?: string
+          vendor_variant_id?: string | null
+          vendor_variant_label?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendor_variant_links_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendor_variant_links_vendor_site_id_fkey"
+            columns: ["vendor_site_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_sites"
             referencedColumns: ["id"]
           },
         ]
@@ -3319,6 +3444,30 @@ export type Database = {
           label: string
         }[]
       }
+      analytics_by_competitor: {
+        Args: {
+          p_cmp_from?: string
+          p_cmp_to?: string
+          p_counsellor_id?: string
+          p_course_id?: string
+          p_from: string
+          p_scope_id?: string
+          p_scope_invert?: boolean
+          p_scope_type?: string
+          p_source_ids?: string[]
+          p_subject_id?: string
+          p_term_id?: string
+          p_to: string
+        }
+        Returns: {
+          competitor_id: string
+          competitor_name: string
+          lost_leads: number
+          other_name: string
+          prev_lost_leads: number
+          row_key: string
+        }[]
+      }
       analytics_by_course: {
         Args: {
           p_cmp_from?: string
@@ -3438,6 +3587,29 @@ export type Database = {
           revenue: number
           teacher_id: string
           teacher_name: string
+        }[]
+      }
+      analytics_competitor_splits: {
+        Args: {
+          p_counsellor_id?: string
+          p_course_id?: string
+          p_from: string
+          p_scope_id?: string
+          p_scope_invert?: boolean
+          p_scope_type?: string
+          p_source_ids?: string[]
+          p_subject_id?: string
+          p_term_id?: string
+          p_to: string
+        }
+        Returns: {
+          competitor_id: string
+          dim_id: string
+          dim_name: string
+          grain: string
+          leads: number
+          other_name: string
+          row_key: string
         }[]
       }
       analytics_events_in_range: {
@@ -3618,12 +3790,22 @@ export type Database = {
           skipped: number
         }[]
       }
+      competitor_typed_names: {
+        Args: never
+        Returns: {
+          leads: number
+          name: string
+        }[]
+      }
       confirm_batch_export: { Args: { p_batch_id: string }; Returns: undefined }
       convert_to_purchase: { Args: { p_enquiry_id: number }; Returns: number }
       enquiries_called_by_facets: {
         Args: {
+          p_basis?: string
           p_called_by?: string[]
           p_close_reason?: Database["public"]["Enums"]["close_reason"]
+          p_competitor_ids?: string[]
+          p_competitor_other?: string
           p_content_ids?: string[]
           p_counsellor_id?: string
           p_course_id?: string
@@ -3634,6 +3816,7 @@ export type Database = {
           p_follow_up_to?: string
           p_importance?: Database["public"]["Enums"]["importance"][]
           p_include_archived?: boolean
+          p_institute_ids?: string[]
           p_last_called_from?: string
           p_last_called_to?: string
           p_lost_reason?: Database["public"]["Enums"]["lost_reason"]
@@ -3656,8 +3839,11 @@ export type Database = {
       }
       enquiries_table: {
         Args: {
+          p_basis?: string
           p_called_by?: string[]
           p_close_reason?: Database["public"]["Enums"]["close_reason"]
+          p_competitor_ids?: string[]
+          p_competitor_other?: string
           p_content_ids?: string[]
           p_counsellor_id?: string
           p_course_id?: string
@@ -3669,6 +3855,7 @@ export type Database = {
           p_follow_up_to?: string
           p_importance?: Database["public"]["Enums"]["importance"][]
           p_include_archived?: boolean
+          p_institute_ids?: string[]
           p_last_called_from?: string
           p_last_called_to?: string
           p_limit?: number
@@ -3691,6 +3878,7 @@ export type Database = {
           assigned_to_name: string
           close_reason: Database["public"]["Enums"]["close_reason"]
           closed_at: string
+          competitor_name: string
           created_at: string
           enquiry_id: number
           follow_up_slots_used: number
@@ -3735,11 +3923,13 @@ export type Database = {
         Args: { p_ids: number[] }
         Returns: {
           amount_total: number
+          arrived_at: string
           assigned_date: string
           assigned_to_name: string
           assignment_label: string
           close_reason: Database["public"]["Enums"]["close_reason"]
           closed_at: string
+          competitor: string
           contents: string
           courses: string
           created_at: string
@@ -3816,6 +4006,10 @@ export type Database = {
           message: string
           ok: boolean
         }[]
+      }
+      merge_competitor_other: {
+        Args: { p_competitor_id: string; p_name: string }
+        Returns: number
       }
       my_day: {
         Args: { p_counsellor_id?: string; p_date?: string }
@@ -4023,6 +4217,10 @@ export type Database = {
         }[]
       }
       pending_calendar_nudge: { Args: never; Returns: Json }
+      promote_competitor_other: {
+        Args: { p_name: string; p_new_name?: string }
+        Returns: string
+      }
       purge_archived: {
         Args: { p_expected_count: number; p_ids: number[] }
         Returns: {
@@ -4178,6 +4376,14 @@ export type Database = {
         Returns: {
           checkout_ref: string
         }[]
+      }
+      set_enquiry_competitor: {
+        Args: {
+          p_competitor_id?: string
+          p_competitor_other?: string
+          p_enquiry_id: number
+        }
+        Returns: undefined
       }
       set_my_quick_add_tab: { Args: { p_tab: string }; Returns: string }
       set_my_theme: { Args: { p_theme: string }; Returns: string }

@@ -44,6 +44,12 @@ export type NewItem = {
 };
 
 export type LogCallInput = {
+  /**
+   * §89. Which competitor took the lead, on a competitor loss. Exactly one of
+   * the two, and neither on any other outcome.
+   */
+  competitorId?: string | null;
+  competitorOther?: string | null;
   enquiryId: number;
   outcome: CallOutcome | "";
   /**
@@ -645,6 +651,22 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
     return { error: "A purchase needs an order ID." };
   }
 
+  // §89. And which competitor. Same reasoning as the teacher below: the
+  // Competitor report reads this column, so a loss saved without it is a row
+  // that says we lost to nobody. Exactly one of the two, never both.
+  const competitorId = input.competitorId?.trim() || null;
+  const competitorOther = input.competitorOther?.trim() || null;
+  if (outcome === "competitor") {
+    if (!competitorId && !competitorOther) {
+      return {
+        error: "Name the competitor — pick one from the list, or choose Other and type the name.",
+      };
+    }
+    if (competitorId && competitorOther) {
+      return { error: "Name one competitor: either a listed one or a typed name." };
+    }
+  }
+
   // A competitor loss is only worth recording if it says who we lost to.
   // Enforced here and not only in the panel, because the panel is one caller
   // of this and the report is built on what lands in the table.
@@ -1087,6 +1109,33 @@ export async function logCall(input: LogCallInput): Promise<LogCallResult> {
     }
   }
 
+  /*
+   * §89. Who took the lead, recorded after the call rather than with it.
+   *
+   * The order is forced: enquiries.competitor_id may only sit on a lead whose
+   * lost reason is already `competitor`, and that reason is derived by
+   * app.recompute_enquiry from the call that was just written. So the call
+   * goes in, the recompute settles the status, and then this says who.
+   *
+   * A failure here is reported rather than swallowed — a competitor loss whose
+   * competitor silently went missing is exactly the hole §89 was opened to
+   * close — but the call itself stands: it is the record of a conversation that
+   * happened, and refusing it after the fact would lose more than it saved.
+   */
+  if (outcome === "competitor" && (competitorId || competitorOther)) {
+    const { error: competitorError } = await supabase.rpc("set_enquiry_competitor", {
+      p_enquiry_id: targetEnquiryId,
+      p_competitor_id: competitorId ?? undefined,
+      p_competitor_other: competitorOther ?? undefined,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    if (competitorError) {
+      return {
+        error: `The call was saved, but the competitor was not: ${competitorError.message}`,
+      };
+    }
+  }
+
   // §49.2. A call has been logged on this lead, which means a person has had
   // the conversation the guesses were about. Whatever they left standing they
   // left standing on purpose, so the lines stop being provisional.
@@ -1447,6 +1496,9 @@ export async function removeEnquiryItem(input: {
 }
 
 export type EditCallInput = {
+  /** §89. Required when the correction says the lead went to a competitor. */
+  competitorId?: string | null;
+  competitorOther?: string | null;
   callId: number;
   outcome: CallOutcome;
   discussion: string;
@@ -1468,6 +1520,28 @@ export type EditCallInput = {
  * enquiry afterwards, so an outcome corrected from follow-up to call back
  * moves the lead's status and next date without anything here saying so.
  */
+/**
+ * §89. The competitor list, for the one caller that does not already have it.
+ *
+ * The call panel is handed its masters by whichever screen mounted it; the
+ * edit form on a student's history is a client island three levels down a
+ * server-rendered table, and threading a master list through those levels to
+ * reach a control that opens perhaps once a week is the wrong trade. Read when
+ * the form needs it.
+ */
+export async function listCompetitors(): Promise<{ id: string; name: string }[]> {
+  const viewer = await requireUser();
+  if (!viewer.profile) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("competitors")
+    .select("id, name")
+    .eq("is_active", true)
+    .order("sort_order")
+    .order("name");
+  return data ?? [];
+}
+
 export async function editCall(input: EditCallInput): Promise<LogCallResult> {
   const viewer = await requireUser();
   if (!viewer.profile) return { error: "Your account is not active." };
@@ -1499,6 +1573,21 @@ export async function editCall(input: EditCallInput): Promise<LogCallResult> {
     return { error: "A follow-up needs a next follow-up date." };
   }
 
+  // §89. Same rule as logCall: a correction that says "went to a competitor"
+  // has to say which. Exactly one of the two.
+  const editCompetitorId = input.competitorId?.trim() || null;
+  const editCompetitorOther = input.competitorOther?.trim() || null;
+  if (input.outcome === "competitor") {
+    if (!editCompetitorId && !editCompetitorOther) {
+      return {
+        error: "Name the competitor — pick one from the list, or choose Other and type the name.",
+      };
+    }
+    if (editCompetitorId && editCompetitorOther) {
+      return { error: "Name one competitor: either a listed one or a typed name." };
+    }
+  }
+
   const { error, count } = await supabase
     .from("calls")
     .update(
@@ -1518,6 +1607,37 @@ export async function editCall(input: EditCallInput): Promise<LogCallResult> {
       error:
         "You can only edit your own calls, and only on the day you made them. Ask an admin to correct an older one.",
     };
+  }
+
+  /*
+   * §89. Who took the lead — but only if the correction actually made this a
+   * competitor loss.
+   *
+   * An edit lands on one call, and the lead's outcome comes from its *last*
+   * one. Correcting an older call to `competitor` changes the history without
+   * changing where the lead ended up, and writing a competitor onto a lead
+   * that is not a competitor loss is exactly what the constraint forbids. So
+   * the answer is applied against what the recompute settled on, not against
+   * what was typed.
+   */
+  if (input.outcome === "competitor" && (editCompetitorId || editCompetitorOther)) {
+    const { data: settled } = await supabase
+      .from("enquiries")
+      .select("lost_reason")
+      .eq("id", call.enquiry_id)
+      .maybeSingle();
+    if (settled?.lost_reason === "competitor") {
+      const { error: competitorError } = await supabase.rpc("set_enquiry_competitor", {
+        p_enquiry_id: call.enquiry_id,
+        p_competitor_id: editCompetitorId ?? undefined,
+        p_competitor_other: editCompetitorOther ?? undefined,
+      });
+      if (competitorError) {
+        return {
+          error: `The correction was saved, but the competitor was not: ${competitorError.message}`,
+        };
+      }
+    }
   }
 
   // The grading belongs to the enquiry rather than the call, and is corrected

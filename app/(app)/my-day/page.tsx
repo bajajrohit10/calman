@@ -194,6 +194,7 @@ export default async function Page({
           contents: masters.contents,
           terms: masters.terms,
           sources: masters.sources,
+          competitors: masters.competitors,
         }}
       />
     </div>
