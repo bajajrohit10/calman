@@ -214,7 +214,7 @@ export async function computeTodo(supabase: Supa, siteIds?: string[]): Promise<T
         if (l.shopify_price == null || !l.vendor_variant_id || l.keep_price) continue;
         const o = opt.get(`${l.vendor_site_id}|${l.vendor_product_slug}|${l.vendor_variant_id}`);
         if (!o || o.state !== "live" || o.price == null || Number(o.price) <= 0) continue;
-        const e = expectedZeroinfyPrice(Number(o.price), l.shopify_product_title, site.get(l.vendor_site_id)?.name);
+        const e = expectedZeroinfyPrice(Number(o.price), l.shopify_product_title, site.get(l.vendor_site_id)?.name, Number(l.shopify_product_id));
         if (!priceOk(Number(l.shopify_price), e.price)) {
           if (keepWhenLower && e.price < Number(l.shopify_price)) {
             hit("price_down|all");
@@ -283,7 +283,7 @@ export async function computeTodo(supabase: Supa, siteIds?: string[]): Promise<T
             variantId: o.variant_id,
             label: o.label,
             price: o.price == null ? null : Number(o.price),
-            expected: o.price == null ? null : expectedZeroinfyPrice(Number(o.price), first.shopify_product_title, site.get(siteId)?.name).price,
+            expected: o.price == null ? null : expectedZeroinfyPrice(Number(o.price), first.shopify_product_title, site.get(siteId)?.name, Number(first.shopify_product_id)).price,
           }));
         const auto =
           p.kind === "attempt"
