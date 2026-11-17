@@ -22,6 +22,7 @@ export const OFFER_RULES_ACTIVE = true;
  *  Combos of these faculties with others do get the ₹500 (e.g. Borana +
  *  Bhattad, Borana + Rajkumar, Arjun Chhabra combos).
  *  - CA Inter Both Group combos priced at BB's combo coupon (BGCOMBO ₹45,000).
+ *  - CA/CMA Final: the offer has ended for Final (17 Nov 2026), so Final = BB.
  * Within ₹1 of the rule is fine (₹32,000 for ₹31,999).
  */
 
@@ -62,6 +63,8 @@ export function expectedZeroinfyPrice(vendorPrice: number, zeroinfyTitle: string
   if (vendorPrice < 3999) return { price: vendorPrice, rule: "Below ₹3,999: no BB offer, same as BB" };
 
   const same = (why: string): Expected => ({ price: vendorPrice, rule: `${why}: no BB offer, same as BB` });
+  // The BB offer has ended for CA/CMA Final (Rohit, 17 Nov 2026): Final listings = BB's price.
+  if (/\bfinal\b/.test(t)) return same("CA/CMA Final (offer ended)");
   if (/acca/.test(t)) return same("ACCA");
   if (/prep ?test/.test(t)) return same("BB Prep Test");
   if (/copy from center/.test(t)) return same("Copy From Center");
