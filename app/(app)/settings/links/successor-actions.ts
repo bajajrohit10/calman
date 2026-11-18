@@ -150,8 +150,17 @@ export async function moveToNewVendorPage(pid: number, siteId: string, oldSlug: 
   let toPick = 0;
 
   // 3. Variants for attempts still to come: same option on the new page → re-link; otherwise leave to pick.
+  // Two different old options landing on one new option means the vendor dropped a choice
+  // (e.g. GST recorded batch gone, only the live one left): a person decides those.
+  const paired = new Map(current.map((l) => [l.id, l.vendor_variant_label?.startsWith("Zeroinfy-only") ? null : pairOption(l.vendor_variant_label, live)]));
+  const cores = new Map<string, Set<string>>();
   for (const l of current) {
-    const c = l.vendor_variant_label?.startsWith("Zeroinfy-only") ? null : pairOption(l.vendor_variant_label, live);
+    const c = paired.get(l.id);
+    if (c) (cores.get(c.id) ?? cores.set(c.id, new Set()).get(c.id)!).add(core(l.vendor_variant_label));
+  }
+  for (const l of current) {
+    const c0 = paired.get(l.id);
+    const c = c0 && cores.get(c0.id)!.size === 1 ? c0 : null;
     const base = { vendor_product_slug: newSlug, vendor_product_title: title, reviewed_by: viewer.userId, reviewed_at: now };
     if (c) {
       await supabase
