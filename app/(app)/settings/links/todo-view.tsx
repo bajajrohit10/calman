@@ -12,6 +12,8 @@ import { answerAttempt, confirmListing, dismissChoices, fixPrices, ignoreOptions
 import { CausesView } from "./causes-view";
 import { Workbench } from "./workbench";
 import { addAttemptAuto, linkPastedProduct, removeVariants, retargetLink } from "./workbench-actions";
+import { findNewVendorPage, moveToNewVendorPage } from "./successor-actions";
+import type { Successor } from "@/lib/price-check/successor";
 
 /**
  * Settings → Links → "To do on Zeroinfy": one list of what to change on the
@@ -439,6 +441,9 @@ function ListingCard({
               )}
             </div>
           ))}
+          {[...new Map(l.dropped.filter((d) => !d.replacement).map((d) => [`${d.siteId}|${d.slug}`, d])).values()].map((d) => (
+            <NewPageFinder key={`np-${d.siteId}-${d.slug}`} pid={l.pid} siteId={d.siteId} slug={d.slug} canWrite={canWrite} pending={pending} act={act} />
+          ))}
         </Block>
       ) : null}
 
@@ -589,6 +594,94 @@ function MissingBlock({
         )
       ) : null}
     </Block>
+  );
+}
+
+/**
+ * The vendor moved this course to a new page (BB: a new attempt is a new product link).
+ * Find it in the vendor's product list; "Use this page" moves the links and replaces an
+ * old attempt (e.g. Nov 26 → May 27) at the vendor's prices. No page → ask the vendor / archive.
+ */
+function NewPageFinder({
+  pid,
+  siteId,
+  slug,
+  canWrite,
+  pending,
+  act,
+}: {
+  pid: number;
+  siteId: string;
+  slug: string;
+  canWrite: boolean;
+  pending: boolean;
+  act: (fn: () => Promise<{ error: string | null; count?: number }>, done: (n: number) => string) => void;
+}) {
+  const { V, VSITE } = useContext(VendorCtx);
+  const [state, setState] = useState<{ busy: boolean; error: string | null; list: Successor[] | null; siteUrl: string }>({ busy: false, error: null, list: null, siteUrl: `https://www.${VSITE}` });
+  const [msg, setMsg] = useState("");
+  async function find() {
+    setState((s) => ({ ...s, busy: true, error: null }));
+    const r = await findNewVendorPage(pid, siteId, slug);
+    setState({ busy: false, error: r.error, list: r.candidates ?? null, siteUrl: r.siteUrl ?? `https://www.${VSITE}` });
+  }
+  return (
+    <div className="flex flex-col gap-1.5 border-t border-line pt-1.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-ink-3">
+          Old page: <span className="font-mono text-[11.5px]">{slug}</span>
+        </span>
+        <Button size="sm" variant="secondary" disabled={state.busy || pending} onClick={find}>
+          {state.busy ? "Searching…" : `Find the new ${V} page`}
+        </Button>
+      </div>
+      {state.error ? <span className="text-danger">{state.error}</span> : null}
+      {state.list && !state.list.length ? (
+        <span className="text-ink-2">
+          No new page for this course on {V}. Confirm with {V}; if it has stopped, archive the listing (or remove these variants).
+        </span>
+      ) : null}
+      {state.list?.map((c) => (
+        <div key={c.slug} className="flex flex-wrap items-center gap-2 rounded-md bg-surface-2 px-2 py-1">
+          <a className="text-accent underline" href={productUrl(state.siteUrl, c.slug)} target="_blank" rel="noreferrer">
+            {c.title}
+          </a>
+          <span className="text-ink-3">
+            {V} {rupees(c.price)}
+            {c.mrp && c.price && c.mrp > c.price ? ` (MRP ${rupees(c.mrp)})` : ""}
+            {c.sure ? " · best match" : c.why ? ` · ${c.why}` : ""}
+          </span>
+          {canWrite ? (
+            <Button
+              size="sm"
+              disabled={pending}
+              onClick={() =>
+                act(async () => {
+                  const r = await moveToNewVendorPage(pid, siteId, slug, c.slug);
+                  if (!r.error)
+                    setMsg(
+                      [
+                        r.added ? `added ${r.added} variants for the new attempt` : "",
+                        r.removed ? `removed ${r.removed} old-attempt variants` : "",
+                        r.relinked ? `re-linked ${r.relinked}` : "",
+                        r.toPick ? `${r.toPick} need an option picked in Batches & options` : "",
+                        r.note ?? "",
+                        "Update the attempt wording in the description.",
+                      ]
+                        .filter(Boolean)
+                        .join(" · "),
+                    );
+                  return { error: r.error, count: (r.added ?? 0) + (r.relinked ?? 0) };
+                }, () => `Moved to the new ${V} page.`)
+              }
+            >
+              Use this page
+            </Button>
+          ) : null}
+        </div>
+      ))}
+      {msg ? <span className="text-ok">{msg}</span> : null}
+    </div>
   );
 }
 

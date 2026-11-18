@@ -62,7 +62,7 @@ export type BatchMismatch = { why: "batch" | "books"; linkId: string; variantId:
 export type AttemptGroup = { variantIds: number[]; variants: { title: string; price: number | null }[]; choices: AttemptChoice[] };
 
 /** A linked vendor option the vendor no longer sells; `replacement` = the live option of the same product that differs in one part only (e.g. the batch). */
-export type Dropped = { label: string; variants: number; linkIds: string[]; slug: string; productTitle: string | null; replacement: { id: string; label: string; price: number | null; changed: string } | null };
+export type Dropped = { label: string; variants: number; linkIds: string[]; siteId: string; slug: string; productTitle: string | null; replacement: { id: string; label: string; price: number | null; changed: string } | null };
 
 const parts = (label: string) => label.split(/,\s*(?=[A-Za-z .&/()-]+:)/).map((p) => p.trim().replace(/\s+/g, " "));
 const partKey = (p: string) => p.slice(0, Math.max(0, p.indexOf(":"))).trim().toLowerCase();
@@ -317,7 +317,7 @@ export async function computeTodo(supabase: Supa, siteIds?: string[]): Promise<T
                 replacement = { id: c.variant_id, label: c.label, price: c.price == null ? null : Number(c.price), changed: diff[0] };
               }
             }
-            g = { label: o.label, variants: 0, linkIds: [], slug: l.vendor_product_slug!, productTitle: l.vendor_product_title, replacement };
+            g = { label: o.label, variants: 0, linkIds: [], siteId: l.vendor_site_id, slug: l.vendor_product_slug!, productTitle: l.vendor_product_title, replacement };
             gone.set(o.variant_id, g);
           }
           g.variants++;
