@@ -34,6 +34,45 @@ const core = (label: string | null) =>
     .map((p) => p.replace(/\s+/g, " ").toLowerCase())
     .sort()
     .join(" | ");
+/**
+ * Pair an option of the old page with one on the new page. BB re-issues batches on a
+ * new page ("Batch 2 - Live from 12th Nov" → "Batch 2 - Live from 16th Nov"), so this
+ * compares per subject: the batch number when given, otherwise the words without dates;
+ * a subject with only one choice on the new page doesn't need to agree. One clear
+ * candidate or none.
+ */
+const MON = "jan|feb|mar|apr|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december";
+function loose(label: string | null): Record<string, string> {
+  const o: Record<string, string> = {};
+  for (const p of parts(label)) {
+    const i = p.indexOf(":");
+    if (i < 0) continue;
+    const k = p.slice(0, i).toLowerCase().replace(/[^a-z]+/g, "");
+    if (/^(exam|exams|attempt)$/.test(k)) continue;
+    const v = p.slice(i + 1).toLowerCase();
+    const b = v.match(/batch\s*(\d)/);
+    o[k] = b
+      ? `b${b[1]}`
+      : v
+          .replace(new RegExp(`\\b(${MON})\\b`, "g"), " ")
+          .replace(/\d+(st|nd|rd|th)?/g, " ")
+          .replace(/\b(starting|started|start|from)\b/g, " ")
+          .replace(/[^a-z]+/g, " ")
+          .trim();
+  }
+  return o;
+}
+function pairOption<T extends { title: string }>(label: string | null, opts: T[]): T | null {
+  const exact = opts.filter((v) => core(v.title) === core(label));
+  if (exact.length === 1) return exact[0];
+  if (opts.length === 1) return opts[0];
+  const want = loose(label);
+  const lo = opts.map((v) => loose(v.title));
+  const fixed = new Set(Object.keys(lo[0] ?? {}).filter((k) => new Set(lo.map((x) => x[k])).size === 1));
+  const wk = Object.keys(want).sort().join();
+  const c = opts.filter((_, i) => Object.keys(lo[i]).sort().join() === wk && Object.keys(lo[i]).every((k) => fixed.has(k) || lo[i][k] === want[k]));
+  return c.length === 1 ? c[0] : null;
+}
 /** ₹1 below a round figure (owner, 13 Nov 2026). */
 const rupee = (n: number | null) => (n == null ? null : n % 100 === 0 ? n - 1 : n);
 
@@ -112,12 +151,12 @@ export async function moveToNewVendorPage(pid: number, siteId: string, oldSlug: 
 
   // 3. Variants for attempts still to come: same option on the new page → re-link; otherwise leave to pick.
   for (const l of current) {
-    const c = live.filter((v) => core(v.title) === core(l.vendor_variant_label));
+    const c = l.vendor_variant_label?.startsWith("Zeroinfy-only") ? null : pairOption(l.vendor_variant_label, live);
     const base = { vendor_product_slug: newSlug, vendor_product_title: title, reviewed_by: viewer.userId, reviewed_at: now };
-    if (c.length === 1) {
+    if (c) {
       await supabase
         .from("vendor_variant_links")
-        .update({ ...base, vendor_variant_id: c[0].id, vendor_variant_label: c[0].title.slice(0, 500), status: "approved", confidence: "high", review_note: "Moved to the vendor's new page (same option)." })
+        .update({ ...base, vendor_variant_id: c.id, vendor_variant_label: c.title.slice(0, 500), status: "approved", confidence: "high", review_note: "Moved to the vendor's new page (same option)." })
         .eq("id", l.id);
       relinked++;
     } else {
