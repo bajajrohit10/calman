@@ -37,7 +37,7 @@ export async function shopifyProductsToRefresh(): Promise<{ error: string | null
   return { error: null, pids: [...pids] };
 }
 
-/** Re-read up to 10 listings from Shopify: prices, titles; drop links of variants deleted on Shopify. */
+/** Re-read up to 10 listings from Shopify: prices, titles; drop links of variants deleted on Shopify, and of listings archived there. */
 export async function refreshShopify(pids: number[]): Promise<{ error: string | null; failed?: string[] }> {
   if (!(await gate())) return { error: DENIED };
   if (pids.length > 10) return { error: "At most 10 per call." };
@@ -53,6 +53,14 @@ export async function refreshShopify(pids: number[]): Promise<{ error: string | 
         const msg = e instanceof Error ? e.message : String(e);
         if (/no longer on Shopify/.test(msg)) await supabase.from("vendor_variant_links").delete().eq("shopify_product_id", pid);
         failed.push(`${pid}: ${msg}`);
+        return;
+      }
+      if (p.status === "ARCHIVED") {
+        // Archived on Shopify = taken out of the price check: drop its links and BB products.
+        await Promise.all([
+          supabase.from("vendor_variant_links").delete().eq("shopify_product_id", pid),
+          supabase.from("listing_vendor_products").delete().eq("shopify_product_id", pid),
+        ]);
         return;
       }
       await syncLinksWithShopify(supabase, p);

@@ -23,6 +23,8 @@ export type ShopifyProductForEdit = {
   id: number;
   title: string;
   handle: string;
+  /** ACTIVE / DRAFT / ARCHIVED */
+  status: string;
   options: ShopifyOption[];
   variants: ShopifyVariant[];
 };
@@ -44,19 +46,20 @@ type VariantNode = {
 export async function getProductForEdit(productId: number): Promise<ShopifyProductForEdit> {
   const variants: VariantNode[] = [];
   let after: string | null = null;
-  let head: { title: string; handle: string; options: { id: string; name: string; position: number; optionValues: { id: string; name: string }[] }[] } | null = null;
+  let head: { title: string; handle: string; status: string; options: { id: string; name: string; position: number; optionValues: { id: string; name: string }[] }[] } | null = null;
   for (let page = 0; page < 20; page++) {
     const data: {
       product: {
         title: string;
         handle: string;
+        status: string;
         options: { id: string; name: string; position: number; optionValues: { id: string; name: string }[] }[];
         variants: { nodes: VariantNode[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } };
       } | null;
     } = await adminQuery(
       `query P($id: ID!, $after: String) {
         product(id: $id) {
-          title handle
+          title handle status
           options { id name position optionValues { id name } }
           variants(first: 250, after: $after) {
             nodes { id title price compareAtPrice inventoryPolicy taxable
@@ -77,6 +80,7 @@ export async function getProductForEdit(productId: number): Promise<ShopifyProdu
     id: productId,
     title: head!.title,
     handle: head!.handle,
+    status: head!.status,
     options: head!.options
       .map((o) => ({
         id: o.id,
