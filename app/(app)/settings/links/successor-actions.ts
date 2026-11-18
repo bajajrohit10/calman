@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { isAdmin, requireUser } from "@/lib/auth";
 import { planAttempt } from "@/lib/price-check/attempt-plan";
+import { expectedZeroinfyPrice } from "@/lib/price-check/rules";
 import { ziAttempts } from "@/lib/price-check/batch-dates";
 import { createVariants, deleteVariants, getProductForEdit, type NewVariant } from "@/lib/price-check/shopify-edit";
 import { findSuccessors, readEdportalFeed, type Successor } from "@/lib/price-check/successor";
@@ -18,8 +19,8 @@ import type { Json } from "@/types/database";
  *  - variants for an attempt still to come are re-linked to the matching option
  *    on the new page;
  *  - variants for an old attempt (this month or earlier, e.g. Nov 26) are
- *    replaced: the new page's attempt is added with the same options at the
- *    vendor's prices (MRP as strike-through), and the old-attempt variants are
+ *    replaced: the new page's attempt is added with the same options, priced by
+ *    the owner's rules from the vendor's price (MRP as strike-through), and the old-attempt variants are
  *    deleted. Super admin only; every Shopify write is logged.
  * Owner, 18 Nov 2026.
  */
@@ -160,7 +161,8 @@ export async function moveToNewVendorPage(pid: number, siteId: string, oldSlug: 
         for (const it of plan.items) {
           const b = byId.get(it.baseVariantId);
           if (!b) return { error: "The listing changed on Shopify since the last refresh — refresh it and try again.", relinked, toPick };
-          const price = rupee(it.price)!;
+          // The owner's pricing rules (BB offer, Karan Kumar, Both Group…), then ₹1 below a round figure.
+          const price = rupee(expectedZeroinfyPrice(it.price, product.title, s.name, pid).price)!;
           const m = rupee(mrp.get(it.vendorVariantId) ?? null);
           vs.push({ options: { ...b.selected, [opt.name]: newValue }, price, compareAtPrice: m != null && m > price ? m : null, inventoryPolicy: "CONTINUE", taxable: false, tracked: b.tracked, requiresShipping: b.requiresShipping });
         }
