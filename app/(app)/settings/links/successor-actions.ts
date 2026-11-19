@@ -173,6 +173,11 @@ export async function moveToNewVendorPage(pid: number, siteId: string, oldSlug: 
     const c0 = paired.get(l.id);
     const c = c0 && cores.get(c0.id)!.size === 1 ? c0 : null;
     const base = { vendor_product_slug: newSlug, vendor_product_title: title, shopify_variant_title: l.shopify_variant_title, reviewed_by: viewer.userId, reviewed_at: now };
+    if (l.vendor_variant_label?.startsWith("Zeroinfy-only")) {
+      // Not sold by the vendor: keep it marked as ours, just under the new page.
+      await supabase.from("vendor_variant_links").update(base).eq("id", l.id);
+      continue;
+    }
     if (c) {
       await supabase
         .from("vendor_variant_links")
