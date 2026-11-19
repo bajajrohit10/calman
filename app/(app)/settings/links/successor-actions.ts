@@ -143,8 +143,19 @@ export async function moveToNewVendorPage(pid: number, siteId: string, oldSlug: 
     .eq("vendor_product_slug", oldSlug);
   if (le) return { error: le.message };
   if (!links?.length) return { error: "No variants of this listing are linked to the old page any more — refresh the listing." };
-  const past = links.filter((l) => oldAttempt(l.shopify_variant_title));
-  const current = links.filter((l) => !oldAttempt(l.shopify_variant_title));
+  // Go by the listing as it is on Shopify now, not Calman's last read (the attempt may have been renamed since).
+  let product: Awaited<ReturnType<typeof getProductForEdit>>;
+  try {
+    product = await getProductForEdit(pid);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+  const shopTitle = new Map(product.variants.map((v) => [v.id, v.title]));
+  const onShop = links
+    .filter((l) => shopTitle.has(Number(l.shopify_variant_id)))
+    .map((l) => ({ ...l, shopify_variant_title: shopTitle.get(Number(l.shopify_variant_id)) ?? l.shopify_variant_title }));
+  const past = onShop.filter((l) => oldAttempt(l.shopify_variant_title));
+  const current = onShop.filter((l) => !oldAttempt(l.shopify_variant_title));
   const now = new Date().toISOString();
   let relinked = 0;
   let toPick = 0;
@@ -161,7 +172,7 @@ export async function moveToNewVendorPage(pid: number, siteId: string, oldSlug: 
   for (const l of current) {
     const c0 = paired.get(l.id);
     const c = c0 && cores.get(c0.id)!.size === 1 ? c0 : null;
-    const base = { vendor_product_slug: newSlug, vendor_product_title: title, reviewed_by: viewer.userId, reviewed_at: now };
+    const base = { vendor_product_slug: newSlug, vendor_product_title: title, shopify_variant_title: l.shopify_variant_title, reviewed_by: viewer.userId, reviewed_at: now };
     if (c) {
       await supabase
         .from("vendor_variant_links")
@@ -187,12 +198,6 @@ export async function moveToNewVendorPage(pid: number, siteId: string, oldSlug: 
       title,
       live.map((v) => ({ variant_id: v.id, label: v.title, price: v.price, state: "live" })),
     );
-    let product;
-    try {
-      product = await getProductForEdit(pid);
-    } catch (e) {
-      return { error: e instanceof Error ? e.message : String(e), relinked, toPick };
-    }
     if (!plan.ok) {
       note = `Old attempt not replaced automatically: ${plan.why} Use Batches & options for it.`;
     } else {
