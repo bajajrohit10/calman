@@ -3,8 +3,9 @@
  * gives ₹500 off as a coupon on bbvirtuals.com, so Zeroinfy lists BB − ₹500 on
  * batches whose BB price (before the coupon) is ₹3,999 or more. No end date —
  * Rohit says when it ends; then set this to false and Zeroinfy = BB again.
+ * Ended 19 Nov 2026 (Rohit): offer off, Zeroinfy = BB.
  */
-export const OFFER_RULES_ACTIVE = true;
+export const OFFER_RULES_ACTIVE = false;
 
 /**
  * Price check: the owner's BB pricing rules as code (keep in step with
